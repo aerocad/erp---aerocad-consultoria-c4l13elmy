@@ -1,0 +1,1690 @@
+{
+  "generatedAt": "2026-10-09T18:17:23.052Z",
+  "collections": [
+    {
+      "name": "users",
+      "type": "auth",
+      "apiRules": {
+        "list": "@request.auth.id != '' && (id = @request.auth.id || @request.auth.role = 'admin')",
+        "view": "@request.auth.id != '' && (id = @request.auth.id || @request.auth.role = 'admin')",
+        "create": "@request.auth.role = 'admin'",
+        "update": "@request.auth.id != '' && (@request.auth.role = 'admin' || (id = @request.auth.id && @request.body.role:changed = false))",
+        "delete": "@request.auth.role = 'admin'"
+      },
+      "fields": [
+        {
+          "name": "name",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "avatar",
+          "type": "file",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "role",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["admin", "comercial", "tecnico", "financeiro"]
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX `idx_tokenKey__pb_users_auth_` ON `users` (`tokenKey`)",
+        "CREATE UNIQUE INDEX `idx_email__pb_users_auth_` ON `users` (`email`) WHERE `email` != ''",
+        "CREATE INDEX `idx_users_role` ON `users` (role)"
+      ]
+    },
+    {
+      "name": "clientes",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.role = 'admin' || @request.auth.role = 'comercial'",
+        "update": "@request.auth.role = 'admin' || @request.auth.role = 'comercial'",
+        "delete": "@request.auth.role = 'admin' || @request.auth.role = 'comercial'"
+      },
+      "fields": [
+        {
+          "name": "tipo",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["pj", "pf"]
+        },
+        {
+          "name": "razao_social",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "cnpj_cpf",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "segmento",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "municipio",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "uf",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "telefone",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "email",
+          "type": "email",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "endereco",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "origem",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["prospect", "cliente", "inativo"]
+        },
+        {
+          "name": "recorrente",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "observacoes",
+          "type": "editor",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX idx_clientes_documento ON clientes (cnpj_cpf) WHERE cnpj_cpf != ''",
+        "CREATE INDEX idx_clientes_razao ON clientes (razao_social)",
+        "CREATE INDEX idx_clientes_status ON clientes (status)"
+      ]
+    },
+    {
+      "name": "contatos",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.role = 'admin' || @request.auth.role = 'comercial'",
+        "update": "@request.auth.role = 'admin' || @request.auth.role = 'comercial'",
+        "delete": "@request.auth.role = 'admin' || @request.auth.role = 'comercial'"
+      },
+      "fields": [
+        {
+          "name": "cliente",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "clientes"
+        },
+        {
+          "name": "nome",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "cargo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "email",
+          "type": "email",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "telefone_whatsapp",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "papel",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["decisor", "tecnico", "financeiro", "juridico"]
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": ["CREATE INDEX idx_contatos_cliente ON contatos (cliente)"]
+    },
+    {
+      "name": "empreendimentos",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.role = 'admin' || @request.auth.role = 'comercial'",
+        "update": "@request.auth.role = 'admin' || @request.auth.role = 'tecnico' || @request.auth.role = 'comercial'",
+        "delete": "@request.auth.role = 'admin'"
+      },
+      "fields": [
+        {
+          "name": "cliente",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "clientes"
+        },
+        {
+          "name": "nome",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "endereco",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "coordenadas",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "kmz_link",
+          "type": "url",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "altura_pretendida",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "aerodromo_referencia",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "tipo",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["edificio", "galpao", "torre", "usina_fv", "aerodromo", "heliponto"]
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": ["CREATE INDEX idx_empreendimentos_cliente ON empreendimentos (cliente)"]
+    },
+    {
+      "name": "servicos_catalogo",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.role = 'admin'",
+        "update": "@request.auth.role = 'admin'",
+        "delete": "@request.auth.role = 'admin'"
+      },
+      "fields": [
+        {
+          "name": "codigo",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "nome",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "descricao",
+          "type": "editor",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "prazo_tipico",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "faixa_min",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "faixa_max",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "preco_padrao",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "base_normativa",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "vigencia_inicio",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "desconto_pacote_percentual",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ativo",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": ["CREATE UNIQUE INDEX idx_servicos_codigo ON servicos_catalogo (codigo)"]
+    },
+    {
+      "name": "oportunidades",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.role = 'admin' || @request.auth.role = 'comercial'",
+        "update": "@request.auth.role = 'admin' || @request.auth.role = 'comercial'",
+        "delete": "@request.auth.role = 'admin' || @request.auth.role = 'comercial'"
+      },
+      "fields": [
+        {
+          "name": "cliente",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "clientes"
+        },
+        {
+          "name": "titulo",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "tipo_servico",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "servicos_catalogo"
+        },
+        {
+          "name": "etapa",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": [
+            "lead",
+            "qualificacao",
+            "proposta_enviada",
+            "negociacao",
+            "ganho",
+            "perdido"
+          ]
+        },
+        {
+          "name": "valor_estimado",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "probabilidade",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "data_prevista_fechamento",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "data_fechamento",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "motivo_perda",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": [
+            "preco",
+            "prazo",
+            "concorrente",
+            "desistencia_obra",
+            "sem_retorno",
+            "outro"
+          ]
+        },
+        {
+          "name": "responsavel",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "trilha_prevista",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["opea", "registro", "demais"]
+        },
+        {
+          "name": "observacoes",
+          "type": "editor",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_oportunidades_etapa ON oportunidades (etapa)",
+        "CREATE INDEX idx_oportunidades_cliente ON oportunidades (cliente)",
+        "CREATE INDEX idx_oportunidades_responsavel ON oportunidades (responsavel)"
+      ]
+    },
+    {
+      "name": "modelos_documentos",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.role = 'admin'",
+        "update": "@request.auth.role = 'admin'",
+        "delete": "@request.auth.role = 'admin'"
+      },
+      "fields": [
+        {
+          "name": "nome",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "categoria",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": [
+            "contrato",
+            "proposta",
+            "ordem_servico",
+            "oficio",
+            "procuracao",
+            "requerimento",
+            "recibo",
+            "outro"
+          ]
+        },
+        {
+          "name": "corpo",
+          "type": "editor",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": ["CREATE INDEX idx_modelos_categoria ON modelos_documentos (categoria)"]
+    },
+    {
+      "name": "propostas",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.role = 'admin' || @request.auth.role = 'comercial'",
+        "update": "@request.auth.role = 'admin' || @request.auth.role = 'comercial'",
+        "delete": "@request.auth.role = 'admin'"
+      },
+      "fields": [
+        {
+          "name": "oportunidade",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "oportunidades"
+        },
+        {
+          "name": "tipo",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["comercial", "tecnica"]
+        },
+        {
+          "name": "numero",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "revisao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "itens",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "valor_total",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "condicoes_pagamento",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "configuracao_gatilhos",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "validade_dias",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["rascunho", "enviada", "aceita", "recusada", "expirada"]
+        },
+        {
+          "name": "data_envio",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "link_drive",
+          "type": "url",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX idx_propostas_numero ON propostas (numero) WHERE numero != ''",
+        "CREATE INDEX idx_propostas_oportunidade ON propostas (oportunidade)",
+        "CREATE INDEX idx_propostas_status ON propostas (status)"
+      ]
+    },
+    {
+      "name": "contratos",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.role = 'admin' || @request.auth.role = 'comercial'",
+        "update": "@request.auth.role = 'admin' || @request.auth.role = 'comercial'",
+        "delete": "@request.auth.role = 'admin'"
+      },
+      "fields": [
+        {
+          "name": "proposta",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "propostas"
+        },
+        {
+          "name": "cliente",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "clientes"
+        },
+        {
+          "name": "numero",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "data_assinatura",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "valor_global",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "parcelamento",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "po_cliente",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "link_documento_assinado",
+          "type": "url",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX idx_contratos_numero ON contratos (numero)",
+        "CREATE INDEX idx_contratos_cliente ON contratos (cliente)"
+      ]
+    },
+    {
+      "name": "sequencias",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": null,
+        "update": null,
+        "delete": null
+      },
+      "fields": [
+        {
+          "name": "chave",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "atual",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "ano",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": ["CREATE UNIQUE INDEX idx_sequencias_chave_ano ON sequencias (chave, ano)"]
+    },
+    {
+      "name": "projetos",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.role = 'admin' || @request.auth.role = 'tecnico' || @request.auth.role = 'comercial'",
+        "update": "@request.auth.role = 'admin' || @request.auth.role = 'tecnico' || @request.auth.role = 'comercial'",
+        "delete": "@request.auth.role = 'admin'"
+      },
+      "fields": [
+        {
+          "name": "numero",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "nome",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "cliente",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "clientes"
+        },
+        {
+          "name": "empreendimento",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "empreendimentos"
+        },
+        {
+          "name": "oportunidade",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "oportunidades"
+        },
+        {
+          "name": "contrato",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "contratos"
+        },
+        {
+          "name": "trilha",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["opea", "registro", "demais"]
+        },
+        {
+          "name": "fase",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["ativo", "suspenso", "concluido", "cancelado"]
+        },
+        {
+          "name": "responsavel_tecnico",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "art",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "pasta_drive_url",
+          "type": "url",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "data_inicio",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "prazo",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "percentual_concluido",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "observacoes",
+          "type": "editor",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX idx_projetos_numero ON projetos (numero) WHERE numero != ''",
+        "CREATE INDEX idx_projetos_trilha ON projetos (trilha)",
+        "CREATE INDEX idx_projetos_status ON projetos (status)",
+        "CREATE INDEX idx_projetos_cliente ON projetos (cliente)"
+      ]
+    },
+    {
+      "name": "processos",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.role = 'admin' || @request.auth.role = 'tecnico' || @request.auth.role = 'comercial'",
+        "update": "@request.auth.role = 'admin' || @request.auth.role = 'tecnico' || @request.auth.role = 'comercial'",
+        "delete": "@request.auth.role = 'admin'"
+      },
+      "fields": [
+        {
+          "name": "projeto",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "projetos"
+        },
+        {
+          "name": "orgao",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["DECEA-CINDACTA", "COMAER", "ANAC"]
+        },
+        {
+          "name": "numero_protocolo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "data_protocolo",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": [
+            "nao_protocolado",
+            "protocolado",
+            "em_exigencia",
+            "deferido",
+            "indeferido",
+            "arquivado"
+          ]
+        },
+        {
+          "name": "prazo_orgao",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "parecer",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["favoravel", "favoravel_com_restricoes", "desfavoravel", "pendente"]
+        },
+        {
+          "name": "data_parecer",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "link_sysaga",
+          "type": "url",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "link_ambiente",
+          "type": "url",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "link_drive",
+          "type": "url",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "link_emails",
+          "type": "url",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "observacoes",
+          "type": "editor",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_processos_projeto ON processos (projeto)",
+        "CREATE INDEX idx_processos_status ON processos (status)",
+        "CREATE INDEX idx_processos_prazo ON processos (prazo_orgao)"
+      ]
+    },
+    {
+      "name": "exigencias",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.role = 'admin' || @request.auth.role = 'tecnico'",
+        "update": "@request.auth.role = 'admin' || @request.auth.role = 'tecnico'",
+        "delete": "@request.auth.role = 'admin'"
+      },
+      "fields": [
+        {
+          "name": "processo",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "processos"
+        },
+        {
+          "name": "descricao",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "prazo",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["pendente", "atendida", "dispensada"]
+        },
+        {
+          "name": "responsavel",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "data_resposta",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "resposta",
+          "type": "editor",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "historico_respostas",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_exigencias_processo ON exigencias (processo)",
+        "CREATE INDEX idx_exigencias_status ON exigencias (status)",
+        "CREATE INDEX idx_exigencias_prazo ON exigencias (prazo)"
+      ]
+    },
+    {
+      "name": "tarefas",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != ''",
+        "delete": "@request.auth.id != ''"
+      },
+      "fields": [
+        {
+          "name": "titulo",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "responsavel",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "prazo",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "tipo",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["ligacao", "reuniao", "envio", "elaboracao", "protocolo"]
+        },
+        {
+          "name": "oportunidade",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "oportunidades"
+        },
+        {
+          "name": "projeto",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "projetos"
+        },
+        {
+          "name": "concluida",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_tarefas_responsavel ON tarefas (responsavel)",
+        "CREATE INDEX idx_tarefas_prazo ON tarefas (prazo)"
+      ]
+    },
+    {
+      "name": "parcelas",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.role = 'admin' || @request.auth.role = 'financeiro' || @request.auth.role = 'comercial'",
+        "view": "@request.auth.role = 'admin' || @request.auth.role = 'financeiro' || @request.auth.role = 'comercial'",
+        "create": "@request.auth.role = 'admin' || @request.auth.role = 'financeiro'",
+        "update": "@request.auth.role = 'admin' || @request.auth.role = 'financeiro'",
+        "delete": "@request.auth.role = 'admin' || @request.auth.role = 'financeiro'"
+      },
+      "fields": [
+        {
+          "name": "projeto",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "projetos"
+        },
+        {
+          "name": "cliente",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "clientes"
+        },
+        {
+          "name": "descricao",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "valor",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "gatilho",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["assinatura", "protocolo", "entrega", "medicao", "manual"]
+        },
+        {
+          "name": "nf_numero",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "vencimento",
+          "type": "date",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["pendente", "paga", "vencida"]
+        },
+        {
+          "name": "data_pagamento",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "valor_recebido",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "retencoes",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "observacoes",
+          "type": "editor",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "origem",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["manual", "gatilho"]
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_parcelas_projeto ON parcelas (projeto)",
+        "CREATE INDEX idx_parcelas_cliente ON parcelas (cliente)",
+        "CREATE INDEX idx_parcelas_status ON parcelas (status)",
+        "CREATE INDEX idx_parcelas_vencimento ON parcelas (vencimento)"
+      ]
+    },
+    {
+      "name": "ordens_servico",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.role = 'admin'",
+        "update": "@request.auth.role = 'admin'",
+        "delete": "@request.auth.role = 'admin'"
+      },
+      "fields": [
+        {
+          "name": "projeto",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "projetos"
+        },
+        {
+          "name": "prestador",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "descricao",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "valor_interno",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["rascunho", "emitida", "concluida", "cancelada"]
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": ["CREATE INDEX idx_ordens_projeto ON ordens_servico (projeto)"]
+    },
+    {
+      "name": "documentos",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != ''",
+        "delete": "@request.auth.role = 'admin'"
+      },
+      "fields": [
+        {
+          "name": "nome",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "tipo",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "modelo",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "modelos_documentos"
+        },
+        {
+          "name": "projeto",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "projetos"
+        },
+        {
+          "name": "processo",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "processos"
+        },
+        {
+          "name": "cliente",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "clientes"
+        },
+        {
+          "name": "versao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["rascunho", "gerado", "enviado_assinatura", "assinado"]
+        },
+        {
+          "name": "link_assinatura",
+          "type": "url",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "link_arquivo",
+          "type": "url",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "arquivo",
+          "type": "file",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "gerado_de_template",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "conteudo",
+          "type": "editor",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_documentos_projeto ON documentos (projeto)",
+        "CREATE INDEX idx_documentos_cliente ON documentos (cliente)",
+        "CREATE INDEX idx_documentos_status ON documentos (status)"
+      ]
+    },
+    {
+      "name": "links_externos",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != ''",
+        "delete": "@request.auth.id != ''"
+      },
+      "fields": [
+        {
+          "name": "tipo",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["drive", "email", "assinatura", "orgao", "outro"]
+        },
+        {
+          "name": "url",
+          "type": "url",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "titulo",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "projeto",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "projetos"
+        },
+        {
+          "name": "processo",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "processos"
+        },
+        {
+          "name": "documento",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "documentos"
+        },
+        {
+          "name": "cliente",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "clientes"
+        },
+        {
+          "name": "criado_por",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_links_projeto ON links_externos (projeto)",
+        "CREATE INDEX idx_links_processo ON links_externos (processo)",
+        "CREATE INDEX idx_links_documento ON links_externos (documento)",
+        "CREATE INDEX idx_links_cliente ON links_externos (cliente)"
+      ]
+    },
+    {
+      "name": "atividades",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != ''",
+        "update": null,
+        "delete": null
+      },
+      "fields": [
+        {
+          "name": "usuario",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "texto",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "cliente",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "clientes"
+        },
+        {
+          "name": "oportunidade",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "oportunidades"
+        },
+        {
+          "name": "projeto",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "projetos"
+        },
+        {
+          "name": "processo",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "processos"
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_atividades_cliente ON atividades (cliente)",
+        "CREATE INDEX idx_atividades_oportunidade ON atividades (oportunidade)",
+        "CREATE INDEX idx_atividades_projeto ON atividades (projeto)",
+        "CREATE INDEX idx_atividades_processo ON atividades (processo)",
+        "CREATE INDEX idx_atividades_created ON atividades (created DESC)"
+      ]
+    }
+  ]
+}

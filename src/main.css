@@ -1,0 +1,141 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 95%;
+    --foreground: 0 0% 35%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 35%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 35%;
+    --primary: 22 100% 54%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 28 100% 96%;
+    --secondary-foreground: 0 0% 35%;
+    --muted: 0 0% 95%;
+    --muted-foreground: 0 0% 45%;
+    --accent: 28 100% 96%;
+    --accent-foreground: 22 100% 45%;
+    --destructive: 3 57% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 87%;
+    --input: 0 0% 87%;
+    --ring: 22 100% 54%;
+    --radius: 0.625rem;
+    --sidebar-background: 0 0% 29%;
+    --sidebar-foreground: 0 0% 100%;
+    --sidebar-primary: 22 100% 54%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 0% 35%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 0 0% 38%;
+    --sidebar-ring: 22 100% 54%;
+    --chart-1: 22 100% 54%;
+    --chart-2: 153 59% 35%;
+    --chart-3: 199 63% 43%;
+    --chart-4: 39 100% 44%;
+    --chart-5: 3 57% 50%;
+  }
+
+  * {
+    @apply border-border;
+  }
+  html {
+    font-family: Arial, Helvetica, sans-serif;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    min-width: 320px;
+  }
+  button,
+  a,
+  input,
+  select,
+  textarea {
+    -webkit-tap-highlight-color: transparent;
+  }
+  code,
+  .font-mono {
+    font-variant-numeric: tabular-nums;
+  }
+  section[aria-label='Notifications alt+T'] {
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+}
+
+@layer components {
+  .technical-label {
+    @apply text-[10px] font-bold uppercase tracking-[0.16em] text-[#9A9A9A];
+  }
+  .crm-card {
+    @apply rounded-[10px] border border-[#DEDEDE] bg-white shadow-[0_1px_3px_rgba(89,89,89,0.08)] transition-shadow hover:shadow-[0_6px_18px_rgba(89,89,89,0.12)];
+  }
+  .blueprint-grid {
+    background-color: #fffaf5;
+    background-image:
+      linear-gradient(rgba(255, 106, 19, 0.055) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 106, 19, 0.055) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+  .auth-grid {
+    background-image:
+      linear-gradient(rgba(255, 106, 19, 0.09) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 106, 19, 0.09) 1px, transparent 1px);
+    background-size: 32px 32px;
+  }
+  .mono-value {
+    @apply font-mono tabular-nums tracking-tight;
+  }
+}
+
+@keyframes blueprint-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes soft-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 106, 19, 0.28);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(255, 106, 19, 0);
+  }
+}
+.animate-blueprint-rise {
+  animation: blueprint-rise 0.38s ease-out both;
+}
+.animate-soft-pulse {
+  animation: soft-pulse 2s ease-in-out infinite;
+}
+
+@media print {
+  body * {
+    visibility: hidden !important;
+  }
+  #print-document,
+  #print-document * {
+    visibility: visible !important;
+  }
+  #print-document {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    min-height: auto !important;
+    box-shadow: none !important;
+    border: 0 !important;
+    margin: 0 !important;
+  }
+  @page {
+    size: A4;
+    margin: 0;
+  }
+}
