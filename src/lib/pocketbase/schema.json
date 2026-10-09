@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-09T18:17:23.052Z",
+  "generatedAt": "2026-10-09T23:46:26.106Z",
   "collections": [
     {
       "name": "users",
@@ -551,11 +551,23 @@
           "selectValues": [
             "contrato",
             "proposta",
+            "proposta_tecnica",
             "ordem_servico",
             "oficio",
             "procuracao",
             "requerimento",
             "recibo",
+            "fatura",
+            "ata_reuniao",
+            "estudo_viabilidade",
+            "nota_tecnica",
+            "memorial",
+            "laudo",
+            "cronograma",
+            "checklist",
+            "fnc",
+            "pac",
+            "relatorio_gerencial",
             "outro"
           ]
         },

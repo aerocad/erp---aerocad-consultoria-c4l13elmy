@@ -1,6 +1,19 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, CheckCircle2, FileText, Link2, Printer, Save } from 'lucide-react'
-import { Link, useNavigate } from 'react-router-dom'
+import {
+  ArrowLeft,
+  CheckCircle2,
+  FileCheck,
+  FileText,
+  Link2,
+  Maximize2,
+  Minimize2,
+  Printer,
+  RefreshCw,
+  Save,
+  Sliders,
+  Sparkles,
+} from 'lucide-react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import logo from '@/assets/aerocad-logo.svg'
@@ -21,126 +34,437 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
+import {
+  DOCUMENT_FAMILIES,
+  formatDocumentFileName,
+  dataHojeExtenso,
+  INSTITUTIONAL_DATA,
+} from '@/lib/documentCatalogo'
+import { buildCommercialProposalHTML } from '@/lib/commercialProposalBuilder'
+import { buildTechnicalProposalHTML } from '@/lib/technicalProposalBuilder'
+import {
+  buildContractHTML,
+  buildInternalServiceOrderHTML,
+  buildInvoiceHTML,
+  buildPowerOfAttorneyHTML,
+  buildReceiptHTML,
+} from '@/lib/additionalDocumentBuilders'
 import { formatCurrency, formatDate } from '@/lib/format'
 import { createOne, listAll, updateOne } from '@/services/api'
 import type {
   ClienteRecord,
   DocumentoRecord,
   ModeloRecord,
+  OportunidadeRecord,
+  ParcelaRecord,
   ProcessoRecord,
   ProjetoRecord,
 } from '@/types/crm'
 
 const placeholderRegex = /{{\s*([^}]+)\s*}}/g
+
 export default function DocumentGeneratorPage() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+
   const [templates, setTemplates] = useState<ModeloRecord[]>([])
   const [clients, setClients] = useState<ClienteRecord[]>([])
   const [projects, setProjects] = useState<ProjetoRecord[]>([])
   const [processes, setProcesses] = useState<ProcessoRecord[]>([])
+  const [opportunities, setOpportunities] = useState<OportunidadeRecord[]>([])
+  const [parcelas, setParcelas] = useState<ParcelaRecord[]>([])
+
+  const [familyFilter, setFamilyFilter] = useState<string>('todas')
   const [templateId, setTemplateId] = useState('')
   const [clientId, setClientId] = useState('')
-  const [projectId, setProjectId] = useState('')
-  const [processId, setProcessId] = useState('')
+  const [projectId, setProjectId] = useState(searchParams.get('projeto') || '')
+  const [processId, setProcessId] = useState(searchParams.get('processo') || '')
+
   const [values, setValues] = useState<Record<string, string>>({})
   const [name, setName] = useState('')
+  const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('portrait')
+  const [activeTab, setActiveTab] = useState<'dados' | 'editor' | 'opcoes'>('dados')
+
+  // Variante específica para Proposta Comercial
+  const [pcVariant, setPcVariant] = useState<'multi_modulo' | 'simples' | 'duas_opcoes'>(
+    'multi_modulo',
+  )
+
   const [saved, setSaved] = useState<DocumentoRecord | null>(null)
   const [saving, setSaving] = useState(false)
   const [signatureOpen, setSignatureOpen] = useState(false)
   const [signatureLink, setSignatureLink] = useState('')
+
   useEffect(() => {
     void Promise.all([
       listAll<ModeloRecord>('modelos_documentos', { sort: 'nome' }),
       listAll<ClienteRecord>('clientes', { sort: 'razao_social' }),
-      listAll<ProjetoRecord>('projetos', { expand: 'cliente,oportunidade', sort: '-numero' }),
+      listAll<ProjetoRecord>('projetos', {
+        expand: 'cliente,oportunidade,responsavel_tecnico',
+        sort: '-numero',
+      }),
       listAll<ProcessoRecord>('processos', { expand: 'projeto', sort: '-created' }),
-    ]).then(([t, c, p, pr]) => {
+      listAll<OportunidadeRecord>('oportunidades', {
+        expand: 'cliente,tipo_servico',
+        sort: '-created',
+      }),
+      listAll<ParcelaRecord>('parcelas', { expand: 'projeto', sort: 'vencimento' }),
+    ]).then(([t, c, p, pr, op, parc]) => {
       setTemplates(t)
       setClients(c)
       setProjects(p)
       setProcesses(pr)
+      setOpportunities(op)
+      setParcelas(parc)
+
+      // Se não tiver template selecionado, seleciona por padrão a Proposta Comercial Multi-Módulo ou o primeiro
+      const defaultTpl =
+        t.find((i) => i.nome.includes('Multi-Módulo') || i.nome.includes('Proposta Comercial')) ||
+        t[0]
+      if (defaultTpl && !templateId) {
+        setTemplateId(defaultTpl.id)
+      }
     })
   }, [])
+
   const template = templates.find((i) => i.id === templateId)
   const client = clients.find((i) => i.id === clientId)
   const project = projects.find((i) => i.id === projectId)
   const process = processes.find((i) => i.id === processId)
-  const placeholders = useMemo(() => {
-    const found = new Set<string>()
-    for (const match of template?.corpo?.matchAll(placeholderRegex) || [])
-      found.add(match[1].trim())
-    return Array.from(found)
-  }, [template?.corpo])
+  const opportunity = opportunities.find((i) => i.id === project?.oportunidade)
+  const projectParcelas = parcelas.filter((p) => p.projeto === projectId)
+
+  // Atualiza contexto ao mudar o projeto
   useEffect(() => {
-    const p = projects.find((i) => i.id === projectId)
-    if (p) {
-      setClientId(p.cliente)
-      setProcessId('')
+    if (projectId) {
+      const p = projects.find((i) => i.id === projectId)
+      if (p && p.cliente) {
+        setClientId(p.cliente)
+      }
     }
   }, [projectId, projects])
+
+  // Ajusta orientação padrão com base no template
   useEffect(() => {
-    const pr = processes.find((i) => i.id === processId)
-    if (pr) {
-      setProjectId(pr.projeto)
+    if (template) {
+      const isLandscape =
+        template.categoria === 'cronograma' ||
+        template.nome.toLowerCase().includes('gantt') ||
+        template.nome.toLowerCase().includes('paisagem')
+      setOrientation(isLandscape ? 'landscape' : 'portrait')
     }
-  }, [processId, processes])
+  }, [template])
+
+  // Identifica placeholders
+  const placeholders = useMemo(() => {
+    const found = new Set<string>()
+    for (const match of template?.corpo?.matchAll(placeholderRegex) || []) {
+      found.add(match[1].trim())
+    }
+    return Array.from(found)
+  }, [template?.corpo])
+
+  // Preenchimento inteligente com dados institucionais e do CRM
   useEffect(() => {
     if (!template) return
+
+    const estimatedValue =
+      projectParcelas.reduce((acc, cur) => acc + (cur.valor || 0), 0) ||
+      opportunity?.valor_estimado ||
+      (template.nome.includes('Multi-Módulo') ? 182700 : 8320)
+
+    const numDoc = project?.numero?.split('-')[1] || project?.numero || '241'
+
+    const currentYear = new Date().getFullYear()
+
     const defaults: Record<string, string> = {
-      'cliente.razao_social': client?.razao_social || '',
-      'cliente.cnpj_cpf': client?.cnpj_cpf || '',
-      'cliente.endereco': client?.endereco || '',
-      'projeto.numero': project?.numero || '',
-      'projeto.nome': project?.nome || '',
-      'processo.numero_protocolo': process?.numero_protocolo || '',
+      'cliente.razao_social': client?.razao_social || 'ZURICH AIRPORT BRASIL',
+      'cliente.cnpj_cpf': client?.cnpj_cpf || '28.036.597/0001-43',
+      'cliente.endereco':
+        client?.endereco || 'Aeroporto Internacional de Florianópolis — Hercílio Luz (SBFL/FLN)',
+      'projeto.numero': project?.numero || `${currentYear}-241`,
+      'projeto.nome':
+        project?.nome ||
+        'Ampliação da PPD 14/32 com deslocamento da CAB 32 — Aeroporto Internacional de Florianópolis (SBFL/FLN)',
+      'processo.numero_protocolo': process?.numero_protocolo || 'OPEA-CINDACTA-II-2026',
+      orgao: process?.orgao || 'DECEA / ANAC',
       data_hoje: formatDate(new Date()),
-      valor_contrato: formatCurrency(project?.expand?.oportunidade?.valor_estimado || 0),
-      orgao: process?.orgao || '',
+      cidade_data: dataHojeExtenso('Brasília – DF'),
+      valor_contrato: formatCurrency(estimatedValue),
+      prazo_execucao: '140 dias corridos AEROCAD + prazo de órgão',
+      'proposta.numero': `${numDoc}/${currentYear}`,
+      'contrato.numero': `CTR-${numDoc}/${currentYear}`,
+      'ordem_servico.numero': `OS-${numDoc}/${currentYear}`,
+      'fatura.numero': `FT-${numDoc}-01/${currentYear}`,
+      'recibo.numero': `RB-${numDoc}-01/${currentYear}`,
+      'documento.numero': `NT-${numDoc}/${currentYear}`,
+      validade_dias: '90',
+      escopo:
+        'Estudo de Viabilidade Aeronáutica (AGA/ATM) e Implementação Regulatória da ampliação da PPD 14/32 com deslocamento da cabeceira 32, atualização do PDIR e cadastros regulatórios.',
+      condicoes_pagamento:
+        'Pagamento parcelado vinculado a marcos técnicos e entregáveis (M1 a M10) com emissão de NFS-e em 5 dias úteis e vencimento em 30 dias corridos.',
+      referencia_rfq:
+        'RFQ Set/2026 · Rev. nº 0 — Estudo de Viabilidade Aeronáutica e Implementação Regulatória',
+      'contato.nome': 'Daniela Bellini',
+      'contato.email': 'daniela.bellini@zurichairportbrasil.com',
+      'contato.telefone': '+55 48 3331-4000',
+      proposta_tecnica_correlata: `240/${currentYear}`,
+      proposta_comercial_correlata: `241/${currentYear}`,
+      responsavel_tecnico_cliente: 'Engº Marcelo Costa Silva',
+      prazo_envio_proposta: `${formatDate(new Date())} — 18h`,
+      preco_modulo_a: formatCurrency(78500),
+      preco_modulo_b: formatCurrency(47700),
+      preco_modulo_c: formatCurrency(56500),
+      responsavel:
+        project?.expand?.responsavel_tecnico?.name ||
+        INSTITUTIONAL_DATA.representantes.responsavelTecnico.nome,
+      'parcela.identificador': 'M1 / Parcela 1',
+      'parcela.descricao': 'Assinatura do Contrato / OS + recebimento dos dados-base pela AEROCAD.',
+      'parcela.vencimento': formatDate(new Date(Date.now() + 30 * 86400000)),
+      'parcela.valor': formatCurrency(estimatedValue * 0.2 || 15700),
+      referencia_contrato_pc: `PC nº ${numDoc}/${currentYear}`,
     }
-    setValues((current) => {
-      const next = { ...current }
+
+    setValues((curr) => {
+      const next = { ...curr }
       placeholders.forEach((key) => {
-        if (!next[key] || key.includes('.')) next[key] = defaults[key] || next[key] || ''
+        if (!next[key] || key.includes('.')) {
+          next[key] = defaults[key] || next[key] || ''
+        }
       })
       return next
     })
-    setName((current) => current || `${template.nome}${project ? ` — ${project.numero}` : ''}`)
-  }, [template, client, project, process, placeholders])
-  const html = useMemo(() => {
-    let body = template?.corpo || ''
+
+    // Gera o nome padronizado do documento pelo catálogo AEROCAD
+    const prefix =
+      template.categoria === 'proposta'
+        ? 'PC'
+        : template.categoria === 'proposta_tecnica'
+          ? 'PT'
+          : template.categoria === 'contrato'
+            ? 'CTR'
+            : template.categoria === 'ordem_servico'
+              ? 'OS'
+              : template.categoria === 'procuracao'
+                ? 'PR'
+                : template.categoria === 'fatura'
+                  ? 'FT'
+                  : template.categoria === 'recibo'
+                    ? 'RB'
+                    : 'DOC'
+
+    const stdFileName = formatDocumentFileName({
+      prefixo: prefix,
+      numero: numDoc,
+      ano: currentYear,
+      cliente: client?.razao_social || 'ZURICH',
+      escopo: project?.nome || 'SBFL_AMPLIACAO',
+    })
+
+    setName((curr) => curr || stdFileName)
+  }, [template, client, project, process, opportunity, projectParcelas, placeholders])
+
+  // Geração do corpo renderizado (aplica os builders dedicados ou a substituição por placeholders)
+  const renderedContent = useMemo(() => {
+    if (!template) return ''
+
+    const isPcMultiModulo =
+      template.nome.includes('Multi-Módulo') ||
+      (template.categoria === 'proposta' && pcVariant === 'multi_modulo')
+    const isPcSimples =
+      template.nome.includes('Simples') ||
+      (template.categoria === 'proposta' && pcVariant === 'simples')
+    const isPcDuasOpcoes = template.categoria === 'proposta' && pcVariant === 'duas_opcoes'
+    const isPtFiel =
+      template.categoria === 'proposta_tecnica' || template.nome.includes('Proposta Técnica')
+    const isContrato = template.categoria === 'contrato' && template.nome.includes('11 Cláusulas')
+    const isOS = template.categoria === 'ordem_servico'
+    const isProcuracao = template.categoria === 'procuracao'
+    const isFatura = template.categoria === 'fatura'
+    const isRecibo = template.categoria === 'recibo'
+
+    const currentYear = new Date().getFullYear()
+    const numDoc = project?.numero?.split('-')[1] || project?.numero || '241'
+
+    // 1. Proposta Comercial Fiel
+    if (template.categoria === 'proposta') {
+      return buildCommercialProposalHTML({
+        tipoVariante: isPcMultiModulo ? 'multi_modulo' : isPcDuasOpcoes ? 'duas_opcoes' : 'simples',
+        numero: numDoc,
+        ano: currentYear,
+        contratante:
+          client?.razao_social || values['cliente.razao_social'] || 'ZURICH AIRPORT BRASIL',
+        cnpjCpf: client?.cnpj_cpf || values['cliente.cnpj_cpf'] || '28.036.597/0001-43',
+        endereco:
+          client?.endereco ||
+          values['cliente.endereco'] ||
+          'Aeroporto Internacional de Florianópolis (SBFL)',
+        objetoAerodromo:
+          project?.nome ||
+          values['projeto.nome'] ||
+          'Aeroporto Internacional de Florianópolis (SBFL/FLN)',
+        referenciaRfq:
+          values['referencia_rfq'] || 'RFQ Set/2026 · Rev. nº 0 — Estudo de Viabilidade AGA/ATM',
+        contatoEnvio: values['contato.email'] || 'daniela.bellini@zurichairportbrasil.com',
+        docTecnicoCorrelato: `Proposta Técnica AEROCAD PT nº ${values['proposta_tecnica_correlata'] || '240/2026'}`,
+        valorGlobal: isPcMultiModulo ? 182700 : 8320,
+        validadeDias: Number(values['validade_dias']) || 90,
+        reajusteIndice: 'IPCA/IBGE',
+        limiteRevisoes: 2,
+      })
+    }
+
+    // 2. Proposta Técnica Fiel (com Aderência, Normas e Gantt)
+    if (isPtFiel) {
+      return buildTechnicalProposalHTML({
+        numero: values['proposta_tecnica_correlata']?.split('/')[0] || '240',
+        ano: currentYear,
+        objetoAerodromo:
+          project?.nome ||
+          values['projeto.nome'] ||
+          'Aeroporto Internacional de Florianópolis — Hercílio Luz (SBFL/FLN)',
+        contratante:
+          client?.razao_social || values['cliente.razao_social'] || 'ZURICH AIRPORT BRASIL',
+        referenciaRfq:
+          values['referencia_rfq'] ||
+          'RFQ Set/2026 · Rev. nº 0 — Estudo de Viabilidade Aeronáutica',
+        contatoEnvio: values['contato.email'] || 'daniela.bellini@zurichairportbrasil.com',
+        responsavelTecnicoCliente:
+          values['responsavel_tecnico_cliente'] || 'Engº Marcelo Costa Silva',
+        prazoEnvioProposta: values['prazo_envio_proposta'] || `${formatDate(new Date())} — 18h`,
+        propostaComercialCorrelata: `${numDoc}/${currentYear}`,
+      })
+    }
+
+    // 3. Contrato 11 Cláusulas
+    if (isContrato) {
+      return buildContractHTML({
+        numeroContrato: values['contrato.numero'] || `CTR-${numDoc}/${currentYear}`,
+        clienteRazaoSocial:
+          client?.razao_social || values['cliente.razao_social'] || 'Águas do Cerrado S.A.',
+        clienteCnpj: client?.cnpj_cpf || values['cliente.cnpj_cpf'] || '12.345.678/0001-90',
+        clienteEndereco:
+          client?.endereco || values['cliente.endereco'] || 'SIA Trecho 3, Brasília-DF',
+        objetoNome: project?.nome || values['projeto.nome'] || 'OPEA Reservatório Norte',
+        projetoNumero: project?.numero || values['projeto.numero'] || `${currentYear}-232`,
+        escopo:
+          values['escopo'] ||
+          'Processo técnico instrucional de Objeto Projetado no Espaço Aéreo perante o DECEA.',
+        valorGlobal: 16640,
+        prazoExecucao: values['prazo_execucao'] || '60 dias corridos',
+        condicoesPagamento:
+          values['condicoes_pagamento'] ||
+          '50% de entrada na assinatura do contrato + 50% após o protocolo oficial perante o DECEA/CINDACTA.',
+      })
+    }
+
+    // 4. Ordem de Serviço
+    if (isOS) {
+      return buildInternalServiceOrderHTML({
+        numeroOS: values['ordem_servico.numero'] || `OS-${numDoc}/${currentYear}`,
+        projetoNumero: project?.numero || values['projeto.numero'] || `${currentYear}-232`,
+        projetoNome: project?.nome || values['projeto.nome'] || 'OPEA Reservatório Norte',
+        clienteRazaoSocial:
+          client?.razao_social || values['cliente.razao_social'] || 'Águas do Cerrado S.A.',
+        clienteCnpj: client?.cnpj_cpf || values['cliente.cnpj_cpf'] || '12.345.678/0001-90',
+        escopo: values['escopo'] || 'Elaboração das superfícies OLS e protocolo SYSAGA.',
+        responsavelTecnico:
+          values['responsavel'] || INSTITUTIONAL_DATA.representantes.responsavelTecnico.nome,
+        prazo: values['prazo_execucao'] || '45 dias úteis',
+      })
+    }
+
+    // 5. Procuração
+    if (isProcuracao) {
+      return buildPowerOfAttorneyHTML({
+        clienteRazaoSocial:
+          client?.razao_social || values['cliente.razao_social'] || 'Águas do Cerrado S.A.',
+        clienteCnpj: client?.cnpj_cpf || values['cliente.cnpj_cpf'] || '12.345.678/0001-90',
+        clienteEndereco:
+          client?.endereco || values['cliente.endereco'] || 'SIA Trecho 3, Brasília-DF',
+        objetoNome: project?.nome || values['projeto.nome'] || 'OPEA Reservatório Norte',
+        projetoNumero: project?.numero || values['projeto.numero'] || `${currentYear}-232`,
+      })
+    }
+
+    // 6. Fatura
+    if (isFatura) {
+      return buildInvoiceHTML({
+        numeroFatura: values['fatura.numero'] || `FT-${numDoc}-01/${currentYear}`,
+        clienteRazaoSocial:
+          client?.razao_social || values['cliente.razao_social'] || 'Águas do Cerrado S.A.',
+        clienteCnpj: client?.cnpj_cpf || values['cliente.cnpj_cpf'] || '12.345.678/0001-90',
+        clienteEndereco:
+          client?.endereco || values['cliente.endereco'] || 'SIA Trecho 3, Brasília-DF',
+        projetoNumero: project?.numero || values['projeto.numero'] || `${currentYear}-232`,
+        projetoNome: project?.nome || values['projeto.nome'] || 'OPEA Reservatório Norte',
+        descricaoMarco:
+          values['parcela.descricao'] ||
+          'Comprovação de Protocolo SYSAGA junto ao DECEA/CINDACTA I.',
+        vencimento:
+          values['parcela.vencimento'] || formatDate(new Date(Date.now() + 30 * 86400000)),
+        valor: 8320,
+      })
+    }
+
+    // 7. Recibo
+    if (isRecibo) {
+      return buildReceiptHTML({
+        numeroRecibo: values['recibo.numero'] || `RB-${numDoc}-01/${currentYear}`,
+        clienteRazaoSocial:
+          client?.razao_social || values['cliente.razao_social'] || 'Águas do Cerrado S.A.',
+        clienteCnpj: client?.cnpj_cpf || values['cliente.cnpj_cpf'] || '12.345.678/0001-90',
+        projetoNumero: project?.numero || values['projeto.numero'] || `${currentYear}-232`,
+        projetoNome: project?.nome || values['projeto.nome'] || 'OPEA Reservatório Norte',
+        descricaoEntrega:
+          values['parcela.descricao'] ||
+          'Parcela referente à entrada e início dos estudos de viabilidade.',
+        valor: 8320,
+      })
+    }
+
+    // Fallback: Substituição direta de tags
+    let body = template.corpo || ''
     placeholders.forEach((key) => {
       body = body.replaceAll(`{{${key}}}`, values[key] || `[${key}]`)
       body = body.replaceAll(`{{ ${key} }}`, values[key] || `[${key}]`)
     })
     return body
-  }, [template?.corpo, placeholders, values])
+  }, [template, pcVariant, project, client, values, placeholders])
+
+  // Filtragem de templates pela família
+  const filteredTemplates = useMemo(() => {
+    if (familyFilter === 'todas') return templates
+    return templates.filter((t) => t.categoria === familyFilter)
+  }, [templates, familyFilter])
+
   async function generate() {
     if (!template) return toast.error('Escolha um modelo')
-    if (placeholders.some((key) => !values[key]?.trim()))
-      return toast.error('Preencha todos os campos do documento')
     setSaving(true)
     try {
       const record = await createOne<DocumentoRecord>('documentos', {
         nome: name || template.nome,
         tipo: template.categoria,
         modelo: template.id,
-        cliente: clientId,
-        projeto: projectId,
-        processo: processId,
+        cliente: clientId || undefined,
+        projeto: projectId || undefined,
+        processo: processId || undefined,
         versao: 'REV001',
         status: 'gerado',
         gerado_de_template: true,
-        conteudo: html,
+        conteudo: renderedContent,
       })
       setSaved(record)
-      toast.success('Documento gerado e salvo')
+      toast.success('Documento gerado e salvo com sucesso!')
     } catch {
       toast.error('Não foi possível gerar o documento')
     } finally {
       setSaving(false)
     }
   }
+
   async function sendSignature() {
     if (!saved || !signatureLink) return
     try {
@@ -156,6 +480,7 @@ export default function DocumentGeneratorPage() {
       toast.error('Informe um link válido')
     }
   }
+
   async function markSigned() {
     if (!saved) return
     try {
@@ -165,79 +490,161 @@ export default function DocumentGeneratorPage() {
       toast.error('Não foi possível atualizar o documento')
     }
   }
+
   return (
-    <div>
+    <div className="pb-12">
       <Button variant="ghost" asChild className="mb-4 -ml-3">
         <Link to="/documentos">
           <ArrowLeft className="mr-2 h-4 w-4" />
-          Voltar aos documentos
+          Voltar ao catálogo de documentos
         </Link>
       </Button>
-      <div className="mb-6">
-        <p className="technical-label">GERADOR A4</p>
-        <h1 className="text-2xl font-bold text-[#424242]">Novo documento</h1>
-        <p className="mt-1 text-sm text-[#737373]">
-          Modelo → contexto → campos → pré-visualização e impressão.
-        </p>
+
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="technical-label">MÓDULO DE DOCUMENTOS AEROCAD®</p>
+          <h1 className="text-2xl font-bold text-[#333]">Gerador Oficial de Documentos</h1>
+          <p className="mt-1 text-sm text-[#666]">
+            Modelos fiéis para Propostas Comerciais, Propostas Técnicas, Contratos e Peças
+            Regulatórias A4.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setOrientation((o) => (o === 'portrait' ? 'landscape' : 'portrait'))}
+            className="border-[#D0D0D0]"
+          >
+            {orientation === 'landscape' ? (
+              <>
+                <Minimize2 className="mr-2 h-4 w-4 text-[#FF6A13]" />
+                Modo Retrato (A4)
+              </>
+            ) : (
+              <>
+                <Maximize2 className="mr-2 h-4 w-4 text-[#FF6A13]" />
+                Modo Paisagem (Gantt)
+              </>
+            )}
+          </Button>
+
+          <Button
+            onClick={() => window.print()}
+            disabled={!template}
+            className="bg-[#2D2D2D] hover:bg-[#1A1A1A] text-white"
+          >
+            <Printer className="mr-2 h-4 w-4" />
+            Imprimir / Salvar PDF
+          </Button>
+        </div>
       </div>
-      <div className="grid gap-6 xl:grid-cols-[420px_1fr]">
+
+      <div className="grid gap-6 xl:grid-cols-[440px_1fr]">
+        {/* Painel lateral de configuração */}
         <aside className="space-y-5">
           <section className="crm-card p-5">
-            <div className="mb-4 flex items-center gap-3">
-              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#FF6A13] text-xs font-bold text-white">
-                1
+            <div className="mb-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#FF6A13] text-xs font-bold text-white">
+                  1
+                </span>
+                <h2 className="font-bold text-sm">Família e Modelo</h2>
+              </div>
+              <span className="text-[11px] font-mono text-[#888]">
+                {filteredTemplates.length} disponíveis
               </span>
-              <h2 className="font-bold">Modelo</h2>
             </div>
-            <Select
-              value={templateId}
-              onValueChange={(id) => {
-                setTemplateId(id)
-                setValues({})
-                setSaved(null)
-                setName('')
-              }}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Escolha o modelo" />
-              </SelectTrigger>
-              <SelectContent>
-                {templates.map((item) => (
-                  <SelectItem key={item.id} value={item.id}>
-                    {item.nome}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </section>
-          <section className="crm-card p-5">
-            <div className="mb-4 flex items-center gap-3">
-              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#FF6A13] text-xs font-bold text-white">
-                2
-              </span>
-              <h2 className="font-bold">Contexto</h2>
-            </div>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label>Cliente</Label>
-                <Select value={clientId} onValueChange={setClientId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione" />
+
+            <div className="space-y-3">
+              <div>
+                <Label className="text-xs text-[#666]">Filtrar por Família do Catálogo</Label>
+                <Select value={familyFilter} onValueChange={setFamilyFilter}>
+                  <SelectTrigger className="mt-1 h-9">
+                    <SelectValue placeholder="Todas as famílias" />
                   </SelectTrigger>
                   <SelectContent>
-                    {clients.map((i) => (
-                      <SelectItem key={i.id} value={i.id}>
-                        {i.razao_social}
+                    <SelectItem value="todas">Todas as famílias de documentos</SelectItem>
+                    <SelectItem value="proposta">PC — Proposta Comercial</SelectItem>
+                    <SelectItem value="proposta_tecnica">PT — Proposta Técnica</SelectItem>
+                    <SelectItem value="contrato">CT — Contratos</SelectItem>
+                    <SelectItem value="ordem_servico">OS — Ordens de Serviço</SelectItem>
+                    <SelectItem value="procuracao">PR — Procurações</SelectItem>
+                    <SelectItem value="fatura">FT — Faturas</SelectItem>
+                    <SelectItem value="recibo">RB — Recibos</SelectItem>
+                    <SelectItem value="ata_reuniao">AT — Atas de Reunião</SelectItem>
+                    <SelectItem value="requerimento">RQ — Requerimentos</SelectItem>
+                    <SelectItem value="nota_tecnica">NT — Notas Técnicas</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label className="text-xs text-[#666]">Modelo Selecionado</Label>
+                <Select
+                  value={templateId}
+                  onValueChange={(id) => {
+                    setTemplateId(id)
+                    setSaved(null)
+                    setName('')
+                  }}
+                >
+                  <SelectTrigger className="mt-1 font-medium">
+                    <SelectValue placeholder="Escolha o modelo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {filteredTemplates.map((item) => (
+                      <SelectItem key={item.id} value={item.id}>
+                        {item.nome}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <Label>Projeto</Label>
+
+              {/* Seletor de variante quando for Proposta Comercial */}
+              {template?.categoria === 'proposta' && (
+                <div className="rounded-lg border border-orange-200 bg-orange-50/50 p-3 mt-2">
+                  <Label className="text-xs font-bold text-[#E85B06] flex items-center gap-1.5">
+                    <Sliders className="h-3.5 w-3.5" />
+                    Variante de Proposta Comercial
+                  </Label>
+                  <Select value={pcVariant} onValueChange={(v: any) => setPcVariant(v)}>
+                    <SelectTrigger className="mt-1.5 h-8 bg-white text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="multi_modulo">
+                        Multi-Módulo RFQ (SBFL — Módulos A, B, C, D e Marcos M1-M10)
+                      </SelectItem>
+                      <SelectItem value="simples">
+                        Simples (OPEA / Cadastro / Medição única ou 2-3 parcelas)
+                      </SelectItem>
+                      <SelectItem value="duas_opcoes">
+                        Duas Opções (Módulo a módulo × Turnkey completo)
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+          </section>
+
+          <section className="crm-card p-5">
+            <div className="mb-3 flex items-center gap-2">
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#FF6A13] text-xs font-bold text-white">
+                2
+              </span>
+              <h2 className="font-bold text-sm">Vínculo de Contexto CRM</h2>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <Label className="text-xs text-[#666]">Projeto Referência</Label>
                 <Select value={projectId} onValueChange={setProjectId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Opcional" />
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Selecione um projeto" />
                   </SelectTrigger>
                   <SelectContent>
                     {projects.map((i) => (
@@ -248,11 +655,28 @@ export default function DocumentGeneratorPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <Label>Processo</Label>
+
+              <div>
+                <Label className="text-xs text-[#666]">Cliente / Contratante</Label>
+                <Select value={clientId} onValueChange={setClientId}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Selecione o cliente" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {clients.map((i) => (
+                      <SelectItem key={i.id} value={i.id}>
+                        {i.razao_social}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label className="text-xs text-[#666]">Processo Regulatório (Opcional)</Label>
                 <Select value={processId} onValueChange={setProcessId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Opcional" />
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Selecione o processo" />
                   </SelectTrigger>
                   <SelectContent>
                     {processes.map((i) => (
@@ -265,116 +689,143 @@ export default function DocumentGeneratorPage() {
               </div>
             </div>
           </section>
-          {template && (
-            <section className="crm-card p-5">
-              <div className="mb-4 flex items-center gap-3">
-                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#FF6A13] text-xs font-bold text-white">
-                  3
-                </span>
-                <h2 className="font-bold">Campos</h2>
-              </div>
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Nome do documento</Label>
-                  <Input value={name} onChange={(e) => setName(e.target.value)} />
-                </div>
-                {placeholders.map((key) => (
-                  <div key={key} className="space-y-2">
-                    <Label className="font-mono text-xs">{`{{${key}}}`}</Label>
-                    {['texto', 'escopo'].includes(key) ? (
-                      <Textarea
-                        value={values[key] || ''}
-                        onChange={(e) => setValues((v) => ({ ...v, [key]: e.target.value }))}
-                      />
-                    ) : (
-                      <Input
-                        value={values[key] || ''}
-                        onChange={(e) => setValues((v) => ({ ...v, [key]: e.target.value }))}
-                      />
-                    )}
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
-          <div className="flex flex-wrap gap-2">
+
+          <section className="crm-card p-5">
+            <div className="mb-3 flex items-center gap-2">
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#FF6A13] text-xs font-bold text-white">
+                3
+              </span>
+              <h2 className="font-bold text-sm">Identificação do Arquivo</h2>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-xs text-[#666]">Nome do Documento / Nomenclatura Padrão</Label>
+              <Input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="font-mono text-xs"
+              />
+              <p className="text-[10px] text-[#888]">
+                Padrão AEROCAD:{' '}
+                <code>
+                  AEROCAD_&lt;PREFIXO&gt;_&lt;NUM&gt;_&lt;ANO&gt;_&lt;CLIENTE&gt;_v&lt;HHMMSS&gt;
+                </code>
+              </p>
+            </div>
+          </section>
+
+          {/* Ações de salvamento */}
+          <div className="space-y-3 pt-1">
             <Button
               onClick={generate}
               disabled={!template || saving}
-              className="flex-1 bg-[#FF6A13] hover:bg-[#E85B06]"
+              className="w-full bg-[#FF6A13] hover:bg-[#E85B06] text-white shadow"
             >
               <Save className="mr-2 h-4 w-4" />
-              {saving ? 'Gerando...' : 'Gerar documento'}
+              {saving ? 'Gravando no CRM...' : 'Salvar no CRM e Gerar Documento'}
             </Button>
-            <Button variant="outline" onClick={() => window.print()} disabled={!template}>
-              <Printer className="mr-2 h-4 w-4" />
-              Imprimir / PDF
-            </Button>
-          </div>
-          {saved && (
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-              <div className="flex items-center gap-2 text-sm font-bold text-emerald-800">
-                <CheckCircle2 className="h-4 w-4" />
-                Documento salvo
-              </div>
-              <div className="mt-3 flex gap-2">
-                <Button size="sm" variant="outline" onClick={() => setSignatureOpen(true)}>
-                  <Link2 className="mr-2 h-4 w-4" />
-                  Enviar para assinatura
-                </Button>
-                {saved.status === 'enviado_assinatura' && (
-                  <Button size="sm" onClick={markSigned}>
-                    Marcar assinado
+
+            {saved && (
+              <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-4 animate-in fade-in">
+                <div className="flex items-center gap-2 text-sm font-bold text-emerald-900">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                  Documento gravado no repositório
+                </div>
+                <p className="mt-1 text-xs text-emerald-700">
+                  ID: {saved.id} · Status: {saved.status}
+                </p>
+                <div className="mt-3 flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="bg-white"
+                    onClick={() => setSignatureOpen(true)}
+                  >
+                    <Link2 className="mr-2 h-3.5 w-3.5" />
+                    Link de Assinatura
                   </Button>
-                )}
+                  {saved.status === 'enviado_assinatura' && (
+                    <Button size="sm" onClick={markSigned}>
+                      Marcar Assinado
+                    </Button>
+                  )}
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </aside>
-        <section className="overflow-auto rounded-xl border bg-[#D9D9D9] p-3 sm:p-6">
+
+        {/* Pré-visualização A4 */}
+        <section className="overflow-auto rounded-xl border bg-[#EFEFEF] p-4 sm:p-8">
+          <div className="mb-3 flex items-center justify-between text-xs text-[#666]">
+            <span className="flex items-center gap-2 font-mono">
+              <span className="h-2 w-2 rounded-full bg-[#FF6A13]" />
+              Formato:{' '}
+              {orientation === 'landscape'
+                ? 'A4 Paisagem (297 × 210 mm)'
+                : 'A4 Retrato (210 × 297 mm)'}
+            </span>
+            <span>Identidade Visual AEROCAD® · Safety Orange #FF6A13</span>
+          </div>
+
           <article
             id="print-document"
-            className="relative mx-auto min-h-[1123px] w-full max-w-[794px] bg-white p-[56px] shadow-2xl sm:p-[72px]"
+            className={`relative mx-auto bg-white shadow-2xl transition-all ${
+              orientation === 'landscape'
+                ? 'min-h-[794px] w-full max-w-[1123px] p-[40px] sm:p-[50px] landscape-mode'
+                : 'min-h-[1123px] w-full max-w-[794px] p-[50px] sm:p-[64px]'
+            }`}
+            style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}
           >
-            <header className="flex items-end justify-between border-b-4 border-[#FF6A13] pb-4">
-              <img src={logo} alt="AEROCAD" className="w-52" />
+            {/* Cabeçalho Institucional AEROCAD */}
+            <header className="flex items-end justify-between border-b-2 border-[#FF6A13] pb-4">
+              <img src={logo} alt="AEROCAD" className="w-48 object-contain" />
               <div className="text-right">
-                <p className="text-[10px] font-bold uppercase tracking-[.16em] text-[#737373]">
+                <p className="text-[10px] font-bold uppercase tracking-[.18em] text-[#FF6A13]">
                   CONSULTORIA & AEROPORTOS
                 </p>
-                <p className="mt-1 font-mono text-xs text-[#595959]">
-                  {project?.numero || 'DOCUMENTO AEROCAD'}
+                <p className="mt-1 font-mono text-[11px] font-semibold text-[#444]">
+                  {project?.numero || 'AEROCAD ENGENHARIA'}
                 </p>
               </div>
             </header>
+
+            {/* Conteúdo Renderizado */}
             <div
-              className="document-body prose prose-sm mt-12 max-w-none text-[#424242]"
+              className="document-body mt-8 text-[#222]"
               dangerouslySetInnerHTML={{
                 __html:
-                  html ||
-                  '<div style="text-align:center;padding:120px 20px;color:#999"><h2>Pré-visualização A4</h2><p>Escolha um modelo para começar.</p></div>',
+                  renderedContent ||
+                  '<div style="text-align:center;padding:120px 20px;color:#999"><h2>Pré-visualização do Documento</h2><p>Escolha um modelo para carregar.</p></div>',
               }}
             />
-            <footer className="absolute bottom-10 left-[56px] right-[56px] border-t pt-3 text-[9px] text-[#8A8A8A] sm:left-[72px] sm:right-[72px]">
-              <div className="flex justify-between">
-                <span>AEROCAD TERRAPLANAGEM E CONSTRUÇÃO LTDA · CNPJ 28.036.597/0001-43</span>
-                <span>AEROCAD · gerado em {formatDate(new Date())}</span>
+
+            {/* Rodapé Institucional com dados bancários e endereço */}
+            <footer className="mt-14 border-t border-[#D9D9D9] pt-3 text-[9px] text-[#777]">
+              <div className="flex justify-between items-center">
+                <span className="font-semibold text-[#555]">
+                  {INSTITUTIONAL_DATA.razaoSocial} · CNPJ {INSTITUTIONAL_DATA.cnpj}
+                </span>
+                <span className="font-mono text-[#888]">
+                  Brasília – DF · Emissão: {formatDate(new Date())}
+                </span>
               </div>
               <p className="mt-1">
-                SBS Quadra 2, Sala 206, Ed. Prime Business Convenience, Brasília-DF · +55 61 9
-                8462-8800 · contato@aerocad.com.br
+                {INSTITUTIONAL_DATA.endereco} · Tel: {INSTITUTIONAL_DATA.telefone} ·{' '}
+                {INSTITUTIONAL_DATA.email} · {INSTITUTIONAL_DATA.website}
               </p>
             </footer>
           </article>
         </section>
       </div>
+
       <Dialog open={signatureOpen} onOpenChange={setSignatureOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Link para assinatura</DialogTitle>
+            <DialogTitle>Link para Assinatura Eletrônica</DialogTitle>
           </DialogHeader>
           <div className="space-y-2">
-            <Label>Cole o link manual da plataforma de assinatura</Label>
+            <Label>Link do documento na plataforma (Clicksign, DocuSign ou similar)</Label>
             <Input
               type="url"
               value={signatureLink}
@@ -386,7 +837,9 @@ export default function DocumentGeneratorPage() {
             <Button variant="outline" onClick={() => setSignatureOpen(false)}>
               Cancelar
             </Button>
-            <Button onClick={sendSignature}>Salvar e marcar como enviado</Button>
+            <Button onClick={sendSignature} className="bg-[#FF6A13] hover:bg-[#E85B06]">
+              Salvar Link e Marcar Enviado
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
