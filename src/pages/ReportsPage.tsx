@@ -49,6 +49,8 @@ import {
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { RelatorioSaldoAFaturarCliente } from '@/components/financeiro/RelatorioSaldoAFaturarCliente'
+import { useAuth } from '@/contexts/AuthContext'
 import { useCrmData } from '@/hooks/use-crm-data'
 import { stageColors, stageLabels, trailLabels, trailPhases } from '@/lib/crm'
 import { formatCurrency, formatDate } from '@/lib/format'
@@ -96,8 +98,12 @@ const ORGAO_LABELS: Record<string, string> = {
 }
 
 export default function ReportsPage() {
+  const { user } = useAuth()
   const navigate = useNavigate()
   const currentYear = new Date().getFullYear().toString()
+
+  // Controle de permissão para visualização de valores internos de faturamento/cobrança
+  const canViewFinancialDetails = ['admin', 'financeiro'].includes(user?.role || '')
 
   // Filtros principais
   const [selectedYear, setSelectedYear] = useState<string>(currentYear)
@@ -1667,6 +1673,15 @@ export default function ReportsPage() {
               </div>
             </div>
           </div>
+
+          {/* Relatório Analítico: Saldo a Faturar por Cliente para Cobrança Ativa (Restrito Admin / Financeiro) */}
+          {canViewFinancialDetails && (
+            <RelatorioSaldoAFaturarCliente
+              clientes={clientesData.data}
+              projetos={projetosData.data}
+              parcelas={parcelasData.data}
+            />
+          )}
 
           {/* Gráfico de Barras por Mês do Ano Selecionável */}
           <div className="crm-card p-5">
