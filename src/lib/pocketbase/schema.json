@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-10T20:27:14.747Z",
+  "generatedAt": "2026-10-10T20:35:21.577Z",
   "collections": [
     {
       "name": "users",
@@ -2124,6 +2124,69 @@
       "indexes": [
         "CREATE INDEX idx_importacoes_log_created ON importacoes_log (created DESC)",
         "CREATE INDEX idx_importacoes_log_usuario ON importacoes_log (usuario)"
+      ]
+    },
+    {
+      "name": "alertas_dispensados",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && usuario = @request.auth.id",
+        "view": "@request.auth.id != '' && usuario = @request.auth.id",
+        "create": "@request.auth.id != '' && usuario = @request.auth.id",
+        "update": "@request.auth.id != '' && usuario = @request.auth.id",
+        "delete": "@request.auth.id != '' && usuario = @request.auth.id"
+      },
+      "fields": [
+        {
+          "name": "usuario",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "chave_unica",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "severidade_dispensada",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["critico", "atencao", "informativo"]
+        },
+        {
+          "name": "data_dispensa",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "motivo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX idx_alertas_disp_usuario_chave ON alertas_dispensados (usuario, chave_unica)",
+        "CREATE INDEX idx_alertas_disp_usuario ON alertas_dispensados (usuario)"
       ]
     }
   ]

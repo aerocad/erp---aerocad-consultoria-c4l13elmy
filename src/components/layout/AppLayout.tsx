@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
+  AlertTriangle,
   Banknote,
+  Bell,
   BriefcaseBusiness,
   ChevronLeft,
   ChevronRight,
@@ -31,6 +33,8 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { AlertasDrawer } from '@/components/common/AlertasDrawer'
+import { useAlertas } from '@/contexts/AlertasContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { canAccess, roleLabels } from '@/lib/crm'
 import { escapeFilter, initials } from '@/lib/format'
@@ -65,6 +69,16 @@ type SearchResult = { id: string; label: string; meta: string; path: string; typ
 
 export default function AppLayout() {
   const { user, logout } = useAuth()
+  const {
+    alertas,
+    dispensados,
+    criticosCount,
+    atencaoCount,
+    urgentesCount,
+    drawerOpen,
+    setDrawerOpen,
+    reload: reloadAlertas,
+  } = useAlertas()
   const location = useLocation()
   const navigate = useNavigate()
   const [collapsed, setCollapsed] = useState(false)
@@ -207,10 +221,33 @@ export default function AppLayout() {
                       isActive ? 'opacity-100' : 'opacity-0',
                     )}
                   />
-                  <Icon
-                    className={cn('h-[19px] w-[19px] shrink-0', isActive && 'text-[#FF6A13]')}
-                  />
-                  {(!collapsed || mobile) && <span>{item.label}</span>}
+                  <div className="relative flex items-center justify-center">
+                    <Icon
+                      className={cn('h-[19px] w-[19px] shrink-0', isActive && 'text-[#FF6A13]')}
+                    />
+                    {item.key === 'painel' && urgentesCount > 0 && collapsed && !mobile && (
+                      <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                        <span
+                          className={`relative inline-flex rounded-full h-2.5 w-2.5 ${criticosCount > 0 ? 'bg-red-500' : 'bg-amber-500'}`}
+                        />
+                      </span>
+                    )}
+                  </div>
+                  {(!collapsed || mobile) && <span className="flex-1 truncate">{item.label}</span>}
+                  {item.key === 'painel' && urgentesCount > 0 && (!collapsed || mobile) && (
+                    <span
+                      className={cn(
+                        'ml-auto rounded-full px-2 py-0.5 text-[10px] font-bold tracking-tight',
+                        criticosCount > 0
+                          ? 'bg-red-500 text-white animate-pulse'
+                          : 'bg-amber-500 text-white',
+                      )}
+                      title={`${criticosCount} crítico(s), ${atencaoCount} atenção`}
+                    >
+                      {urgentesCount}
+                    </span>
+                  )}
                 </>
               )}
             </NavLink>
@@ -317,6 +354,30 @@ export default function AppLayout() {
             >
               <Search className="h-4 w-4" />
             </Button>
+
+            {/* Sininho de Notificações / Alertas por Prazo */}
+            {role !== 'terceiro' && (
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setDrawerOpen(true)}
+                className="relative border-[#DEDEDE] text-[#555] hover:border-[#FF6A13] hover:text-[#FF6A13]"
+                title={`Alertas por Prazo (${urgentesCount} urgentes)`}
+              >
+                <Bell className="h-4 w-4" />
+                {urgentesCount > 0 && (
+                  <span
+                    className={cn(
+                      'absolute -top-1 -right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[9px] font-bold text-white shadow-xs',
+                      criticosCount > 0 ? 'bg-red-600 animate-pulse' : 'bg-amber-500',
+                    )}
+                  >
+                    {urgentesCount > 9 ? '9+' : urgentesCount}
+                  </span>
+                )}
+              </Button>
+            )}
+
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button className="h-10 bg-[#FF6A13] font-bold text-white hover:bg-[#E85B06]">
@@ -370,6 +431,15 @@ export default function AppLayout() {
           CRM AEROCAD · v1 <span className="mx-2">•</span> Perfil: {roleLabels[role]}
         </footer>
       </div>
+
+      {/* Drawer Global de Alertas */}
+      <AlertasDrawer
+        open={drawerOpen}
+        onOpenChange={setDrawerOpen}
+        alertas={alertas}
+        dispensados={dispensados}
+        onReload={reloadAlertas}
+      />
 
       <Dialog open={searchOpen} onOpenChange={setSearchOpen}>
         <DialogContent className="top-[12%] translate-y-0 sm:max-w-xl">

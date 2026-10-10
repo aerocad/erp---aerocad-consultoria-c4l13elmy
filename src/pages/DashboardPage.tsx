@@ -18,6 +18,7 @@ import { CrmBadge } from '@/components/common/CrmBadge'
 import { ErrorState, PageLoading } from '@/components/common/States'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Progress } from '@/components/ui/progress'
+import { useAlertas } from '@/contexts/AlertasContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { useCrmData } from '@/hooks/use-crm-data'
 import {
@@ -29,6 +30,7 @@ import {
   trailLabels,
 } from '@/lib/crm'
 import { formatCurrency, formatDate, formatDateLong, initials, relativeTime } from '@/lib/format'
+import { AlertasWidget } from '@/components/common/AlertasWidget'
 import type {
   AtividadeRecord,
   ExigenciaRecord,
@@ -41,6 +43,7 @@ import type {
 
 export default function DashboardPage() {
   const { user } = useAuth()
+  const { alertas, dispensados, reload: reloadAlertas, loading: loadingAlertas } = useAlertas()
   const navigate = useNavigate()
   const opportunities = useCrmData<OportunidadeRecord>('oportunidades', {
     expand: 'cliente,responsavel',
@@ -208,6 +211,22 @@ export default function DashboardPage() {
           Operação sincronizada
         </CrmBadge>
       </div>
+      {/* Seção Alertas por Prazo */}
+      {user?.role !== 'terceiro' && (
+        <AlertasWidget
+          alertas={alertas}
+          dispensados={dispensados}
+          onReload={() => {
+            reloadAlertas()
+            void requirements.reload()
+            void proposals.reload()
+            void ordensServico.reload()
+            void installments.reload()
+          }}
+          loading={loading || loadingAlertas}
+        />
+      )}
+
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {kpis.map((kpi, index) => {
           const Icon = kpi.icon

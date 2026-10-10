@@ -277,3 +277,41 @@ export interface ImportacaoLogRecord extends RecordModel {
     usuario?: UserRecord
   }
 }
+
+export type AlertaSeveridade = 'critico' | 'atencao' | 'informativo'
+
+export type AlertaTipo =
+  | 'proposta_sem_retorno'
+  | 'proposta_expirada'
+  | 'exigencia_prazo'
+  | 'exigencia_sem_envio'
+  | 'parcela_vencida'
+  | 'os_sem_resposta'
+  | 'os_prazo'
+  | 'os_pendente_validacao'
+  | 'processo_orgao_sem_parecer'
+  | 'projeto_sem_movimentacao'
+
+export interface AlertaItem {
+  chave: string
+  tipo: AlertaTipo
+  severidade: AlertaSeveridade
+  titulo: string
+  descricao: string
+  link: string
+  linkTexto: string
+  categoria: 'comercial' | 'tecnico' | 'financeiro'
+  dataReferencia?: string
+  diasAtraso?: number
+  diasRestantes?: number
+  meta?: Record<string, unknown>
+  registroId: string
+}
+
+export interface AlertaDispensadoRecord extends RecordModel {
+  usuario: string
+  chave_unica: string
+  severidade_dispensada: AlertaSeveridade
+  data_dispensa?: string
+  motivo?: string
+}
