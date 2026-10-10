@@ -16,11 +16,14 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import { AnexosList } from '@/components/common/AnexosList'
+import { AssistenteIAPanel } from '@/components/common/AssistenteIAPanel'
 import { CrmBadge } from '@/components/common/CrmBadge'
 import { ErrorState, PageLoading } from '@/components/common/States'
 import { AnexoDialog } from '@/components/forms/AnexoDialog'
 import { ProcessDialog } from '@/components/forms/ProcessDialog'
 import { Button } from '@/components/ui/button'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Sparkles, Bot } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -308,6 +311,51 @@ export default function ProjectDetailPage() {
               {!documents.length && (
                 <p className="p-8 text-center text-sm text-[#8A8A8A]">Nenhum documento gerado.</p>
               )}
+            </div>
+          </section>
+
+          {/* Assistente IA Integrado ao Projeto */}
+          <section className="crm-card overflow-hidden">
+            <div className="border-b p-5 bg-gradient-to-r from-orange-50/50 via-white to-transparent flex items-center justify-between">
+              <div>
+                <p className="technical-label flex items-center gap-1.5 text-[#D65100]">
+                  <Sparkles className="h-3.5 w-3.5 text-[#FF6A13]" />
+                  ASSISTENTE GENERATIVO AEROCAD
+                </p>
+                <h2 className="font-bold text-[#333]">Redação & Adaptação Técnica sob Demanda</h2>
+              </div>
+              <span className="text-xs font-mono bg-white px-2.5 py-1 rounded-md border border-orange-200 text-[#D65100]">
+                {project.numero}
+              </span>
+            </div>
+            <div className="p-4 bg-orange-50/20">
+              <AssistenteIAPanel
+                contextRecord={{
+                  tipo: 'projeto',
+                  id: project.id,
+                  titulo: `${project.numero} — ${project.nome}`,
+                  subtitulo: project.expand?.cliente?.razao_social,
+                  dados: {
+                    id: project.id,
+                    numero: project.numero,
+                    nome: project.nome,
+                    trilha: project.trilha,
+                    fase: project.fase,
+                    status: project.status,
+                    art: project.art,
+                    prazo: project.prazo,
+                    cliente: project.cliente,
+                    razao_social: project.expand?.cliente?.razao_social,
+                  },
+                }}
+                quickPrompts={[
+                  `Gere a minuta completa do Memorial Descritivo para o projeto ${project.numero} (${project.nome}).`,
+                  `Redija a Proposta Comercial (PC) vinculada a este projeto com as 2 opções de contratação.`,
+                  `Reescreva a seção de prazos destacando o prazo AEROCAD segregado do prazo discricionário dos órgãos.`,
+                  `Elabore a Ordem de Serviço (OS) interna para este projeto com entregáveis e responsável técnico.`,
+                ]}
+                onDocumentCreated={() => void load()}
+              />
             </div>
           </section>
 

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import {
   BookOpen,
+  Bot,
   Building2,
   CheckCircle2,
   CreditCard,
@@ -18,11 +19,13 @@ import {
   Printer,
   Search,
   ShieldCheck,
+  Sparkles,
   UserCheck,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 import { AnexosList } from '@/components/common/AnexosList'
+import { AssistenteIAPanel } from '@/components/common/AssistenteIAPanel'
 import { CrmBadge } from '@/components/common/CrmBadge'
 import { EmptyState, ErrorState, PageLoading } from '@/components/common/States'
 import { SectionHeader } from '@/components/common/SectionHeader'
@@ -57,7 +60,9 @@ import { ANEXO_CATEGORIAS } from '@/services/anexos'
 import type { AnexoRecord, DocumentoRecord } from '@/types/crm'
 
 export default function DocumentsPage() {
-  const [activeTab, setActiveTab] = useState<'gerados' | 'anexos' | 'catalogo'>('gerados')
+  const [activeTab, setActiveTab] = useState<'gerados' | 'assistente' | 'anexos' | 'catalogo'>(
+    'gerados',
+  )
   const [anexoDialogOpen, setAnexoDialogOpen] = useState(false)
 
   const records = useCrmData<DocumentoRecord>('documentos', {
@@ -154,6 +159,10 @@ export default function DocumentsPage() {
             <FileText className="h-4 w-4" />
             Documentos Gerados ({records.data.length})
           </TabsTrigger>
+          <TabsTrigger value="assistente" className="flex items-center gap-2 text-[#D65100]">
+            <Sparkles className="h-4 w-4 text-[#FF6A13]" />
+            Assistente IA Generativo
+          </TabsTrigger>
           <TabsTrigger value="anexos" className="flex items-center gap-2">
             <Paperclip className="h-4 w-4 text-[#FF6A13]" />
             Anexos e Arquivos ({anexosData.data.length})
@@ -163,6 +172,48 @@ export default function DocumentsPage() {
             Catálogo & Regras Oficiais
           </TabsTrigger>
         </TabsList>
+
+        {/* ABA: ASSISTENTE IA GENERATIVO */}
+        <TabsContent value="assistente" className="space-y-4">
+          <div className="crm-card p-4 bg-gradient-to-r from-orange-50/50 via-white to-orange-50/30 border-l-4 border-l-[#FF6A13] flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div>
+              <p className="technical-label flex items-center gap-1.5 text-[#D65100]">
+                <Sparkles className="h-3.5 w-3.5 text-[#FF6A13]" />
+                REDAÇÃO & ADAPTAÇÃO INTELIGENTE DE DOCUMENTOS
+              </p>
+              <h2 className="text-base font-bold text-[#333]">
+                Assistente Técnico-Comercial AEROCAD®
+              </h2>
+              <p className="text-xs text-[#666] mt-0.5">
+                Gere memoriais, propostas com 2 opções de contratação, pareceres e notas técnicas a
+                partir das normas (ICA 11-408, RBAC 153/154/155/161).
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                asChild
+                size="sm"
+                variant="outline"
+                className="border-orange-200 text-[#FF6A13]"
+              >
+                <Link to="/documentos/novo">Abrir Modelos Prontos</Link>
+              </Button>
+            </div>
+          </div>
+
+          <AssistenteIAPanel
+            quickPrompts={[
+              'Gere uma minuta completa de Memorial Descritivo para um aeródromo considerando a ICA 11-408.',
+              'Adapte a Proposta Comercial (PC) segundo o modelo Bruna Rodrigues com 2 opções de contratação.',
+              'Reescreva a cláusula de cronograma e marcos destacando a segregação estrita entre prazos AEROCAD e dos órgãos reguladores.',
+              'Elabore uma Nota Técnica fundamentada sobre impacto OPEA em heliponto elevado conforme RBAC 155.',
+            ]}
+            onDocumentCreated={() => {
+              void records.reload()
+              void anexosData.reload()
+            }}
+          />
+        </TabsContent>
 
         {/* ABA 1: DOCUMENTOS GERADOS */}
         <TabsContent value="gerados">

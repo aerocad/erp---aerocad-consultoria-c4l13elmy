@@ -15,10 +15,12 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import { AnexosList } from '@/components/common/AnexosList'
+import { AssistenteIAPanel } from '@/components/common/AssistenteIAPanel'
 import { CrmBadge } from '@/components/common/CrmBadge'
 import { ErrorState, PageLoading } from '@/components/common/States'
 import { AnexoDialog } from '@/components/forms/AnexoDialog'
 import { Button } from '@/components/ui/button'
+import { Sparkles } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -348,6 +350,53 @@ export default function ProcessDetailPage() {
                 onReload={() => void load()}
                 onOpenUpload={() => setAnexoOpen(true)}
                 emptyMessage="Nenhum arquivo regulatório, planta ou comprovação anexada a este processo."
+              />
+            </div>
+          </div>
+
+          {/* Assistente IA Integrado ao Processo Regulatório */}
+          <div className="border-t">
+            <div className="p-5 bg-gradient-to-r from-orange-50/50 via-white to-transparent flex items-center justify-between">
+              <div>
+                <p className="technical-label flex items-center gap-1.5 text-[#D65100]">
+                  <Sparkles className="h-3.5 w-3.5 text-[#FF6A13]" />
+                  ASSISTENTE GENERATIVO AEROCAD
+                </p>
+                <h3 className="font-bold text-[#333]">
+                  Redação de Respostas a Exigências & Requerimentos
+                </h3>
+              </div>
+              <span className="text-xs font-mono bg-white px-2.5 py-1 rounded-md border border-orange-200 text-[#D65100]">
+                {process.orgao}
+              </span>
+            </div>
+            <div className="p-4 bg-orange-50/20">
+              <AssistenteIAPanel
+                contextRecord={{
+                  tipo: 'processo',
+                  id: process.id,
+                  titulo: `${process.orgao} — ${process.numero_protocolo || 'A protocolar'}`,
+                  subtitulo: process.expand?.projeto?.nome,
+                  dados: {
+                    id: process.id,
+                    orgao: process.orgao,
+                    numero_protocolo: process.numero_protocolo,
+                    data_protocolo: process.data_protocolo,
+                    status: process.status,
+                    prazo_orgao: process.prazo_orgao,
+                    projeto: process.projeto,
+                    projeto_nome: process.expand?.projeto?.nome,
+                    exigencias_pendentes: requirements.filter((r) => r.status === 'pendente')
+                      .length,
+                  },
+                }}
+                quickPrompts={[
+                  `Redija a minuta de resposta formal à exigência pendente deste processo perante o ${process.orgao}.`,
+                  `Elabore o Requerimento Oficial (RQ) com fundamentação na ICA 11-408 / RBAC 154 para este protocolo.`,
+                  `Redija um Ofício Técnico justificando a conformidade das superfícies limitadoras OLS perante o ${process.orgao}.`,
+                  `Elabore o Plano de Ação Corretiva (PAC) para sanar o apontamento regulatório deste processo.`,
+                ]}
+                onDocumentCreated={() => void load()}
               />
             </div>
           </div>

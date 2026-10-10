@@ -19,6 +19,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import { AnexosList } from '@/components/common/AnexosList'
+import { AssistenteIAPanel } from '@/components/common/AssistenteIAPanel'
 import { CrmBadge } from '@/components/common/CrmBadge'
 import { ErrorState, PageLoading } from '@/components/common/States'
 import { AnexoDialog } from '@/components/forms/AnexoDialog'
@@ -29,6 +30,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Sparkles } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { formatCurrency, formatDate, initials, relativeTime } from '@/lib/format'
 import { getOne, listAll } from '@/services/api'
@@ -251,6 +253,10 @@ export default function ClientDetailPage() {
             Anexos ({anexos.length})
           </TabsTrigger>
           <TabsTrigger value="documentos">Documentos ({documents.length})</TabsTrigger>
+          <TabsTrigger value="assistente" className="flex items-center gap-1 text-[#D65100]">
+            <Sparkles className="h-3.5 w-3.5 text-[#FF6A13]" />
+            Assistente IA
+          </TabsTrigger>
           <TabsTrigger value="links">Links externos</TabsTrigger>
         </TabsList>
         <TabsContent value="projetos">
@@ -357,6 +363,43 @@ export default function ClientDetailPage() {
               meta: i.versao,
               badge: i.status,
             }))}
+          />
+        </TabsContent>
+        <TabsContent value="assistente" className="space-y-4">
+          <div className="crm-card p-4 bg-orange-50/30 border-l-4 border-l-[#FF6A13]">
+            <p className="technical-label flex items-center gap-1.5 text-[#D65100]">
+              <Sparkles className="h-3.5 w-3.5 text-[#FF6A13]" />
+              ASSISTENTE IA — {client.razao_social}
+            </p>
+            <p className="text-xs text-[#666] mt-1">
+              Redija propostas comerciais, técnicas ou cartas de apresentação para{' '}
+              {client.razao_social} com o perfil e dados cadastrais.
+            </p>
+          </div>
+          <AssistenteIAPanel
+            contextRecord={{
+              tipo: 'cliente',
+              id: client.id,
+              titulo: client.razao_social,
+              subtitulo: `${client.municipio || ''}/${client.uf || ''} · ${client.cnpj_cpf}`,
+              dados: {
+                id: client.id,
+                razao_social: client.razao_social,
+                cnpj_cpf: client.cnpj_cpf,
+                segmento: client.segmento,
+                municipio: client.municipio,
+                uf: client.uf,
+                projetos_count: projects.length,
+                oportunidades_count: opportunities.length,
+              },
+            }}
+            quickPrompts={[
+              `Gere um E-mail formal de Apresentação de Proposta (EML) para ${client.razao_social}.`,
+              `Elabore a Proposta Comercial (PC) inicial considerando o segmento ${client.segmento || 'aeronáutico'}.`,
+              `Redija uma minuta de Procuração (PR) outorgando poderes à Dra. Jaqueline Mota para representar ${client.razao_social}.`,
+              `Gere um Relatório de Status e Alinhamento Técnico dos projetos em andamento deste cliente.`,
+            ]}
+            onDocumentCreated={() => void load()}
           />
         </TabsContent>
         <TabsContent value="links">
