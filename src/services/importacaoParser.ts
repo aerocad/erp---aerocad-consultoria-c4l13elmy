@@ -67,16 +67,55 @@ export function tratarValor(val: unknown): { valor: string; pendente: boolean } 
   return { valor: str, pendente: false }
 }
 
-// Converte valores numéricos seguros
+// Converte valores numéricos seguros com suporte a formatos brasileiros (ex: "8.320,00" ou "1.234,56")
+// e formato decimal padrão internacional/XML (ex: "8320.00", "8320", "1234.56")
 export function parseNumero(val: unknown): number {
   if (val === null || val === undefined) return 0
   if (typeof val === 'number') return isNaN(val) ? 0 : val
-  const str = String(val)
-    .replace(/R\$/g, '')
-    .replace(/\s/g, '')
-    .replace(/\./g, '')
-    .replace(',', '.')
-    .trim()
+
+  let str = String(val).replace(/R\$/g, '').replace(/\s/g, '').trim()
+
+  if (!str) return 0
+
+  const hasComma = str.includes(',')
+  const hasDot = str.includes('.')
+
+  if (hasComma && hasDot) {
+    // Ambos presentes: checar qual separador veio por último para identificar o decimal
+    const lastComma = str.lastIndexOf(',')
+    const lastDot = str.lastIndexOf('.')
+    if (lastComma > lastDot) {
+      // Padrão brasileiro: "1.234.567,89" ou "8.320,00" -> remove pontos de milhar e troca vírgula por ponto
+      str = str.replace(/\./g, '').replace(',', '.')
+    } else {
+      // Padrão internacional com milhar: "1,234,567.89" -> remove vírgulas de milhar
+      str = str.replace(/,/g, '')
+    }
+  } else if (hasComma) {
+    // Somente vírgula presente (ex: "8320,00" ou "1234,56") -> troca vírgula por ponto
+    str = str.replace(',', '.')
+  } else if (hasDot) {
+    // Somente ponto presente.
+    // Pode ser decimal padrão XML/sistemas ("8320.00", "1234.56", "8320.5") OU milhar brasileiro sem centavos ("8.320").
+    const parts = str.split('.')
+    if (parts.length > 2) {
+      // Múltiplos pontos (ex: "1.234.567"): claramente separador de milhar brasileiro
+      str = str.replace(/\./g, '')
+    } else if (parts.length === 2) {
+      const decimals = parts[1]
+      // Se tiver exatamente 3 dígitos após o ponto e o valor inicial tiver tamanho razoável sem outros decimais,
+      // pode ser milhar (ex: "8.320" -> 8320). Mas se for 1, 2 ou 4+ dígitos (ex: "8320.00", "1234.56", "10.5"),
+      // é indiscutivelmente o separador decimal do XML/SisGoV/ABRASF padrão ABNT/W3C.
+      if (decimals.length === 3 && parts[0].length >= 1 && parts[0].length <= 3) {
+        // Ex.: "8.320" ou "100.000" sem centavos -> milhar brasileiro
+        str = parts[0] + parts[1]
+      } else {
+        // Ex.: "8320.00", "1234.56", "10.5", "0.99" -> ponto é o separador decimal
+        // str permanece com ponto
+      }
+    }
+  }
+
   const num = parseFloat(str)
   return isNaN(num) ? 0 : num
 }

@@ -303,10 +303,23 @@ export function parseXmlNfse(xmlString: string, nomeArquivo?: string): NfseDadoE
       parseNumero(cofinsRetidoRaw) +
       parseNumero(csllRetidoRaw)
 
+    const issNum = parseNumero(issRetidoRaw)
+    const inssNum = parseNumero(inssRetidoRaw)
+    const irpjNum = parseNumero(irpjRetidoRaw)
+    const pisNum = parseNumero(pisRetidoRaw)
+    const cofinsNum = parseNumero(cofinsRetidoRaw)
+    const csllNum = parseNumero(csllRetidoRaw)
+
+    const formatRetencaoBr = (n: number) =>
+      n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
     const retencoesPartes: string[] = []
-    if (parseNumero(issRetidoRaw) > 0) retencoesPartes.push(`ISS: R$ ${issRetidoRaw}`)
-    if (parseNumero(inssRetidoRaw) > 0) retencoesPartes.push(`INSS: R$ ${inssRetidoRaw}`)
-    if (parseNumero(irpjRetidoRaw) > 0) retencoesPartes.push(`IR: R$ ${irpjRetidoRaw}`)
+    if (issNum > 0) retencoesPartes.push(`ISS: R$ ${formatRetencaoBr(issNum)}`)
+    if (inssNum > 0) retencoesPartes.push(`INSS: R$ ${formatRetencaoBr(inssNum)}`)
+    if (irpjNum > 0) retencoesPartes.push(`IR: R$ ${formatRetencaoBr(irpjNum)}`)
+    if (pisNum > 0) retencoesPartes.push(`PIS: R$ ${formatRetencaoBr(pisNum)}`)
+    if (cofinsNum > 0) retencoesPartes.push(`COFINS: R$ ${formatRetencaoBr(cofinsNum)}`)
+    if (csllNum > 0) retencoesPartes.push(`CSLL: R$ ${formatRetencaoBr(csllNum)}`)
 
     const combinadoTexto = `${descricaoServico} ${tomadorRazao} ${node.textContent || ''}`
     const projetoIdMencionado = extrairNumeroProjeto(combinadoTexto)
@@ -333,12 +346,12 @@ export function parseXmlNfse(xmlString: string, nomeArquivo?: string): NfseDadoE
       valorLiquido,
       retencoesTexto: retencoesPartes.join(' | '),
       retencoesTotal: retTot,
-      issRetido: parseNumero(issRetidoRaw),
-      inssRetido: parseNumero(inssRetidoRaw),
-      irpjRetido: parseNumero(irpjRetidoRaw),
-      pisRetido: parseNumero(pisRetidoRaw),
-      cofinsRetido: parseNumero(cofinsRetidoRaw),
-      csllRetido: parseNumero(csllRetidoRaw),
+      issRetido: issNum,
+      inssRetido: inssNum,
+      irpjRetido: irpjNum,
+      pisRetido: pisNum,
+      cofinsRetido: cofinsNum,
+      csllRetido: csllNum,
       tomadorRazao: tomadorRazao || 'Tomador não informado',
       tomadorCnpjCpf: limparDocumento(tomadorCnpj || tomadorCpf),
       prestadorRazao,
