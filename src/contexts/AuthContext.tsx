@@ -15,7 +15,7 @@ import type { UserRecord } from '@/types/crm'
 type AuthContextValue = {
   user: UserRecord | null
   ready: boolean
-  login: (email: string, password: string) => Promise<void>
+  login: (email: string, password: string) => Promise<UserRecord>
   logout: () => void
   refreshUser: () => Promise<void>
 }
@@ -53,6 +53,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .collection<UserRecord>('users')
       .authWithPassword(email, password, { requestKey: null })
     setUser(result.record)
+    return result.record
   }, [])
 
   const logout = useCallback(() => {

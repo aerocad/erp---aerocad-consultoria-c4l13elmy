@@ -5,6 +5,27 @@ export const roleLabels: Record<Role, string> = {
   comercial: 'Comercial',
   tecnico: 'Técnico',
   financeiro: 'Financeiro',
+  terceiro: 'Prestador Terceiro',
+}
+
+export const osStatusLabels: Record<string, string> = {
+  atribuida: 'Atribuída',
+  em_execucao: 'Em execução',
+  concluida: 'Concluída',
+  recusada: 'Recusada',
+  cancelada: 'Cancelada',
+  rascunho: 'Rascunho',
+  emitida: 'Emitida',
+}
+
+export const osStatusColors: Record<string, { bg: string; text: string; border: string }> = {
+  atribuida: { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200' },
+  em_execucao: { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200' },
+  concluida: { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200' },
+  recusada: { bg: 'bg-rose-50', text: 'text-rose-700', border: 'border-rose-200' },
+  cancelada: { bg: 'bg-zinc-100', text: 'text-zinc-600', border: 'border-zinc-300' },
+  rascunho: { bg: 'bg-zinc-50', text: 'text-zinc-600', border: 'border-zinc-200' },
+  emitida: { bg: 'bg-orange-50', text: 'text-[#D65100]', border: 'border-orange-200' },
 }
 
 export const stageLabels = {
@@ -83,6 +104,7 @@ export const permissions: Record<Role, string[]> = {
   comercial: ['painel', 'funil', 'clientes', 'projetos', 'processos', 'financeiro', 'documentos'],
   tecnico: ['painel', 'clientes', 'projetos', 'processos', 'documentos'],
   financeiro: ['painel', 'clientes', 'projetos', 'financeiro'],
+  terceiro: ['terceiro-portal'],
 }
 
 export function canAccess(role: Role, area: string) {

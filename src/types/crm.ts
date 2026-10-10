@@ -1,6 +1,6 @@
 import type { RecordModel } from 'pocketbase'
 
-export type Role = 'admin' | 'comercial' | 'tecnico' | 'financeiro'
+export type Role = 'admin' | 'comercial' | 'tecnico' | 'financeiro' | 'terceiro'
 export type Trail = 'opea' | 'registro' | 'demais'
 
 export interface UserRecord extends RecordModel {
@@ -8,6 +8,32 @@ export interface UserRecord extends RecordModel {
   email: string
   avatar: string
   role: Role
+}
+
+export type OrdemServicoStatus =
+  | 'atribuida'
+  | 'em_execucao'
+  | 'concluida'
+  | 'recusada'
+  | 'cancelada'
+  | 'rascunho'
+  | 'emitida'
+
+export interface OrdemServicoRecord extends RecordModel {
+  projeto: string
+  prestador_usuario?: string
+  prestador?: string
+  titulo?: string
+  descricao: string
+  prazo?: string
+  data_conclusao?: string
+  valor_interno?: number
+  observacoes?: string
+  status: OrdemServicoStatus
+  expand?: {
+    projeto?: ProjetoRecord
+    prestador_usuario?: UserRecord
+  }
 }
 
 export interface ClienteRecord extends RecordModel {

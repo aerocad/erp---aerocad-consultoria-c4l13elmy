@@ -20,6 +20,7 @@ import { AssistenteIAPanel } from '@/components/common/AssistenteIAPanel'
 import { CrmBadge } from '@/components/common/CrmBadge'
 import { ErrorState, PageLoading } from '@/components/common/States'
 import { AnexoDialog } from '@/components/forms/AnexoDialog'
+import { OrdemServicoDialog } from '@/components/forms/OrdemServicoDialog'
 import { ProcessDialog } from '@/components/forms/ProcessDialog'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -35,13 +36,14 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { useAuth } from '@/contexts/AuthContext'
-import { trailLabels, trailPhases } from '@/lib/crm'
+import { osStatusColors, osStatusLabels, trailLabels, trailPhases } from '@/lib/crm'
 import { formatCurrency, formatDate } from '@/lib/format'
 import { createOne, getOne, listAll, updateOne } from '@/services/api'
 import type {
   AnexoRecord,
   AtividadeRecord,
   DocumentoRecord,
+  OrdemServicoRecord,
   ParcelaRecord,
   ProcessoRecord,
   ProjetoRecord,
@@ -56,13 +58,19 @@ export default function ProjectDetailPage() {
   const [installments, setInstallments] = useState<ParcelaRecord[]>([])
   const [documents, setDocuments] = useState<DocumentoRecord[]>([])
   const [anexos, setAnexos] = useState<AnexoRecord[]>([])
+  const [ordens, setOrdens] = useState<OrdemServicoRecord[]>([])
   const [activities, setActivities] = useState<AtividadeRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [failed, setFailed] = useState(false)
   const [processOpen, setProcessOpen] = useState(false)
   const [anexoOpen, setAnexoOpen] = useState(false)
+  const [osOpen, setOsOpen] = useState(false)
+  const [editingOs, setEditingOs] = useState<OrdemServicoRecord | null>(null)
   const [note, setNote] = useState('')
   const canWrite = ['admin', 'comercial', 'tecnico'].includes(user?.role || '')
+  const isAdmin = user?.role === 'admin'
+  const canManageOS = ['admin', 'tecnico'].includes(user?.role || '')
+
   const load = async () => {
     setLoading(true)
     try {
@@ -70,7 +78,7 @@ export default function ProjectDetailPage() {
         expand: 'cliente,responsavel_tecnico,oportunidade',
       })
       setProject(record)
-      const [pr, pa, d, an, a] = await Promise.all([
+      const [pr, pa, d, an, a, osList] = await Promise.all([
         listAll<ProcessoRecord>('processos', { filter: `projeto = '${id}'`, sort: '-created' }),
         listAll<ParcelaRecord>('parcelas', {
           filter: `projeto = '${id}'`,
@@ -87,12 +95,18 @@ export default function ProjectDetailPage() {
           expand: 'usuario',
           sort: '-created',
         }),
+        listAll<OrdemServicoRecord>('ordens_servico', {
+          filter: `projeto = '${id}'`,
+          expand: 'prestador_usuario',
+          sort: '-created',
+        }).catch(() => []),
       ])
       setProcesses(pr)
       setInstallments(pa)
       setDocuments(d)
       setAnexos(an)
       setActivities(a)
+      setOrdens(osList)
       setFailed(false)
     } catch {
       setFailed(true)
@@ -359,6 +373,105 @@ export default function ProjectDetailPage() {
             </div>
           </section>
 
+          {/* Seção de Ordens de Serviço / Prestadores Terceirizados */}
+          <section className="crm-card overflow-hidden">
+            <div className="flex items-center justify-between border-b p-5">
+              <div>
+                <p className="technical-label">EXECUÇÃO EXTERNA / TERCEIRIZADA</p>
+                <h2 className="font-bold flex items-center gap-2">
+                  Ordens de Serviço de Terceiros ({ordens.length})
+                </h2>
+              </div>
+              {canManageOS && (
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setEditingOs(null)
+                    setOsOpen(true)
+                  }}
+                  className="bg-[#FF6A13] hover:bg-[#E85B06] text-white"
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Designar Terceiro
+                </Button>
+              )}
+            </div>
+            <div className="divide-y">
+              {ordens.map((item) => {
+                const statusCfg = osStatusColors[item.status] || {
+                  bg: 'bg-neutral-100',
+                  text: 'text-neutral-700',
+                  border: 'border-neutral-200',
+                }
+                const prestadorDisplay =
+                  item.expand?.prestador_usuario?.name || item.prestador || 'Sem prestador'
+
+                return (
+                  <div
+                    key={item.id}
+                    className="flex flex-col justify-between gap-3 p-4 sm:flex-row sm:items-center hover:bg-[#FFF6EC]/50 transition"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-bold text-[#333]">
+                          {item.titulo || item.descricao.slice(0, 50)}
+                        </span>
+                        <span
+                          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold ${statusCfg.bg} ${statusCfg.text} ${statusCfg.border}`}
+                        >
+                          {osStatusLabels[item.status] || item.status}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs text-[#666]">
+                        Prestador: <strong className="text-[#333]">{prestadorDisplay}</strong>
+                        {item.prazo && ` · Prazo: ${formatDate(item.prazo)}`}
+                        {item.data_conclusao && ` · Conclusão: ${formatDate(item.data_conclusao)}`}
+                      </p>
+                      {item.descricao && (
+                        <p className="mt-1 line-clamp-2 text-xs text-[#777] italic">
+                          {item.descricao}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      {isAdmin &&
+                        item.valor_interno !== undefined &&
+                        item.valor_interno !== null && (
+                          <div className="text-right">
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-amber-700">
+                              Custo Interno
+                            </p>
+                            <p className="font-mono text-xs font-bold text-amber-900">
+                              {formatCurrency(item.valor_interno)}
+                            </p>
+                          </div>
+                        )}
+
+                      {canManageOS && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setEditingOs(item)
+                            setOsOpen(true)
+                          }}
+                        >
+                          Editar
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+              {!ordens.length && (
+                <p className="p-8 text-center text-sm text-[#8A8A8A]">
+                  Nenhuma ordem de serviço designada para prestadores terceirizados neste projeto.
+                </p>
+              )}
+            </div>
+          </section>
+
           {/* Seção de Arquivos e Anexos Vinculados ao Projeto */}
           <section className="crm-card overflow-hidden">
             <div className="flex items-center justify-between border-b p-5">
@@ -466,6 +579,15 @@ export default function ProjectDetailPage() {
         onOpenChange={setAnexoOpen}
         presetProjeto={project.id}
         presetCliente={project.cliente}
+        onSuccess={() => void load()}
+      />
+      <OrdemServicoDialog
+        open={osOpen}
+        onOpenChange={setOsOpen}
+        presetProjetoId={project.id}
+        presetProjetoNumero={project.numero}
+        presetProjetoNome={project.nome}
+        editingOS={editingOs}
         onSuccess={() => void load()}
       />
     </div>

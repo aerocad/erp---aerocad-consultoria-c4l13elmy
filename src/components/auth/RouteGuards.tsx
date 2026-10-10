@@ -21,6 +21,9 @@ export function AreaGuard({ area }: { area: string }) {
   useEffect(() => {
     if (!allowed) toast.error('Você não tem acesso a esta área')
   }, [allowed])
-  if (!allowed) return <Navigate to="/painel" replace />
+  if (!allowed) {
+    const fallback = user?.role === 'terceiro' ? '/prestador' : '/painel'
+    return <Navigate to={fallback} replace />
+  }
   return <Outlet />
 }

@@ -72,6 +72,13 @@ export default function AppLayout() {
   const [results, setResults] = useState<SearchResult[]>([])
   const [searching, setSearching] = useState(false)
   const role = user?.role || 'comercial'
+
+  useEffect(() => {
+    if (role === 'terceiro' && !location.pathname.startsWith('/prestador')) {
+      navigate('/prestador', { replace: true })
+    }
+  }, [role, location.pathname, navigate])
+
   const items = useMemo(() => navItems.filter((item) => canAccess(role, item.key)), [role])
   const currentKey = location.pathname.split('/')[1] || 'painel'
   const title = titleMap[currentKey] || 'CRM AEROCAD'

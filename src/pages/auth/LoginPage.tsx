@@ -30,8 +30,11 @@ export default function LoginPage() {
     }
     setLoading(true)
     try {
-      await login(email.trim(), password)
-      const destination = (location.state as { from?: string } | null)?.from || '/painel'
+      const loggedUser = await login(email.trim(), password)
+      const isTerceiro = loggedUser?.role === 'terceiro'
+      const destination = isTerceiro
+        ? '/prestador'
+        : (location.state as { from?: string } | null)?.from || '/painel'
       navigate(destination, { replace: true })
     } catch (requestError) {
       const message = getErrorMessage(requestError)

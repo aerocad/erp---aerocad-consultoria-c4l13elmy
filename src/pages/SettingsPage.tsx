@@ -185,6 +185,7 @@ export default function SettingsPage() {
                       <SelectItem value="comercial">Comercial</SelectItem>
                       <SelectItem value="tecnico">Técnico</SelectItem>
                       <SelectItem value="financeiro">Financeiro</SelectItem>
+                      <SelectItem value="terceiro">Prestador Terceiro</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

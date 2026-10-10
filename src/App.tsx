@@ -19,6 +19,7 @@ import ProcessesPage from '@/pages/ProcessesPage'
 import ProjectDetailPage from '@/pages/ProjectDetailPage'
 import ProjectsPage from '@/pages/ProjectsPage'
 import SettingsPage from '@/pages/SettingsPage'
+import TerceiroPortalPage from '@/pages/TerceiroPortalPage'
 import ConfirmEmailChangePage from '@/pages/auth/ConfirmEmailChangePage'
 import LoginPage from '@/pages/auth/LoginPage'
 import RecoverPasswordPage from '@/pages/auth/RecoverPasswordPage'
@@ -39,6 +40,9 @@ const App = () => (
           <Route path="/confirmar-troca-email" element={<ConfirmEmailChangePage />} />
 
           <Route element={<ProtectedRoute />}>
+            {/* Rota do Portal exclusivo do terceiro */}
+            <Route path="/prestador" element={<TerceiroPortalPage />} />
+
             <Route element={<AppLayout />}>
               <Route path="/" element={<Navigate to="/painel" replace />} />
               <Route element={<AreaGuard area="painel" />}>
