@@ -5,6 +5,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CircleGauge,
+  FileSpreadsheet,
   FileText,
   FolderKanban,
   LogOut,
@@ -57,6 +58,7 @@ const titleMap: Record<string, string> = {
   financeiro: 'Financeiro',
   documentos: 'Documentos',
   configuracoes: 'Configurações',
+  importacao: 'Importação de Base Histórica',
 }
 
 type SearchResult = { id: string; label: string; meta: string; path: string; type: string }
@@ -346,6 +348,12 @@ export default function AppLayout() {
                 {canAccess(role, 'documentos') && (
                   <DropdownMenuItem onSelect={() => navigate('/documentos/novo')}>
                     Gerar documento
+                  </DropdownMenuItem>
+                )}
+                {role === 'admin' && (
+                  <DropdownMenuItem onSelect={() => navigate('/configuracoes/importacao')}>
+                    <FileSpreadsheet className="mr-2 h-4 w-4 text-[#FF6A13]" />
+                    Importar planilha
                   </DropdownMenuItem>
                 )}
               </DropdownMenuContent>

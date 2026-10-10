@@ -256,3 +256,24 @@ export interface AnexoRecord extends RecordModel {
     usuario?: UserRecord
   }
 }
+
+export interface ImportacaoLogRecord extends RecordModel {
+  arquivo_nome: string
+  tamanho_bytes: number
+  usuario: string
+  total_clientes: number
+  total_projetos: number
+  total_financeiro: number
+  total_comunicacoes: number
+  resumo: {
+    clientes: { criados: number; atualizados: number; ignorados: number; pendencias: number }
+    projetos: { criados: number; atualizados: number; ignorados: number; pendencias: number }
+    financeiro: { criados: number; atualizados: number; ignorados: number; pendencias: number }
+    comunicacoes: { criados: number; atualizados: number; ignorados: number; pendencias: number }
+    avisos: string[]
+    erros: string[]
+  }
+  expand?: {
+    usuario?: UserRecord
+  }
+}

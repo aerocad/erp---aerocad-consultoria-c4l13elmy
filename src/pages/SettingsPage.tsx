@@ -1,6 +1,16 @@
 import { useState, type FormEvent } from 'react'
-import { FileText, Pencil, Plus, RotateCcw, Save, Shield, UserRound } from 'lucide-react'
+import {
+  FileSpreadsheet,
+  FileText,
+  Pencil,
+  Plus,
+  RotateCcw,
+  Save,
+  Shield,
+  UserRound,
+} from 'lucide-react'
 import { toast } from 'sonner'
+import { ImportacaoWizard } from '@/components/importacao/ImportacaoWizard'
 
 import { CrmBadge } from '@/components/common/CrmBadge'
 import { ErrorState, PageLoading } from '@/components/common/States'
@@ -39,6 +49,7 @@ export default function SettingsPage() {
   const templates = useCrmData<ModeloRecord>('modelos_documentos', { sort: 'nome' })
   const services = useCrmData<ServiceRecord>('servicos_catalogo', { sort: 'codigo' })
   const sequences = useCrmData<SequenciaRecord>('sequencias', { sort: 'chave' })
+  const isAdmin = user?.role === 'admin'
   const [templateOpen, setTemplateOpen] = useState(false)
   const [editingTemplate, setEditingTemplate] = useState<ModeloRecord | null>(null)
   const [tpl, setTpl] = useState({ nome: '', categoria: 'outro', corpo: '' })
@@ -150,6 +161,15 @@ export default function SettingsPage() {
           <TabsTrigger value="modelos">Modelos</TabsTrigger>
           <TabsTrigger value="servicos">Serviços e preços</TabsTrigger>
           <TabsTrigger value="numeracao">Numeração</TabsTrigger>
+          {isAdmin && (
+            <TabsTrigger
+              value="importacao"
+              className="flex items-center gap-1.5 font-semibold text-[#D65100]"
+            >
+              <FileSpreadsheet className="h-3.5 w-3.5" />
+              Importação
+            </TabsTrigger>
+          )}
         </TabsList>
         <TabsContent value="usuarios">
           <div className="crm-card overflow-hidden">
@@ -338,6 +358,13 @@ export default function SettingsPage() {
             </div>
           </section>
         </TabsContent>
+        {isAdmin && (
+          <TabsContent value="importacao">
+            <div className="crm-card p-6">
+              <ImportacaoWizard />
+            </div>
+          </TabsContent>
+        )}
       </Tabs>
       <Dialog open={templateOpen} onOpenChange={setTemplateOpen}>
         <DialogContent className="sm:max-w-2xl">

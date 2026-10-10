@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-10T19:14:40.242Z",
+  "generatedAt": "2026-10-10T20:27:14.747Z",
   "collections": [
     {
       "name": "users",
@@ -156,6 +156,24 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "municipio_uf",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "primeira_contratacao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "origem_importacao",
+          "type": "bool",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
@@ -957,6 +975,96 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "id_planilha",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "numero_pc_pt",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "tipo_servico",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "escopo_resumido",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "municipio_uf",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "aerodromo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "data_proposta",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "data_aceite",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "prazo_dias",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "valor_global",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "marco_fase_atual",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "proxima_entrega",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "pendente_orgao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "status_planilha",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "origem_importacao",
+          "type": "bool",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
@@ -1354,6 +1462,54 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "id_lancamento",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "numero_parcela_marco",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "percentual_contrato",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "evento_comprobatorio",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "data_prevista",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "data_faturamento",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "status_pagamento",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "origem_importacao",
+          "type": "bool",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
@@ -1733,6 +1889,30 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "tipo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "data_hora",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "id_planilha",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "origem_importacao",
+          "type": "bool",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
@@ -1864,6 +2044,86 @@
         "CREATE INDEX idx_anexos_categoria ON anexos (categoria)",
         "CREATE INDEX idx_anexos_usuario ON anexos (usuario)",
         "CREATE INDEX idx_anexos_created ON anexos (created DESC)"
+      ]
+    },
+    {
+      "name": "importacoes_log",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.role = 'admin'",
+        "view": "@request.auth.role = 'admin'",
+        "create": "@request.auth.role = 'admin'",
+        "update": "@request.auth.role = 'admin'",
+        "delete": "@request.auth.role = 'admin'"
+      },
+      "fields": [
+        {
+          "name": "arquivo_nome",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "tamanho_bytes",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "usuario",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "total_clientes",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "total_projetos",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "total_financeiro",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "total_comunicacoes",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "resumo",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_importacoes_log_created ON importacoes_log (created DESC)",
+        "CREATE INDEX idx_importacoes_log_usuario ON importacoes_log (usuario)"
       ]
     }
   ]

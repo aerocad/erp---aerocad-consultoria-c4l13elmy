@@ -18,6 +18,7 @@ import ProcessDetailPage from '@/pages/ProcessDetailPage'
 import ProcessesPage from '@/pages/ProcessesPage'
 import ProjectDetailPage from '@/pages/ProjectDetailPage'
 import ProjectsPage from '@/pages/ProjectsPage'
+import ImportacaoPage from '@/pages/ImportacaoPage'
 import SettingsPage from '@/pages/SettingsPage'
 import TerceiroPortalPage from '@/pages/TerceiroPortalPage'
 import ConfirmEmailChangePage from '@/pages/auth/ConfirmEmailChangePage'
@@ -72,6 +73,7 @@ const App = () => (
               </Route>
               <Route element={<AreaGuard area="configuracoes" />}>
                 <Route path="/configuracoes" element={<SettingsPage />} />
+                <Route path="/configuracoes/importacao" element={<ImportacaoPage />} />
               </Route>
             </Route>
           </Route>
