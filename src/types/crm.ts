@@ -141,6 +141,16 @@ export interface ParcelaRecord extends RecordModel {
   retencoes: string
   observacoes: string
   origem: 'manual' | 'gatilho'
+  id_lancamento?: string
+  numero_parcela_marco?: string
+  percentual_contrato?: number
+  evento_comprobatorio?: string
+  data_prevista?: string
+  data_faturamento?: string
+  status_pagamento?: string
+  origem_importacao?: boolean
+  nfse_chave?: string
+  nfse_dados?: Record<string, unknown>
   expand?: { projeto?: ProjetoRecord; cliente?: ClienteRecord }
 }
 

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-10T22:09:04.495Z",
+  "generatedAt": "2026-10-10T22:17:41.961Z",
   "collections": [
     {
       "name": "users",
@@ -1510,6 +1510,18 @@
           "type": "bool",
           "required": false,
           "system": false
+        },
+        {
+          "name": "nfse_chave",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "nfse_dados",
+          "type": "json",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
@@ -2050,10 +2062,10 @@
       "name": "importacoes_log",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.role = 'admin'",
-        "view": "@request.auth.role = 'admin'",
-        "create": "@request.auth.role = 'admin'",
-        "update": "@request.auth.role = 'admin'",
+        "list": "@request.auth.role = 'admin' || @request.auth.role = 'financeiro'",
+        "view": "@request.auth.role = 'admin' || @request.auth.role = 'financeiro'",
+        "create": "@request.auth.role = 'admin' || @request.auth.role = 'financeiro'",
+        "update": "@request.auth.role = 'admin' || @request.auth.role = 'financeiro'",
         "delete": "@request.auth.role = 'admin'"
       },
       "fields": [

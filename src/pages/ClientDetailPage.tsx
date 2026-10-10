@@ -315,7 +315,7 @@ export default function ClientDetailPage() {
           />
         </TabsContent>
         <TabsContent value="financeiro">
-          <div className="crm-card p-5">
+          <div className="crm-card p-5 space-y-4">
             <div className="grid gap-4 sm:grid-cols-3">
               <Metric label="Total" value={financial.total} />
               <Metric label="Recebido" value={financial.paid} />
@@ -325,6 +325,20 @@ export default function ClientDetailPage() {
               className="mt-5"
               value={financial.total ? (financial.paid / financial.total) * 100 : 0}
             />
+
+            <div className="pt-4 border-t">
+              <h4 className="text-xs font-bold technical-label text-[#737373] mb-3">
+                PARCELAS & NOTAS FISCAIS (NFS-E)
+              </h4>
+              <List
+                items={installments.map((i) => ({
+                  id: i.id,
+                  title: `${i.descricao}${i.nf_numero ? ` · NFS-e nº ${i.nf_numero}` : ''}`,
+                  meta: `${formatCurrency(i.valor)} · Venc: ${formatDate(i.vencimento)}${i.data_pagamento ? ` · Rec: ${formatDate(i.data_pagamento)}` : ''}`,
+                  badge: i.status,
+                }))}
+              />
+            </div>
           </div>
         </TabsContent>
         <TabsContent value="anexos">

@@ -634,7 +634,13 @@ export default function ReportsPage() {
       const dVenc = p.vencimento ? new Date(p.vencimento) : null
       const mesIdx = dVenc ? dVenc.getMonth() : -1
 
-      if (p.status === 'paga') {
+      // Notas importadas com status pago ou com data de pagamento/recebimento contam como recebimento efetivo
+      const foiRecebido =
+        p.status === 'paga' ||
+        Boolean(p.data_pagamento) ||
+        (p.status_pagamento && p.status_pagamento.toLowerCase().includes('recebid'))
+
+      if (foiRecebido) {
         faturado += valorRecebido
         if (mesIdx >= 0 && mesIdx <= 11) {
           evolucaoMes[mesIdx].faturado += valorRecebido
@@ -674,7 +680,12 @@ export default function ReportsPage() {
         })
       }
       const entry = receitaClienteMap.get(cid)!
-      if (p.status === 'paga') {
+      const itemRecebido =
+        p.status === 'paga' ||
+        Boolean(p.data_pagamento) ||
+        (p.status_pagamento && p.status_pagamento.toLowerCase().includes('recebid'))
+
+      if (itemRecebido) {
         entry.totalFaturado += Number(p.valor_recebido) || val
       } else {
         entry.totalAberto += val

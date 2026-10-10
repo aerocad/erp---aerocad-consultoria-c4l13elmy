@@ -4,6 +4,9 @@ import {
   CalendarClock,
   CheckCircle2,
   CircleDollarSign,
+  FileSpreadsheet,
+  Layers,
+  Link as LinkIcon,
   Plus,
   Search,
   TriangleAlert,
@@ -12,8 +15,9 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import { CrmBadge } from '@/components/common/CrmBadge'
-import { EmptyState, ErrorState, PageLoading } from '@/components/common/States'
 import { SectionHeader } from '@/components/common/SectionHeader'
+import { EmptyState, ErrorState, PageLoading } from '@/components/common/States'
+import { ImportacaoNfseModal } from '@/components/financeiro/ImportacaoNfseModal'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -36,26 +40,47 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useCrmData } from '@/hooks/use-crm-data'
 import { formatCurrency, formatDate } from '@/lib/format'
 import { createOne, updateOne } from '@/services/api'
-import type { ClienteRecord, ParcelaRecord, ProjetoRecord } from '@/types/crm'
+import { vincularNotaOrfaAParcela } from '@/services/nfseExecutor'
+import type { NfseDadoExtraido } from '@/services/nfseParser'
+import type { ParcelaRecord } from '@/types/crm'
 
-export default function FinancePage() {
+export default FinancePage
+
+export function FinancePage() {
   const { user } = useAuth()
   const [params] = useSearchParams()
   const installments = useCrmData<ParcelaRecord>('parcelas', {
+    sort: '-vencimento',
     expand: 'projeto,cliente',
-    sort: 'vencimento',
-    realtime: true,
   })
-  const projects = useCrmData<ProjetoRecord>('projetos', { expand: 'cliente', sort: '-numero' })
-  const clients = useCrmData<ClienteRecord>('clientes', { sort: 'razao_social' })
+  const projects = useCrmData<ProjetoRecord>('projetos', {
+    sort: '-created',
+    fields: 'id,numero,nome,cliente',
+  })
   const [query, setQuery] = useState('')
-  const [status, setStatus] = useState('todos')
+  const [status, setStatus] = useState(params.get('status') || 'todos')
   const [month, setMonth] = useState('todos')
   const [projectFilter, setProjectFilter] = useState(params.get('projeto') || 'todos')
+  const [activeTab, setActiveTab] = useState<'parcelas' | 'orfas'>('parcelas')
+  const [importNfseOpen, setImportNfseOpen] = useState(false)
   const [payment, setPayment] = useState<ParcelaRecord | null>(null)
   const [newOpen, setNewOpen] = useState(false)
   const [payDate, setPayDate] = useState(new Date().toISOString().slice(0, 10))
   const [payValue, setPayValue] = useState('')
+
+  // Estado de Notas Órfãs em memória (persistido na sessão do navegador para vinculação manual)
+  const [notasOrfas, setNotasOrfas] = useState<NfseDadoExtraido[]>(() => {
+    try {
+      const saved = sessionStorage.getItem('aerocad_nfse_orfas')
+      return saved ? JSON.parse(saved) : []
+    } catch {
+      return []
+    }
+  })
+  const [vinculandoNota, setVinculandoNota] = useState<NfseDadoExtraido | null>(null)
+  const [parcelaDestinoId, setParcelaDestinoId] = useState('')
+  const [isVinculando, setIsVinculando] = useState(false)
+
   const [form, setForm] = useState({
     projeto: '',
     cliente: '',
@@ -68,40 +93,54 @@ export default function FinancePage() {
     observacoes: '',
   })
   const canWrite = user?.role === 'admin' || user?.role === 'financeiro'
-  const rows = useMemo(
-    () =>
-      installments.data.filter(
-        (item) =>
-          (status === 'todos' || item.status === status) &&
-          (projectFilter === 'todos' || item.projeto === projectFilter) &&
-          (month === 'todos' || item.vencimento.slice(0, 7) === month) &&
-          (!query ||
-            `${item.descricao} ${item.expand?.projeto?.numero} ${item.expand?.cliente?.razao_social}`
-              .toLowerCase()
-              .includes(query.toLowerCase())),
-      ),
-    [installments.data, status, projectFilter, month, query],
-  )
-  const total = installments.data.reduce((s, i) => s + i.valor, 0)
-  const received = installments.data
-    .filter((i) => i.status === 'paga')
-    .reduce((s, i) => s + (i.valor_recebido || i.valor), 0)
-  const overdue = installments.data
-    .filter((i) => i.status === 'vencida')
-    .reduce((s, i) => s + i.valor, 0)
-  const open = total - received
-  const months = Array.from(
-    new Set(installments.data.map((i) => i.vencimento.slice(0, 7)).filter(Boolean)),
-  )
-    .sort()
-    .reverse()
+
+  const months = useMemo(() => {
+    const set = new Set<string>()
+    installments.data.forEach((item) => {
+      if (item.vencimento) set.add(item.vencimento.slice(0, 7))
+    })
+    return Array.from(set).sort().reverse()
+  }, [installments.data])
+
+  const rows = useMemo(() => {
+    return installments.data.filter((item) => {
+      const matchQuery =
+        item.descricao.toLowerCase().includes(query.toLowerCase()) ||
+        item.expand?.projeto?.numero?.toLowerCase().includes(query.toLowerCase()) ||
+        item.expand?.cliente?.razao_social?.toLowerCase().includes(query.toLowerCase()) ||
+        (item.nf_numero && item.nf_numero.toLowerCase().includes(query.toLowerCase()))
+      const matchStatus = status === 'todos' || item.status === status
+      const matchMonth = month === 'todos' || item.vencimento?.slice(0, 7) === month
+      const matchProject = projectFilter === 'todos' || item.projeto === projectFilter
+      return matchQuery && matchStatus && matchMonth && matchProject
+    })
+  }, [installments.data, query, status, month, projectFilter])
+
+  const { total, paid, open, overdue } = useMemo(() => {
+    const now = new Date()
+    return installments.data.reduce(
+      (acc, item) => {
+        acc.total += item.valor
+        if (item.status === 'paga') {
+          acc.paid += item.valor_recebido || item.valor
+        } else if (item.status === 'vencida' || new Date(item.vencimento) < now) {
+          acc.overdue += item.valor
+        } else {
+          acc.open += item.valor
+        }
+        return acc
+      },
+      { total: 0, paid: 0, open: 0, overdue: 0 },
+    )
+  }, [installments.data])
+
   async function registerPayment() {
     if (!payment) return
     try {
       await updateOne('parcelas', payment.id, {
         status: 'paga',
         data_pagamento: `${payDate} 12:00:00.000Z`,
-        valor_recebido: Number(payValue || payment.valor),
+        valor_recebido: Number(payValue) || payment.valor,
       })
       toast.success('Pagamento registrado')
       setPayment(null)
@@ -110,6 +149,7 @@ export default function FinancePage() {
       toast.error('Não foi possível registrar o pagamento')
     }
   }
+
   async function createInstallment(event: FormEvent) {
     event.preventDefault()
     if (!form.projeto || !form.cliente || !form.descricao || !form.vencimento)
@@ -127,24 +167,58 @@ export default function FinancePage() {
       toast.error('Não foi possível criar a parcela')
     }
   }
-  if (installments.loading || projects.loading || clients.loading) return <PageLoading />
-  if (installments.error) return <ErrorState onRetry={() => void installments.reload()} />
+
+  async function handleConfirmarVinculoManual() {
+    if (!vinculandoNota || !parcelaDestinoId) {
+      toast.error('Selecione a parcela de destino')
+      return
+    }
+    setIsVinculando(true)
+    try {
+      await vincularNotaOrfaAParcela(vinculandoNota, parcelaDestinoId)
+      toast.success(`NFS-e nº ${vinculandoNota.numero} vinculada com sucesso!`)
+
+      // Remove da lista de órfãs
+      setNotasOrfas((prev) => {
+        const atualizadas = prev.filter((n) => n.idTemp !== vinculandoNota.idTemp)
+        try {
+          sessionStorage.setItem('aerocad_nfse_orfas', JSON.stringify(atualizadas))
+        } catch {
+          /* intentionally ignored */
+        }
+        return atualizadas
+      })
+      setVinculandoNota(null)
+      setParcelaDestinoId('')
+      void installments.reload()
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      toast.error('Erro ao vincular nota: ' + msg)
+    } finally {
+      setIsVinculando(false)
+    }
+  }
+
+  if (installments.loading && !installments.data.length) return <PageLoading />
+if (installments.error) return <ErrorState onRetry={installments.reload} />
+
   const kpis = [
     {
-      label: 'Total contratado',
+      label: 'TOTAL PREVISTO',
       value: total,
       icon: CircleDollarSign,
-      color: 'text-[#FF6A13] bg-orange-50',
+      color: 'text-neutral-700 bg-neutral-100',
     },
     {
-      label: 'Recebido',
-      value: received,
+      label: 'RECEBIDO',
+      value: paid,
       icon: CheckCircle2,
-      color: 'text-emerald-600 bg-emerald-50',
+      color: 'text-emerald-700 bg-emerald-100',
     },
-    { label: 'Em aberto', value: open, icon: CalendarClock, color: 'text-sky-600 bg-sky-50' },
-    { label: 'Vencido', value: overdue, icon: TriangleAlert, color: 'text-red-600 bg-red-50' },
+    { label: 'A RECEBER', value: open, icon: CalendarClock, color: 'text-sky-700 bg-sky-100' },
+    { label: 'EM ATRASO', value: overdue, icon: TriangleAlert, color: 'text-rose-700 bg-rose-100' },
   ]
+
   return (
     <div>
       <SectionHeader
@@ -152,16 +226,29 @@ export default function FinancePage() {
         title="Financeiro"
         description="Parcelas, gatilhos e recebimentos da operação."
         actions={
-          <Button
-            disabled={!canWrite}
-            onClick={() => setNewOpen(true)}
-            className="bg-[#FF6A13] hover:bg-[#E85B06]"
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            Nova parcela
-          </Button>
+          <div className="flex items-center gap-2">
+            {canWrite && (
+              <Button
+                variant="outline"
+                onClick={() => setImportNfseOpen(true)}
+                className="border-[#FFD2B3] text-[#D65100] hover:bg-[#FFF6EC]"
+              >
+                <FileSpreadsheet className="mr-2 h-4 w-4 text-[#FF6A13]" />
+                Importar NFS-e
+              </Button>
+            )}
+            <Button
+              disabled={!canWrite}
+              onClick={() => setNewOpen(true)}
+              className="bg-[#FF6A13] hover:bg-[#E85B06] text-white"
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Nova parcela
+            </Button>
+          </div>
         }
       />
+
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {kpis.map(({ label, value, icon: Icon, color }) => (
           <div key={label} className="crm-card p-5">
@@ -181,106 +268,312 @@ export default function FinancePage() {
           </div>
         ))}
       </div>
-      <div className="mt-5 rounded-xl border border-[#FFD2B3] bg-[#FFF6EC] p-4 text-sm text-[#6A4A34]">
-        <strong>Gatilhos automáticos:</strong> entradas são criadas ao iniciar a trilha e saldos em
-        protocolo/entrega/conclusão, conforme a trilha. Registros automáticos são idempotentes e
-        identificados abaixo.
-      </div>
-      <div className="mt-5 flex flex-col gap-3 rounded-xl border bg-white p-3 lg:flex-row">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-3 h-4 w-4 text-[#9A9A9A]" />
-          <Input
-            className="pl-9"
-            placeholder="Buscar projeto, cliente ou descrição"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
+
+      <div className="mt-5 rounded-xl border border-[#FFD2B3] bg-[#FFF6EC] p-4 text-sm text-[#6A4A34] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <strong>Gatilhos automáticos & NFS-e:</strong> entradas são criadas ao iniciar a trilha e
+          saldos em protocolo/entrega/conclusão. Notas fiscais importadas via XML ou planilhas
+          correlacionam automaticamente com as parcelas e registram faturamento/baixa.
         </div>
-        <Select value={month} onValueChange={setMonth}>
-          <SelectTrigger className="lg:w-44">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="todos">Todos os meses</SelectItem>
-            {months.map((item) => (
-              <SelectItem key={item} value={item}>
-                {new Date(`${item}-02`).toLocaleDateString('pt-BR', {
-                  month: 'long',
-                  year: 'numeric',
-                })}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={projectFilter} onValueChange={setProjectFilter}>
-          <SelectTrigger className="lg:w-52">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="todos">Todos os projetos</SelectItem>
-            {projects.data.map((item) => (
-              <SelectItem key={item.id} value={item.id}>
-                {item.numero} · {item.nome}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={status} onValueChange={setStatus}>
-          <SelectTrigger className="lg:w-40">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="todos">Todos</SelectItem>
-            <SelectItem value="pendente">Pendente</SelectItem>
-            <SelectItem value="paga">Paga</SelectItem>
-            <SelectItem value="vencida">Vencida</SelectItem>
-          </SelectContent>
-        </Select>
+        {canWrite && (
+          <Button
+            size="sm"
+            onClick={() => setImportNfseOpen(true)}
+            className="bg-[#FF6A13] hover:bg-[#E85B06] text-white shrink-0"
+          >
+            <FileSpreadsheet className="mr-2 h-4 w-4" />
+            Importar NFS-e
+          </Button>
+        )}
       </div>
-      {!rows.length ? (
-        <div className="mt-5">
-          <EmptyState
-            title="Nenhuma parcela registrada"
-            description="Cadastre uma parcela manual ou avance uma fase com gatilho automático."
-          />
+
+      {/* Navegação entre Parcelas e Notas Órfãs */}
+      <div className="mt-5 flex items-center gap-2 border-b">
+        <button
+          onClick={() => setActiveTab('parcelas')}
+          className={`pb-3 text-sm font-bold border-b-2 transition ${
+            activeTab === 'parcelas'
+              ? 'border-[#FF6A13] text-[#FF6A13]'
+              : 'border-transparent text-[#737373] hover:text-[#333]'
+          }`}
+        >
+          Parcelas Cadastradas ({installments.data.length})
+        </button>
+        {canWrite && (
+          <button
+            onClick={() => setActiveTab('orfas')}
+            className={`pb-3 text-sm font-bold border-b-2 flex items-center gap-1.5 transition ${
+              activeTab === 'orfas'
+                ? 'border-[#FF6A13] text-[#FF6A13]'
+                : 'border-transparent text-[#737373] hover:text-[#333]'
+            }`}
+          >
+            <Layers className="h-4 w-4" />
+            Notas Órfãs
+            {notasOrfas.length > 0 && (
+              <span className="ml-1 rounded-full bg-amber-100 text-amber-800 text-[10px] px-2 py-0.5">
+                {notasOrfas.length}
+              </span>
+            )}
+          </button>
+        )}
+      </div>
+
+      {activeTab === 'orfas' ? (
+        <div className="mt-5 space-y-4">
+          <div className="crm-card p-4 bg-sky-50/50 border-sky-200 text-xs text-sky-950 flex items-start gap-2.5">
+            <Layers className="h-5 w-5 text-sky-600 shrink-0 mt-0.5" />
+            <div>
+              <strong className="text-sm">Central de Notas Órfãs:</strong> Notas fiscais importadas
+              que não encontraram correspondência automática podem ser vinculadas manualmente a
+              qualquer parcela da operação. Ao vincular, o status da parcela é atualizado e
+              registrado no histórico do projeto.
+            </div>
+          </div>
+
+          {!notasOrfas.length ? (
+            <EmptyState
+              title="Nenhuma nota órfã pendente"
+              description="Todas as notas fiscais importadas foram correlacionadas com sucesso ou nenhuma importação com órfãs foi realizada nesta sessão."
+            />
+          ) : (
+            <div className="crm-card divide-y overflow-hidden">
+              {notasOrfas.map((nota) => (
+                <div
+                  key={nota.idTemp}
+                  className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-[#FFF6EC]/30"
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="mono-value font-bold text-sm text-[#FF6A13]">
+                        NFS-e nº {nota.numero}
+                      </span>
+                      <CrmBadge tone="gray">{nota.situacao.toUpperCase()}</CrmBadge>
+                      <span className="text-xs text-[#737373]">
+                        Emissão: {formatDate(nota.dataEmissao)}
+                      </span>
+                    </div>
+                    <p className="text-sm font-semibold text-[#333]">
+                      Tomador: {nota.tomadorRazao}{' '}
+                      {nota.tomadorCnpjCpf && `(${nota.tomadorCnpjCpf})`}
+                    </p>
+                    {nota.descricaoServico && (
+                      <p className="text-xs text-[#777] line-clamp-1 italic">
+                        {nota.descricaoServico}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-4">
+                    <div className="text-right">
+                      <p className="mono-value font-bold text-base text-[#1F1F1F]">
+                        {formatCurrency(nota.valorBruto)}
+                      </p>
+                      {nota.retencoesTexto && (
+                        <p className="text-[10px] text-amber-700">{nota.retencoesTexto}</p>
+                      )}
+                    </div>
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        setVinculandoNota(nota)
+                        setParcelaDestinoId('')
+                      }}
+                      className="bg-[#FF6A13] hover:bg-[#E85B06] text-white shrink-0"
+                    >
+                      <LinkIcon className="mr-1.5 h-3.5 w-3.5" />
+                      Vincular a Parcela
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       ) : (
-        <div className="crm-card mt-5 overflow-hidden">
-          <div className="hidden lg:block">
-            <table className="w-full">
-              <thead className="border-b bg-[#FAFAFA] text-left text-[11px] uppercase tracking-wider text-[#737373]">
-                <tr>
-                  <th className="px-5 py-3">Projeto / Cliente</th>
-                  <th className="px-5 py-3">Descrição</th>
-                  <th className="px-5 py-3">Valor</th>
-                  <th className="px-5 py-3">Vencimento</th>
-                  <th className="px-5 py-3">Status</th>
-                  <th className="px-5 py-3">Ação</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
+        <>
+          <div className="mt-5 flex flex-col gap-3 rounded-xl border bg-white p-3 lg:flex-row">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-3 h-4 w-4 text-[#9A9A9A]" />
+              <Input
+                className="pl-9"
+                placeholder="Buscar projeto, cliente, descrição ou número da NFS-e"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            </div>
+            <Select value={month} onValueChange={setMonth}>
+              <SelectTrigger className="lg:w-44">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos os meses</SelectItem>
+                {months.map((item) => (
+                  <SelectItem key={item} value={item}>
+                    {new Date(`${item}-02`).toLocaleDateString('pt-BR', {
+                      month: 'long',
+                      year: 'numeric',
+                    })}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={projectFilter} onValueChange={setProjectFilter}>
+              <SelectTrigger className="lg:w-52">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos os projetos</SelectItem>
+                {projects.data.map((item) => (
+                  <SelectItem key={item.id} value={item.id}>
+                    {item.numero} · {item.nome}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={status} onValueChange={setStatus}>
+              <SelectTrigger className="lg:w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos</SelectItem>
+                <SelectItem value="pendente">Pendente</SelectItem>
+                <SelectItem value="paga">Paga</SelectItem>
+                <SelectItem value="vencida">Vencida</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {!rows.length ? (
+            <div className="mt-5">
+              <EmptyState
+                title="Nenhuma parcela registrada"
+                description="Cadastre uma parcela manual ou avance uma fase com gatilho automático."
+              />
+            </div>
+          ) : (
+            <div className="crm-card mt-5 overflow-hidden">
+              <div className="hidden lg:block">
+                <table className="w-full">
+                  <thead className="border-b bg-[#FAFAFA] text-left text-[11px] uppercase tracking-wider text-[#737373]">
+                    <tr>
+                      <th className="px-5 py-3">Projeto / Cliente</th>
+                      <th className="px-5 py-3">Descrição</th>
+                      <th className="px-5 py-3">NFS-e / Faturamento</th>
+                      <th className="px-5 py-3">Valor</th>
+                      <th className="px-5 py-3">Vencimento / Recebimento</th>
+                      <th className="px-5 py-3">Status</th>
+                      <th className="px-5 py-3">Ação</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {rows.map((item) => (
+                      <tr key={item.id}>
+                        <td className="px-5 py-4">
+                          <Link
+                            to={`/projetos/${item.projeto}`}
+                            className="mono-value font-bold text-[#D65100] hover:underline"
+                          >
+                            {item.expand?.projeto?.numero || 'Sem projeto'}
+                          </Link>
+                          <p className="text-xs text-[#737373]">
+                            {item.expand?.cliente?.razao_social}
+                          </p>
+                        </td>
+                        <td className="px-5 py-4 text-sm font-semibold">
+                          {item.descricao}
+                          {item.origem === 'gatilho' && (
+                            <CrmBadge tone="orange" className="ml-2">
+                              automático
+                            </CrmBadge>
+                          )}
+                        </td>
+                        <td className="px-5 py-4 text-xs">
+                          {item.nf_numero ? (
+                            <div className="space-y-1">
+                              <span className="inline-flex items-center gap-1 font-mono font-bold text-[#FF6A13] bg-orange-50 px-2 py-0.5 rounded border border-orange-200">
+                                NFS-e nº {item.nf_numero}
+                              </span>
+                              {item.data_faturamento && (
+                                <p className="text-[11px] text-[#737373]">
+                                  Fat: {formatDate(item.data_faturamento)}
+                                </p>
+                              )}
+                              {item.retencoes && (
+                                <p
+                                  className="text-[10px] text-amber-700 line-clamp-1"
+                                  title={item.retencoes}
+                                >
+                                  Ret: {item.retencoes}
+                                </p>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-[#999] italic">Não faturada</span>
+                          )}
+                        </td>
+                        <td className="mono-value px-5 py-4 font-bold">
+                          {formatCurrency(item.valor)}
+                        </td>
+                        <td className="mono-value px-5 py-4 text-xs">
+                          <p>Venc: {formatDate(item.vencimento)}</p>
+                          {item.data_pagamento && (
+                            <p className="text-emerald-700 font-semibold mt-0.5">
+                              Rec: {formatDate(item.data_pagamento)}
+                            </p>
+                          )}
+                        </td>
+                        <td className="px-5 py-4">
+                          <CrmBadge
+                            tone={
+                              item.status === 'paga'
+                                ? 'green'
+                                : item.status === 'vencida'
+                                  ? 'red'
+                                  : 'amber'
+                            }
+                          >
+                            {item.status}
+                          </CrmBadge>
+                        </td>
+                        <td className="px-5 py-4">
+                          {item.status !== 'paga' && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={!canWrite}
+                              onClick={() => {
+                                setPayment(item)
+                                setPayValue(String(item.valor))
+                              }}
+                            >
+                              Registrar pagamento
+                            </Button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="divide-y lg:hidden">
                 {rows.map((item) => (
-                  <tr key={item.id}>
-                    <td className="px-5 py-4">
-                      <Link
-                        to={`/projetos/${item.projeto}`}
-                        className="mono-value font-bold text-[#D65100] hover:underline"
-                      >
-                        {item.expand?.projeto?.numero}
-                      </Link>
-                      <p className="text-xs text-[#737373]">{item.expand?.cliente?.razao_social}</p>
-                    </td>
-                    <td className="px-5 py-4 text-sm font-semibold">
-                      {item.descricao}
-                      {item.origem === 'gatilho' && (
-                        <CrmBadge tone="orange" className="ml-2">
-                          automático
-                        </CrmBadge>
-                      )}
-                    </td>
-                    <td className="mono-value px-5 py-4 font-bold">{formatCurrency(item.valor)}</td>
-                    <td className="mono-value px-5 py-4 text-sm">{formatDate(item.vencimento)}</td>
-                    <td className="px-5 py-4">
+                  <div key={item.id} className="p-4">
+                    <div className="flex justify-between gap-3">
+                      <div>
+                        <Link
+                          to={`/projetos/${item.projeto}`}
+                          className="mono-value font-bold text-[#D65100]"
+                        >
+                          {item.expand?.projeto?.numero}
+                        </Link>
+                        <p className="mt-1 text-sm font-semibold">{item.descricao}</p>
+                        {item.nf_numero && (
+                          <span className="mt-1 inline-flex items-center gap-1 font-mono text-xs font-bold text-[#FF6A13] bg-orange-50 px-2 py-0.5 rounded border border-orange-200">
+                            NFS-e nº {item.nf_numero}
+                          </span>
+                        )}
+                      </div>
                       <CrmBadge
                         tone={
                           item.status === 'paga'
@@ -292,70 +585,32 @@ export default function FinancePage() {
                       >
                         {item.status}
                       </CrmBadge>
-                    </td>
-                    <td className="px-5 py-4">
-                      {item.status !== 'paga' && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={!canWrite}
-                          onClick={() => {
-                            setPayment(item)
-                            setPayValue(String(item.valor))
-                          }}
-                        >
-                          Registrar pagamento
-                        </Button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div className="divide-y lg:hidden">
-            {rows.map((item) => (
-              <div key={item.id} className="p-4">
-                <div className="flex justify-between gap-3">
-                  <div>
-                    <Link
-                      to={`/projetos/${item.projeto}`}
-                      className="mono-value font-bold text-[#D65100]"
-                    >
-                      {item.expand?.projeto?.numero}
-                    </Link>
-                    <p className="mt-1 text-sm font-semibold">{item.descricao}</p>
+                    </div>
+                    <div className="mt-3 flex justify-between">
+                      <span className="mono-value font-bold">{formatCurrency(item.valor)}</span>
+                      <span className="mono-value text-xs">{formatDate(item.vencimento)}</span>
+                    </div>
+                    {item.status !== 'paga' && (
+                      <Button
+                        className="mt-3 w-full"
+                        variant="outline"
+                        disabled={!canWrite}
+                        onClick={() => {
+                          setPayment(item)
+                          setPayValue(String(item.valor))
+                        }}
+                      >
+                        Registrar pagamento
+                      </Button>
+                    )}
                   </div>
-                  <CrmBadge
-                    tone={
-                      item.status === 'paga' ? 'green' : item.status === 'vencida' ? 'red' : 'amber'
-                    }
-                  >
-                    {item.status}
-                  </CrmBadge>
-                </div>
-                <div className="mt-3 flex justify-between">
-                  <span className="mono-value font-bold">{formatCurrency(item.valor)}</span>
-                  <span className="mono-value text-xs">{formatDate(item.vencimento)}</span>
-                </div>
-                {item.status !== 'paga' && (
-                  <Button
-                    className="mt-3 w-full"
-                    variant="outline"
-                    disabled={!canWrite}
-                    onClick={() => {
-                      setPayment(item)
-                      setPayValue(String(item.valor))
-                    }}
-                  >
-                    Registrar pagamento
-                  </Button>
-                )}
+                ))}
               </div>
-            ))}
-          </div>
-        </div>
+            </div>
+          )}
+        </>
       )}
+
       <Dialog open={Boolean(payment)} onOpenChange={(v) => !v && setPayment(null)}>
         <DialogContent>
           <DialogHeader>
@@ -386,6 +641,7 @@ export default function FinancePage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
       <Dialog open={newOpen} onOpenChange={setNewOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
@@ -455,6 +711,86 @@ export default function FinancePage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Modal de Vinculação Manual de Nota Órfã */}
+      <Dialog open={Boolean(vinculandoNota)} onOpenChange={(v) => !v && setVinculandoNota(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Vincular Nota Órfã a uma Parcela</DialogTitle>
+          </DialogHeader>
+          {vinculandoNota && (
+            <div className="space-y-4">
+              <div className="rounded-lg border bg-[#FAFAFA] p-3 text-xs space-y-1">
+                <p>
+                  <strong>NFS-e:</strong> {vinculandoNota.numero} · <strong>Valor:</strong>{' '}
+                  {formatCurrency(vinculandoNota.valorBruto)}
+                </p>
+                <p>
+                  <strong>Tomador:</strong> {vinculandoNota.tomadorRazao}
+                </p>
+                <p>
+                  <strong>Data de Emissão:</strong> {formatDate(vinculandoNota.dataEmissao)}
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Selecione a parcela de destino *</Label>
+                <Select value={parcelaDestinoId} onValueChange={setParcelaDestinoId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione a parcela..." />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-60">
+                    {installments.data.map((item) => (
+                      <SelectItem key={item.id} value={item.id}>
+                        {item.expand?.projeto?.numero || 'Sem proj'} · {item.descricao} —{' '}
+                        {formatCurrency(item.valor)} ({item.status})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isVinculando}
+              onClick={() => setVinculandoNota(null)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => void handleConfirmarVinculoManual()}
+              disabled={isVinculando || !parcelaDestinoId}
+              className="bg-[#FF6A13] hover:bg-[#E85B06] text-white"
+            >
+              {isVinculando ? 'Vinculando...' : 'Confirmar Vínculo'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Importação de NFS-e */}
+      <ImportacaoNfseModal
+        open={importNfseOpen}
+        onOpenChange={setImportNfseOpen}
+        onImportComplete={(res) => {
+          void installments.reload()
+          if (res.orfas.length > 0) {
+            setNotasOrfas((prev) => {
+              const combinadas = [...prev, ...res.orfas.map((o) => o.nota)]
+              try {
+                sessionStorage.setItem('aerocad_nfse_orfas', JSON.stringify(combinadas))
+              } catch {
+                /* intentionally ignored */
+              }
+              return combinadas
+            })
+            setActiveTab('orfas')
+          }
+        }}
+      />
     </div>
   )
 }

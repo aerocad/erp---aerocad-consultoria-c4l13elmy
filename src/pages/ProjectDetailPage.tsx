@@ -540,6 +540,29 @@ export default function ProjectDetailPage() {
             </div>
             <p className="mono-value mt-5 text-2xl font-bold">{formatCurrency(financialTotal)}</p>
             <p className="text-xs text-[#8A8A8A]">{formatCurrency(paid)} recebido</p>
+
+            {installments.length > 0 && (
+              <div className="mt-4 pt-3 border-t divide-y text-xs">
+                {installments.slice(0, 3).map((inst) => (
+                  <div key={inst.id} className="py-2 flex items-center justify-between">
+                    <div>
+                      <p className="font-semibold text-[#333] line-clamp-1">{inst.descricao}</p>
+                      {inst.nf_numero ? (
+                        <span className="font-mono text-[10px] text-[#FF6A13] font-bold">
+                          NFS-e nº {inst.nf_numero}
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-[#8A8A8A]">Sem NFS-e</span>
+                      )}
+                    </div>
+                    <span className="mono-value font-bold text-right text-[11px]">
+                      {formatCurrency(inst.valor)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <Button asChild variant="outline" className="mt-4 w-full">
               <Link to={`/financeiro?projeto=${project.id}`}>Ver parcelas</Link>
             </Button>
