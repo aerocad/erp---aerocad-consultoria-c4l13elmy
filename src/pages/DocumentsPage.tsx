@@ -1,5 +1,9 @@
 import { useState } from 'react'
 import {
+  BookOpen,
+  Building2,
+  CheckCircle2,
+  CreditCard,
   FileCheck,
   FileSignature,
   FileSpreadsheet,
@@ -8,10 +12,13 @@ import {
   Filter,
   Info,
   Link2,
+  Mail,
   Paperclip,
   Plus,
   Printer,
   Search,
+  ShieldCheck,
+  UserCheck,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
@@ -32,12 +39,18 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useCrmData } from '@/hooks/use-crm-data'
 import { formatDate } from '@/lib/format'
-import { DOCUMENT_FAMILIES } from '@/lib/documentCatalogo'
+import {
+  DOCUMENT_FAMILIES,
+  INSTITUTIONAL_DATA,
+  PREFIXOS_NOMENCLATURA,
+  REGRAS_GLOBAIS_AEROCAD,
+  TIPOS_PROJETO_CATALOGO,
+} from '@/lib/documentCatalogo'
 import { ANEXO_CATEGORIAS } from '@/services/anexos'
 import type { AnexoRecord, DocumentoRecord } from '@/types/crm'
 
 export default function DocumentsPage() {
-  const [activeTab, setActiveTab] = useState<'gerados' | 'anexos'>('gerados')
+  const [activeTab, setActiveTab] = useState<'gerados' | 'anexos' | 'catalogo'>('gerados')
   const [anexoDialogOpen, setAnexoDialogOpen] = useState(false)
 
   const records = useCrmData<DocumentoRecord>('documentos', {
@@ -126,7 +139,7 @@ export default function DocumentsPage() {
       {/* Abas: Documentos Gerados vs. Anexos de Arquivos */}
       <Tabs
         value={activeTab}
-        onValueChange={(val) => setActiveTab(val as 'gerados' | 'anexos')}
+        onValueChange={(val) => setActiveTab(val as 'gerados' | 'anexos' | 'catalogo')}
         className="mt-6"
       >
         <TabsList className="bg-white border p-1 rounded-xl mb-6">
@@ -137,6 +150,10 @@ export default function DocumentsPage() {
           <TabsTrigger value="anexos" className="flex items-center gap-2">
             <Paperclip className="h-4 w-4 text-[#FF6A13]" />
             Anexos e Arquivos ({anexosData.data.length})
+          </TabsTrigger>
+          <TabsTrigger value="catalogo" className="flex items-center gap-2 text-[#FF6A13]">
+            <BookOpen className="h-4 w-4" />
+            Catálogo & Regras Oficiais
           </TabsTrigger>
         </TabsList>
 
@@ -444,6 +461,192 @@ export default function DocumentsPage() {
                 : 'Nenhum arquivo anexado ainda.'
             }
           />
+        </TabsContent>
+
+        {/* ABA 3: CATÁLOGO DE MODELOS & REGRAS OFICIAIS */}
+        <TabsContent value="catalogo" className="space-y-6">
+          {/* Cartões superiores: Representantes Institucionais e Dados Bancários */}
+          <div className="grid gap-6 md:grid-cols-2">
+            <div className="crm-card p-5 border-l-4 border-l-[#FF6A13]">
+              <div className="flex items-center gap-2 mb-3">
+                <UserCheck className="h-5 w-5 text-[#FF6A13]" />
+                <h3 className="font-bold text-sm text-[#333]">Representantes Padrão da AEROCAD</h3>
+              </div>
+              <p className="text-xs text-[#666] mb-4">
+                Profissionais cadastrados para outorga de procurações, coordenação técnica e
+                responsabilidade técnica no CREA/CAU:
+              </p>
+              <div className="space-y-3 text-xs">
+                <div className="p-2.5 bg-orange-50/50 rounded-lg border border-orange-100">
+                  <p className="font-bold text-[#333]">
+                    {INSTITUTIONAL_DATA.representantes.signataria.nome}
+                  </p>
+                  <p className="text-[#666]">
+                    {INSTITUTIONAL_DATA.representantes.signataria.cargo} · CPF{' '}
+                    <span className="font-mono">
+                      {INSTITUTIONAL_DATA.representantes.signataria.cpf}
+                    </span>
+                  </p>
+                </div>
+                <div className="p-2.5 bg-gray-50 rounded-lg border border-gray-100">
+                  <p className="font-bold text-[#333]">
+                    {INSTITUTIONAL_DATA.representantes.coordenador.nome}
+                  </p>
+                  <p className="text-[#666]">
+                    {INSTITUTIONAL_DATA.representantes.coordenador.cargo} ·{' '}
+                    <span className="font-mono">
+                      {INSTITUTIONAL_DATA.representantes.coordenador.email}
+                    </span>
+                  </p>
+                </div>
+                <div className="p-2.5 bg-gray-50 rounded-lg border border-gray-100">
+                  <p className="font-bold text-[#333]">
+                    {INSTITUTIONAL_DATA.representantes.responsavelTecnico.nome}
+                  </p>
+                  <p className="text-[#666]">
+                    {INSTITUTIONAL_DATA.representantes.responsavelTecnico.cargo} ·{' '}
+                    <span className="font-mono font-bold text-[#FF6A13]">
+                      {INSTITUTIONAL_DATA.representantes.responsavelTecnico.crea}
+                    </span>
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="crm-card p-5 border-l-4 border-l-emerald-600">
+              <div className="flex items-center gap-2 mb-3">
+                <CreditCard className="h-5 w-5 text-emerald-600" />
+                <h3 className="font-bold text-sm text-[#333]">
+                  Dados Bancários Institucionais & Faturamento
+                </h3>
+              </div>
+              <p className="text-xs text-[#666] mb-4">
+                Conta corporativa para recebimento de honorários, faturas e transferências PIX:
+              </p>
+              <div className="space-y-2 text-xs">
+                <div className="grid grid-cols-[120px_1fr] py-1 border-b">
+                  <span className="text-[#777]">Instituição</span>
+                  <span className="font-semibold">{INSTITUTIONAL_DATA.banco}</span>
+                </div>
+                <div className="grid grid-cols-[120px_1fr] py-1 border-b">
+                  <span className="text-[#777]">Agência</span>
+                  <span className="font-mono">{INSTITUTIONAL_DATA.agencia}</span>
+                </div>
+                <div className="grid grid-cols-[120px_1fr] py-1 border-b">
+                  <span className="text-[#777]">Conta Corrente</span>
+                  <span className="font-mono">{INSTITUTIONAL_DATA.contaCorrente}</span>
+                </div>
+                <div className="grid grid-cols-[120px_1fr] py-1 border-b">
+                  <span className="text-[#777]">Favorecida</span>
+                  <span className="font-semibold">{INSTITUTIONAL_DATA.favorecida}</span>
+                </div>
+                <div className="grid grid-cols-[120px_1fr] py-1">
+                  <span className="text-[#777]">CNPJ / PIX</span>
+                  <span className="font-mono font-bold text-emerald-700">
+                    {INSTITUTIONAL_DATA.chavePix}
+                  </span>
+                </div>
+              </div>
+              <div className="mt-4 p-2 bg-emerald-50 text-[11px] text-emerald-800 rounded border border-emerald-200">
+                <strong>Regra de Faturamento:</strong> NFS-e emitida em até 5 dias úteis após evento
+                comprobatório, com prazo padrão de 30 dias (ou 60 dias para clientes como Alcoa).
+              </div>
+            </div>
+          </div>
+
+          {/* Regras Globais da Seção J */}
+          <div className="crm-card p-5">
+            <div className="flex items-center gap-2 mb-3">
+              <ShieldCheck className="h-5 w-5 text-[#FF6A13]" />
+              <h3 className="font-bold text-sm text-[#333]">
+                10 Regras Globais e Boas Práticas (Seção J)
+              </h3>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {REGRAS_GLOBAIS_AEROCAD.map((regra, idx) => (
+                <div
+                  key={idx}
+                  className="flex items-start gap-2.5 p-2.5 rounded-lg bg-gray-50 border text-xs"
+                >
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#FF6A13] text-[10px] font-bold text-white">
+                    {idx + 1}
+                  </span>
+                  <span className="text-[#333] leading-relaxed">{regra}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Tabela de 17 Tipos de Projeto e Normativa */}
+          <div className="crm-card p-5">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Building2 className="h-5 w-5 text-[#FF6A13]" />
+                <h3 className="font-bold text-sm text-[#333]">
+                  17 Tipos de Projeto & Normativas Oficiais (DECEA / ANAC / OACI)
+                </h3>
+              </div>
+              <span className="text-xs font-mono text-[#888]">
+                {TIPOS_PROJETO_CATALOGO.length} categorias
+              </span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-[#F8F9FA] border-b text-[#555]">
+                    <th className="py-2.5 px-3 font-bold w-[130px]">Código</th>
+                    <th className="py-2.5 px-3 font-bold w-[220px]">Tipo de Projeto</th>
+                    <th className="py-2.5 px-3 font-bold w-[200px]">Normativa Principal</th>
+                    <th className="py-2.5 px-3 font-bold">Descrição / Abrangência</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {TIPOS_PROJETO_CATALOGO.map((item) => (
+                    <tr key={item.codigo} className="hover:bg-orange-50/30">
+                      <td className="py-2.5 px-3 font-bold text-[#FF6A13] font-mono">
+                        {item.codigo}
+                      </td>
+                      <td className="py-2.5 px-3 font-semibold text-[#333]">{item.tipo}</td>
+                      <td className="py-2.5 px-3 font-mono text-[11px] text-[#555]">
+                        {item.normativaPrincipal}
+                      </td>
+                      <td className="py-2.5 px-3 text-[#666]">{item.descricao}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Nomenclatura Padrão de Arquivos e 17 Prefixos */}
+          <div className="crm-card p-5">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <FileCheck className="h-5 w-5 text-[#FF6A13]" />
+                <h3 className="font-bold text-sm text-[#333]">
+                  Prefixos de Nomenclatura e Padrão de Arquivo
+                </h3>
+              </div>
+              <span className="text-xs font-mono text-[#888]">
+                {PREFIXOS_NOMENCLATURA.length} prefixos
+              </span>
+            </div>
+            <div className="p-3 bg-gray-900 text-white rounded-lg font-mono text-xs mb-4">
+              <span className="text-orange-400">Padrão de arquivo:</span>{' '}
+              AEROCAD_&lt;PREFIXO&gt;_&lt;NÚMERO&gt;_&lt;ANO&gt;_&lt;CLIENTE&gt;_&lt;ESCOPO&gt;_v&lt;HHMMSS&gt;.docx
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {PREFIXOS_NOMENCLATURA.map((pref) => (
+                <div key={pref.prefixo} className="p-2.5 bg-gray-50 rounded-lg border text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold font-mono text-[#FF6A13]">{pref.prefixo}</span>
+                    <span className="text-[#333] font-semibold truncate">{pref.significado}</span>
+                  </div>
+                  <p className="mt-1 text-[11px] text-[#666] line-clamp-2">{pref.descricao}</p>
+                </div>
+              ))}
+            </div>
+          </div>
         </TabsContent>
       </Tabs>
 

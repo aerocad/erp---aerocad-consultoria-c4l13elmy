@@ -21,7 +21,7 @@ export function buildContractHTML(data: ContractDocumentData): string {
 <style>
   .ct-title { color: #FF6A13; font-size: 15px; font-weight: bold; text-align: center; margin-bottom: 4px; text-transform: uppercase; }
   .ct-subtitle { font-size: 13px; font-weight: bold; text-align: center; color: #333; margin-bottom: 24px; }
-  .ct-clause { font-size: 12px; font-weight: bold; color: #FF6A13; margin-top: 18px; margin-bottom: 4px; text-transform: uppercase; }
+  .ct-clause { font-size: 12px; font-weight: bold; color: #FF6A13; margin-top: 18px; margin-bottom: 4px; text-transform: uppercase; page-break-after: avoid; }
   .ct-p { font-size: 11px; line-height: 1.6; text-align: justify; margin: 6px 0; color: #222; }
 </style>
 
@@ -138,8 +138,9 @@ export function buildInternalServiceOrderHTML(data: {
 <style>
   .os-title { color: #FF6A13; font-size: 16px; font-weight: bold; text-align: center; margin-bottom: 4px; text-transform: uppercase; }
   .os-subtitle { font-size: 13px; font-weight: bold; text-align: center; color: #333; margin-bottom: 24px; }
-  .os-sec { color: #FF6A13; font-size: 12px; font-weight: bold; margin-top: 18px; margin-bottom: 6px; border-bottom: 1.5px solid #FF6A13; padding-bottom: 2px; text-transform: uppercase; }
-  .os-table { width: 100%; border-collapse: collapse; font-size: 11px; margin: 8px 0; }
+  .os-sec { color: #FF6A13; font-size: 12px; font-weight: bold; margin-top: 18px; margin-bottom: 6px; border-bottom: 1.5px solid #FF6A13; padding-bottom: 2px; text-transform: uppercase; page-break-after: avoid; }
+  .os-table { width: 100%; border-collapse: collapse; font-size: 11px; margin: 8px 0; page-break-inside: avoid; }
+  .os-table thead { display: table-header-group; }
   .os-table th, .os-table td { border: 1px solid #D9D9D9; padding: 6px 8px; text-align: left; }
   .os-table th { background: #F8F9FA; font-weight: bold; width: 25%; }
 </style>
@@ -222,7 +223,7 @@ export function buildPowerOfAttorneyHTML(data: {
   return `
 <style>
   .pr-title { color: #FF6A13; font-size: 16px; font-weight: bold; text-align: center; margin-bottom: 24px; text-transform: uppercase; }
-  .pr-sec { color: #FF6A13; font-size: 12px; font-weight: bold; margin-top: 18px; margin-bottom: 4px; text-transform: uppercase; }
+  .pr-sec { color: #FF6A13; font-size: 12px; font-weight: bold; margin-top: 18px; margin-bottom: 4px; text-transform: uppercase; page-break-after: avoid; }
   .pr-p { font-size: 11px; line-height: 1.7; text-align: justify; margin: 6px 0; }
 </style>
 
@@ -271,7 +272,8 @@ export function buildInvoiceHTML(data: {
 <style>
   .ft-title { color: #FF6A13; font-size: 16px; font-weight: bold; text-align: center; margin-bottom: 4px; text-transform: uppercase; }
   .ft-subtitle { font-size: 13px; font-weight: bold; text-align: center; color: #333; margin-bottom: 24px; }
-  .ft-table { width: 100%; border-collapse: collapse; font-size: 11px; margin: 10px 0; }
+  .ft-table { width: 100%; border-collapse: collapse; font-size: 11px; margin: 10px 0; page-break-inside: avoid; }
+  .ft-table thead { display: table-header-group; }
   .ft-table th, .ft-table td { border: 1px solid #D9D9D9; padding: 7px 10px; text-align: left; }
   .ft-table th { background: #F8F9FA; font-weight: bold; }
   .ft-total-row td { background: #FFF4EC; font-weight: bold; font-size: 12px; }
@@ -351,7 +353,8 @@ export function buildReceiptHTML(data: {
   .rb-title { color: #FF6A13; font-size: 16px; font-weight: bold; text-align: center; margin-bottom: 4px; text-transform: uppercase; }
   .rb-subtitle { font-size: 13px; font-weight: bold; text-align: center; color: #333; margin-bottom: 24px; }
   .rb-box { background: #FFF9F5; border: 1.5px solid #FFD3B4; border-radius: 8px; padding: 22px; margin: 20px 0; font-size: 12px; line-height: 1.8; text-align: justify; color: #222; }
-  .rb-table { width: 100%; border-collapse: collapse; font-size: 11px; margin: 12px 0; }
+  .rb-table { width: 100%; border-collapse: collapse; font-size: 11px; margin: 12px 0; page-break-inside: avoid; }
+  .rb-table thead { display: table-header-group; }
   .rb-table th, .rb-table td { border: 1px solid #D9D9D9; padding: 7px 10px; text-align: left; }
   .rb-table th { background: #F8F9FA; font-weight: bold; width: 25%; }
 </style>

@@ -2,9 +2,11 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   ArrowLeft,
   CheckCircle2,
+  Copy,
   FileCheck,
   FileText,
   Link2,
+  Mail,
   Maximize2,
   Minimize2,
   Printer,
@@ -51,6 +53,11 @@ import {
   buildPowerOfAttorneyHTML,
   buildReceiptHTML,
 } from '@/lib/additionalDocumentBuilders'
+import {
+  buildEVAHTML,
+  buildPurchaseOrderHTML,
+  buildProposalEmailText,
+} from '@/lib/newDocumentBuilders'
 import { formatCurrency, formatDate } from '@/lib/format'
 import { createOne, listAll, updateOne } from '@/services/api'
 import type {
@@ -91,6 +98,12 @@ export default function DocumentGeneratorPage() {
   const [pcVariant, setPcVariant] = useState<'multi_modulo' | 'simples' | 'duas_opcoes'>(
     'multi_modulo',
   )
+
+  // Configuração específica para EVA (mencionar ART)
+  const [evaMencionarArt, setEvaMencionarArt] = useState(false)
+
+  // Configuração específica de vencimento da NFS-e (regra padrão 30 dias x 60 dias ex: Alcoa)
+  const [vencimentoDiasNfe, setVencimentoDiasNfe] = useState<'30' | '60'>('30')
 
   const [saved, setSaved] = useState<DocumentoRecord | null>(null)
   const [saving, setSaving] = useState(false)
@@ -279,7 +292,13 @@ export default function DocumentGeneratorPage() {
                   ? 'FT'
                   : template.categoria === 'recibo'
                     ? 'RB'
-                    : 'DOC'
+                    : template.categoria === 'estudo_viabilidade'
+                      ? 'EVA'
+                      : template.categoria === 'pedido_compras'
+                        ? 'PO'
+                        : template.categoria === 'email_apresentacao'
+                          ? 'EML'
+                          : 'DOC'
 
     const stdFileName = formatDocumentFileName({
       prefixo: prefix,
@@ -305,11 +324,21 @@ export default function DocumentGeneratorPage() {
     const isPcDuasOpcoes = template.categoria === 'proposta' && pcVariant === 'duas_opcoes'
     const isPtFiel =
       template.categoria === 'proposta_tecnica' || template.nome.includes('Proposta Técnica')
-    const isContrato = template.categoria === 'contrato' && template.nome.includes('11 Cláusulas')
+    const isContrato = template.categoria === 'contrato'
     const isOS = template.categoria === 'ordem_servico'
     const isProcuracao = template.categoria === 'procuracao'
     const isFatura = template.categoria === 'fatura'
     const isRecibo = template.categoria === 'recibo'
+    const isEVA =
+      template.categoria === 'estudo_viabilidade' ||
+      template.nome.toLowerCase().includes('viabilidade') ||
+      template.nome.includes('EVA')
+    const isPedidoCompras =
+      template.categoria === 'pedido_compras' ||
+      template.nome.toLowerCase().includes('pedido de compras')
+    const isEmailApresentacao =
+      template.categoria === 'email_apresentacao' ||
+      template.nome.toLowerCase().includes('e-mail de apresentação')
 
     const currentYear = new Date().getFullYear()
     const numDoc = project?.numero?.split('-')[1] || project?.numero || '241'
@@ -451,6 +480,158 @@ export default function DocumentGeneratorPage() {
       })
     }
 
+    // 8. Estudo de Viabilidade Aeronáutica (EVA)
+    if (isEVA) {
+      return buildEVAHTML({
+        numeroEstudo: `EVA-${numDoc}/${currentYear}`,
+        empreendimentoNome:
+          project?.nome || values['projeto.nome'] || 'Galpão Logístico — Áreas Candidatas 1 e 2',
+        clienteRazaoSocial:
+          client?.razao_social || values['cliente.razao_social'] || 'LOG CP Empreendimentos',
+        clienteCnpj: client?.cnpj_cpf || values['cliente.cnpj_cpf'] || '12.345.678/0001-90',
+        municipioUf:
+          client?.municipio && client?.uf
+            ? `${client.municipio} / ${client.uf}`
+            : 'Florianópolis / SC',
+        aerodromoReferencia: 'SBFL / FLN — Aeroporto Internacional Hercílio Luz',
+        coordenadasOuPoligono:
+          'Polígono Galpão 1 (2,65 ha) · Polígono Galpão 2 (Hospital - 3,10 ha)',
+        responsavelTecnicoNome:
+          values['responsavel'] || INSTITUTIONAL_DATA.representantes.responsavelTecnico.nome,
+        responsavelTecnicoCrea: INSTITUTIONAL_DATA.representantes.responsavelTecnico.crea,
+        responsavelTecnicoTitulo: 'Engenheiro Civil — Responsável Técnico',
+        mencionarArt: evaMencionarArt,
+        numeroArt: evaMencionarArt ? project?.art || 'ART CREA-SC 2026/099823' : undefined,
+        candidatos: [
+          {
+            nome: 'Galpão Candidato 1',
+            areaHa: '2,65 ha',
+            superficieGovernante: 'radar_rampa (PZPANA)',
+            alturaPretendidaM: 14.8,
+            alturaConstruivelM: 9.44,
+            recomendacao: 'NÃO RECOMENDADO',
+            observacao: 'Penetra rampa radar por 5,36 m com a altura pretendida de 14,80 m',
+          },
+          {
+            nome: 'Galpão Candidato 2 (Hospital)',
+            areaHa: '3,10 ha',
+            superficieGovernante: 'dme_fln_rampa (PZPANA)',
+            alturaPretendidaM: 14.8,
+            alturaConstruivelM: 20.31,
+            recomendacao: 'RECOMENDADO',
+            observacao: '100% da área comporta o gabarito pretendido com folga técnica de 5,51 m',
+          },
+        ],
+        discussaoTecnica:
+          'A análise comparativa entre as áreas candidatas indica que o Galpão 1 possui forte restrição decorrente da rampa de proteção do Radar secundário, tornando-o inviável para a cota pretendida de 14,80 m sem gerar penetração. Em contrapartida, o Galpão 2 (Hospital) possui cota construível de 20,31 m governada pela rampa do DME FLN, comportando integralmente a implantação logística com folga segura para aprovação.',
+        conclusaoRecomendacaoFinal: 'RECOMENDADO',
+        parecerResumo:
+          'RECOMENDA-SE a implantação do empreendimento na Área Candidata 2 (Hospital), plenamente viável técnica e operacionalmente perante os critérios do DECEA/COMAER. A Área 1 NÃO É RECOMENDADA para a altura pretendida.',
+      })
+    }
+
+    // 9. Pedido de Compras
+    if (isPedidoCompras) {
+      return buildPurchaseOrderHTML({
+        numeroPedido: `008/${currentYear}`,
+        fornecedorRazaoSocial: client?.razao_social || 'TWR Consultoria Aeronáutica Ltda.',
+        fornecedorCnpjCpf: client?.cnpj_cpf || '49.421.197/0001-21',
+        fornecedorContatoNome: values['contato.nome'] || 'Eugênio Edison Silva',
+        fornecedorEmail: values['contato.email'] || 'eugenio@twrconsultoria.com.br',
+        fornecedorTelefone: values['contato.telefone'] || '+55 11 98765-4321',
+        fornecedorAtribuicao: 'Assessoria Especializada AGA / PDIR / OPEA',
+        itens: [
+          {
+            item: 1,
+            descricao: 'FLN — PBZPA / PZPANA atualizados para configuração 14/32',
+            quantidade: 1,
+            precoUnitario: 10000,
+            valorTotal: 10000,
+            previsaoEntrega: '30 dias',
+          },
+          {
+            item: 2,
+            descricao: 'FLN — Atualização das pranchas e memorial do PDIR',
+            quantidade: 1,
+            precoUnitario: 10000,
+            valorTotal: 10000,
+            previsaoEntrega: '45 dias',
+          },
+          {
+            item: 3,
+            descricao: 'Central Garden (SE) — Processo OPEA COMAER',
+            quantidade: 1,
+            precoUnitario: 1500,
+            valorTotal: 1500,
+            previsaoEntrega: '15 dias',
+          },
+          {
+            item: 4,
+            descricao: 'MEA — Atualização cadastral SDIA',
+            quantidade: 1,
+            precoUnitario: 1500,
+            valorTotal: 1500,
+            previsaoEntrega: '15 dias',
+          },
+        ],
+        valorTotal: 23000,
+        formaPagamento: 'Transferência Bancária / Chave PIX',
+        chavePixOuBanco: 'Chave PIX CNPJ 49.421.197/0001-21',
+        prazosCondicoes:
+          'Pagamento parcelado efetuado em até 5 dias úteis após o aceite e validação técnica de cada produto pela AEROCAD.',
+      })
+    }
+
+    // 10. E-mail de Apresentação de Proposta (formato texto / visualização estruturada)
+    if (isEmailApresentacao) {
+      const emailObj = buildProposalEmailText({
+        numeroProposta: `${numDoc}/${currentYear}`,
+        objeto:
+          project?.nome ||
+          values['projeto.nome'] ||
+          'Estudo de Viabilidade AGA/ATM e Implementação Regulatória',
+        destinatarioNome: values['contato.nome'] || 'Daniela Bellini',
+        destinatarioTratamento: 'Prezada',
+        contexto:
+          'Em cumprimento às diretrizes alinhadas para a contratação dos serviços técnicos especializados de consultoria aeroportuária, temos a satisfação de submeter à sua apreciação nossa proposta técnica e comercial.',
+        bulletsEscopo: [
+          'Estudo de Viabilidade Aeronáutica (AGA/ATM) com análise de obstáculos e impactos em procedimentos IFR;',
+          'Modelagem e atualização dos Planos de Zona de Proteção (PBZPA e PZPANA);',
+          'Instrução e acompanhamento dos processos regulatórios junto ao DECEA/COMAER e à ANAC;',
+          'Assessoria contínua com até 8 reuniões técnicas e 2 revisões completas dos produtos sem custo adicional.',
+        ],
+        valorGlobal: isPcMultiModulo ? 182700 : 8320,
+        prazoExecucao:
+          '140 dias corridos sob controle AEROCAD + prazo discricionário de órgãos públicos',
+        condicoesPagamento: `Parcelamento vinculado a entregas técnicas comprobatórias (M1 a M10), com NFS-e emitida em 5 dias úteis e vencimento em ${vencimentoDiasNfe} dias`,
+        validadeDias: Number(values['validade_dias']) || 90,
+        propostaCorrelata: values['proposta_tecnica_correlata'] || `240/${currentYear}`,
+        contatoSecundario: 'o Sr. Leonardo Arins e equipe de infraestrutura',
+        disposicaoVideoconferencia: true,
+      })
+
+      return `
+<div style="font-family: Arial, Helvetica, sans-serif; max-width: 680px; margin: 0 auto; color: #222;">
+  <div style="background: #FFF7F0; border: 1.5px solid #FF6A13; border-radius: 8px; padding: 14px 18px; margin-bottom: 20px;">
+    <p style="font-size: 11px; font-weight: bold; color: #FF6A13; margin: 0 0 4px 0; text-transform: uppercase;">
+      📧 MODELO DE E-MAIL DE ENCAMINHAMENTO (SEM ASSINATURA — REMETENTE ASSINA NO CLIENTE DE E-MAIL)
+    </p>
+    <p style="font-size: 13px; font-weight: bold; color: #333; margin: 0;">
+      ${emailObj.subject}
+    </p>
+  </div>
+
+  <div style="background: #FAFAFA; border: 1px solid #E5E5E5; border-radius: 8px; padding: 22px; font-size: 13px; line-height: 1.8; white-space: pre-line; color: #2D2D2D;">
+${emailObj.bodyText}
+  </div>
+
+  <div style="margin-top: 16px; padding: 12px; background: #F1F3F5; border-radius: 6px; font-size: 11px; color: #666;">
+    <strong>Regra da Seção H:</strong> O texto do e-mail encerra com "Cordialmente," e NÃO possui bloco de assinatura com cargo/endereço, pois a assinatura é aplicada pelo cliente de e-mail do remetente. Utilize o botão <strong>"Copiar Texto do E-mail"</strong> no topo para colar diretamente no seu cliente de correio.
+  </div>
+</div>
+`
+    }
+
     // Fallback: Substituição direta de tags
     let body = template.corpo || ''
     placeholders.forEach((key) => {
@@ -556,6 +737,25 @@ export default function DocumentGeneratorPage() {
             )}
           </Button>
 
+          {template?.categoria === 'email_apresentacao' ||
+          template?.nome.toLowerCase().includes('e-mail') ? (
+            <Button
+              onClick={() => {
+                // Remove tags HTML e copia texto limpo
+                const tempDiv = document.createElement('div')
+                tempDiv.innerHTML = renderedContent
+                const plainText = tempDiv.innerText || tempDiv.textContent || ''
+                void navigator.clipboard.writeText(plainText).then(() => {
+                  toast.success('Texto do e-mail copiado para a área de transferência!')
+                })
+              }}
+              className="bg-[#FF6A13] hover:bg-[#E85B06] text-white"
+            >
+              <Copy className="mr-2 h-4 w-4" />
+              Copiar E-mail
+            </Button>
+          ) : null}
+
           <Button
             onClick={() => window.print()}
             disabled={!template}
@@ -599,6 +799,9 @@ export default function DocumentGeneratorPage() {
                     <SelectItem value="procuracao">PR — Procurações</SelectItem>
                     <SelectItem value="fatura">FT — Faturas</SelectItem>
                     <SelectItem value="recibo">RB — Recibos</SelectItem>
+                    <SelectItem value="estudo_viabilidade">EVA — Estudo de Viabilidade</SelectItem>
+                    <SelectItem value="pedido_compras">PO — Pedido de Compras</SelectItem>
+                    <SelectItem value="email_apresentacao">EML — E-mail de Apresentação</SelectItem>
                     <SelectItem value="ata_reuniao">AT — Atas de Reunião</SelectItem>
                     <SelectItem value="requerimento">RQ — Requerimentos</SelectItem>
                     <SelectItem value="nota_tecnica">NT — Notas Técnicas</SelectItem>
@@ -660,6 +863,53 @@ export default function DocumentGeneratorPage() {
                   </Select>
                 </div>
               )}
+
+              {/* Opções específicas para EVA */}
+              {(template?.categoria === 'estudo_viabilidade' ||
+                template?.nome.toLowerCase().includes('viabilidade') ||
+                template?.nome.includes('EVA')) && (
+                <div className="rounded-lg border border-orange-200 bg-orange-50/50 p-3 mt-2">
+                  <Label className="text-xs font-bold text-[#E85B06] block mb-1">
+                    Regra Seção J — Responsável Técnico & ART
+                  </Label>
+                  <label className="flex items-center gap-2 text-xs text-[#333] cursor-pointer mt-1">
+                    <input
+                      type="checkbox"
+                      checked={evaMencionarArt}
+                      onChange={(e) => setEvaMencionarArt(e.target.checked)}
+                      className="rounded border-gray-300 text-[#FF6A13] focus:ring-[#FF6A13]"
+                    />
+                    Mencionar ART no bloco de assinatura (desmarque quando não aplicável)
+                  </label>
+                  <p className="text-[10px] text-[#666] mt-1">
+                    Regra J: Quando não aplicável ao pedido, o bloco do RT omite menção à ART.
+                  </p>
+                </div>
+              )}
+
+              {/* Opções de prazo de vencimento de NFS-e */}
+              <div className="rounded-lg border border-gray-200 bg-gray-50/80 p-3 mt-2">
+                <Label className="text-xs font-bold text-[#444] flex items-center justify-between">
+                  <span>Regra de Vencimento da NFS-e</span>
+                  <span className="text-[10px] font-normal text-muted-foreground">
+                    Seção J.1 item 8
+                  </span>
+                </Label>
+                <Select
+                  value={vencimentoDiasNfe}
+                  onValueChange={(val: '30' | '60') => setVencimentoDiasNfe(val)}
+                >
+                  <SelectTrigger className="mt-1.5 h-8 bg-white text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="30">30 dias corridos (Padrão AEROCAD)</SelectItem>
+                    <SelectItem value="60">
+                      60 dias corridos (Regra do Cliente — ex.: Alcoa)
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </section>
 

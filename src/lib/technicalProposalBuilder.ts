@@ -197,6 +197,7 @@ export function buildTechnicalProposalHTML(data: TechnicalProposalData): string 
   .pt-subtitle { font-size: 13px; font-weight: bold; text-align: center; color: #222; margin-bottom: 24px; line-height: 1.4; }
   .pt-section { color: #FF6A13; font-size: 13px; font-weight: bold; margin-top: 22px; margin-bottom: 8px; border-bottom: 1.5px solid #FF6A13; padding-bottom: 3px; text-transform: uppercase; page-break-after: avoid; }
   .pt-table { width: 100%; border-collapse: collapse; margin-top: 8px; margin-bottom: 12px; font-size: 11px; page-break-inside: avoid; }
+  .pt-table thead { display: table-header-group; }
   .pt-table th, .pt-table td { border: 1px solid #D9D9D9; padding: 6px 8px; vertical-align: top; text-align: left; }
   .pt-table th { background-color: #F8F9FA; font-weight: bold; color: #333; }
   .pt-table thead th { background-color: #FF6A13; color: #FFFFFF; font-weight: bold; border-color: #FF6A13; }

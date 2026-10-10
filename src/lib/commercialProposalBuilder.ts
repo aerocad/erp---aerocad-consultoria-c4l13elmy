@@ -79,6 +79,7 @@ function buildHeaderStyle(): string {
   .doc-subtitle { font-size: 13px; font-weight: bold; text-align: center; color: #222; margin-bottom: 24px; line-height: 1.4; }
   .section-title { color: #FF6A13; font-size: 13px; font-weight: bold; margin-top: 22px; margin-bottom: 8px; border-bottom: 1.5px solid #FF6A13; padding-bottom: 3px; text-transform: uppercase; page-break-after: avoid; }
   .aerocad-table { width: 100%; border-collapse: collapse; margin-top: 8px; margin-bottom: 12px; font-size: 11px; page-break-inside: avoid; }
+  .aerocad-table thead { display: table-header-group; }
   .aerocad-table th, .aerocad-table td { border: 1px solid #D9D9D9; padding: 6px 9px; vertical-align: top; text-align: left; }
   .aerocad-table th { background-color: #F8F9FA; font-weight: bold; color: #333; }
   .aerocad-table thead th { background-color: #FF6A13; color: #FFFFFF; font-weight: bold; border-color: #FF6A13; }

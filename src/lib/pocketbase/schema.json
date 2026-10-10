@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-10T18:07:26.800Z",
+  "generatedAt": "2026-10-10T18:31:05.006Z",
   "collections": [
     {
       "name": "users",
@@ -560,6 +560,8 @@
             "fatura",
             "ata_reuniao",
             "estudo_viabilidade",
+            "pedido_compras",
+            "email_apresentacao",
             "nota_tecnica",
             "memorial",
             "laudo",
