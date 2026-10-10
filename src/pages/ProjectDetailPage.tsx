@@ -39,6 +39,10 @@ import { useAuth } from '@/contexts/AuthContext'
 import { osStatusColors, osStatusLabels, trailLabels, trailPhases } from '@/lib/crm'
 import { formatCurrency, formatDate } from '@/lib/format'
 import { createOne, getOne, listAll, updateOne } from '@/services/api'
+import {
+  calcularResumoFinanceiroProjeto,
+  getStatusFinanceiroBadgeConfig,
+} from '@/services/projetoFinanceiroInferidor'
 import type {
   AnexoRecord,
   AtividadeRecord,
@@ -167,6 +171,8 @@ export default function ProjectDetailPage() {
   const paid = installments
     .filter((i) => i.status === 'paga')
     .reduce((s, i) => s + (i.valor_recebido || i.valor), 0)
+  const resumoFinanceiro = calcularResumoFinanceiroProjeto(project, installments)
+  const badgeFinanceiro = getStatusFinanceiroBadgeConfig(resumoFinanceiro)
   const days = project.prazo
     ? Math.ceil((new Date(project.prazo).getTime() - Date.now()) / 86400000)
     : null
@@ -184,6 +190,12 @@ export default function ProjectDetailPage() {
               <CrmBadge tone={project.trilha === 'registro' ? 'green' : 'orange'}>
                 {trailLabels[project.trilha]}
               </CrmBadge>
+              <span
+                className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${badgeFinanceiro.badgeClass}`}
+                title={badgeFinanceiro.descricao}
+              >
+                {badgeFinanceiro.label}
+              </span>
             </div>
             <h1 className="mt-2 text-2xl font-bold text-[#424242]">{project.nome}</h1>
             <Link
@@ -533,29 +545,115 @@ export default function ProjectDetailPage() {
           <section className="crm-card p-5">
             <div className="flex items-center justify-between">
               <div>
-                <p className="technical-label">FINANCEIRO</p>
+                <p className="technical-label">FINANCEIRO & FATURAMENTO</p>
                 <h2 className="font-bold">Resumo do projeto</h2>
               </div>
               <WalletCards className="h-5 w-5 text-[#FF6A13]" />
             </div>
-            <p className="mono-value mt-5 text-2xl font-bold">{formatCurrency(financialTotal)}</p>
-            <p className="text-xs text-[#8A8A8A]">{formatCurrency(paid)} recebido</p>
+
+            {/* Bloco de Confronto: Contratado × Faturado em Notas × Saldo */}
+            <div className="mt-4 rounded-xl border border-neutral-200 bg-[#FAFAFA] p-3.5 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-[#666]">Status do faturamento</span>
+                <span
+                  className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-bold ${badgeFinanceiro.badgeClass}`}
+                >
+                  {badgeFinanceiro.label}
+                </span>
+              </div>
+
+              {/* Barra de progresso de faturamento */}
+              <div>
+                <div className="flex justify-between text-xs text-[#737373] mb-1">
+                  <span>Progresso do faturamento</span>
+                  <span className="mono-value font-bold text-[#FF6A13]">
+                    {resumoFinanceiro.percentualFaturado}%
+                  </span>
+                </div>
+                <div className="h-2 overflow-hidden rounded bg-[#E5E5E5]">
+                  <div
+                    className={`h-full transition-all duration-300 ${
+                      resumoFinanceiro.statusFinanceiro === 'faturamento_integral'
+                        ? 'bg-emerald-600'
+                        : resumoFinanceiro.totalFaturadoNfse > 0
+                          ? 'bg-[#FF6A13]'
+                          : 'bg-neutral-300'
+                    }`}
+                    style={{ width: `${Math.min(100, resumoFinanceiro.percentualFaturado)}%` }}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 pt-2 border-t text-xs">
+                <div>
+                  <p className="text-[10px] uppercase font-bold text-neutral-500">
+                    Valor Contratado
+                  </p>
+                  <p className="mono-value font-bold text-sm text-[#333]">
+                    {formatCurrency(resumoFinanceiro.valorGlobalContratado)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase font-bold text-neutral-500">
+                    Faturado em NFS-e
+                  </p>
+                  <p className="mono-value font-bold text-sm text-[#FF6A13]">
+                    {formatCurrency(resumoFinanceiro.totalFaturadoNfse)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase font-bold text-neutral-500">
+                    Saldo a Faturar
+                  </p>
+                  <p
+                    className={`mono-value font-bold text-xs ${
+                      resumoFinanceiro.saldoAFaturar > 0 ? 'text-amber-700' : 'text-emerald-700'
+                    }`}
+                  >
+                    {formatCurrency(resumoFinanceiro.saldoAFaturar)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase font-bold text-neutral-500">Total Recebido</p>
+                  <p className="mono-value font-bold text-xs text-emerald-700">
+                    {formatCurrency(paid)}
+                  </p>
+                </div>
+              </div>
+
+              {resumoFinanceiro.numerosNotas.length > 0 && (
+                <div className="pt-2 border-t text-[11px] text-[#666]">
+                  <span className="font-medium">
+                    NFS-e emitidas ({resumoFinanceiro.numerosNotas.length}):
+                  </span>{' '}
+                  <span className="font-mono text-neutral-800">
+                    {resumoFinanceiro.numerosNotas.map((n) => `nº ${n}`).join(', ')}
+                  </span>
+                </div>
+              )}
+            </div>
 
             {installments.length > 0 && (
               <div className="mt-4 pt-3 border-t divide-y text-xs">
-                {installments.slice(0, 3).map((inst) => (
+                <p className="text-[11px] font-bold uppercase tracking-wider text-neutral-500 mb-2">
+                  Parcelas ({installments.length})
+                </p>
+                {installments.slice(0, 4).map((inst) => (
                   <div key={inst.id} className="py-2 flex items-center justify-between">
-                    <div>
-                      <p className="font-semibold text-[#333] line-clamp-1">{inst.descricao}</p>
-                      {inst.nf_numero ? (
-                        <span className="font-mono text-[10px] text-[#FF6A13] font-bold">
-                          NFS-e nº {inst.nf_numero}
-                        </span>
-                      ) : (
-                        <span className="text-[10px] text-[#8A8A8A]">Sem NFS-e</span>
-                      )}
+                    <div className="min-w-0 pr-2">
+                      <p className="font-semibold text-[#333] truncate">{inst.descricao}</p>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        {inst.nf_numero ? (
+                          <span className="font-mono text-[10px] text-[#FF6A13] font-bold bg-orange-50 px-1.5 py-0.2 rounded border border-orange-200">
+                            NFS-e nº {inst.nf_numero}
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-[#8A8A8A]">Sem NFS-e</span>
+                        )}
+                        <span className="text-[10px] text-neutral-500">· {inst.status}</span>
+                      </div>
                     </div>
-                    <span className="mono-value font-bold text-right text-[11px]">
+                    <span className="mono-value font-bold text-right text-[11px] shrink-0">
                       {formatCurrency(inst.valor)}
                     </span>
                   </div>

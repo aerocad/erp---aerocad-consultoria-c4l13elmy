@@ -85,6 +85,21 @@ export interface ProjetoRecord extends RecordModel {
   prazo: string
   percentual_concluido: number
   observacoes: string
+  id_planilha?: string
+  numero_pc_pt?: string
+  tipo_servico?: string
+  escopo_resumido?: string
+  municipio_uf?: string
+  aerodromo?: string
+  data_proposta?: string
+  data_aceite?: string
+  prazo_dias?: number
+  valor_global?: number
+  marco_fase_atual?: string
+  proxima_entrega?: string
+  pendente_orgao?: string
+  status_planilha?: string
+  origem_importacao?: boolean
   expand?: {
     cliente?: ClienteRecord
     responsavel_tecnico?: UserRecord

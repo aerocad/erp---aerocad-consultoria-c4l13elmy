@@ -10,6 +10,7 @@ import {
   Link as LinkIcon,
   Plus,
   Search,
+  Sparkles,
   TriangleAlert,
 } from 'lucide-react'
 import { Link, useSearchParams } from 'react-router-dom'
@@ -20,6 +21,7 @@ import { SectionHeader } from '@/components/common/SectionHeader'
 import { EmptyState, ErrorState, PageLoading } from '@/components/common/States'
 import { ImportacaoNfseModal } from '@/components/financeiro/ImportacaoNfseModal'
 import { ExcluirDuplicadasModal } from '@/components/financeiro/ExcluirDuplicadasModal'
+import { ExtrairProjetosModal } from '@/components/financeiro/ExtrairProjetosModal'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -68,6 +70,7 @@ export function FinancePage() {
   const [activeTab, setActiveTab] = useState<'parcelas' | 'orfas'>('parcelas')
   const [importNfseOpen, setImportNfseOpen] = useState(false)
   const [duplicadasModalOpen, setDuplicadasModalOpen] = useState(false)
+  const [extrairProjetosModalOpen, setExtrairProjetosModalOpen] = useState(false)
   const [payment, setPayment] = useState<ParcelaRecord | null>(null)
   const [newOpen, setNewOpen] = useState(false)
   const [payDate, setPayDate] = useState(new Date().toISOString().slice(0, 10))
@@ -413,23 +416,34 @@ export function FinancePage() {
               </div>
             </div>
             {canWrite && notasOrfas.length > 0 && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setDuplicadasModalOpen(true)}
-                className={`shrink-0 border-orange-300 text-[#D65100] hover:bg-[#FFF6EC] ${
-                  totalDuplicatasOrfas > 0 ? 'bg-orange-50 font-semibold' : ''
-                }`}
-                title="Detectar e excluir notas duplicadas (mesmo número e prestador)"
-              >
-                <CopyX className="mr-1.5 h-4 w-4 text-[#FF6A13]" />
-                Excluir duplicadas
-                {totalDuplicatasOrfas > 0 && (
-                  <span className="ml-1.5 rounded-full bg-rose-100 text-rose-800 text-[10px] px-1.5 py-0.2 font-bold">
-                    {totalDuplicatasOrfas}
-                  </span>
-                )}
-              </Button>
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  size="sm"
+                  onClick={() => setExtrairProjetosModalOpen(true)}
+                  className="bg-[#FF6A13] hover:bg-[#E85B06] text-white shadow-sm"
+                  title="Analisar notas órfãs e extrair/sugerir projetos com numeração AAAA-NNN"
+                >
+                  <Sparkles className="mr-1.5 h-4 w-4" />
+                  Extrair projetos das notas
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setDuplicadasModalOpen(true)}
+                  className={`border-orange-300 text-[#D65100] hover:bg-[#FFF6EC] ${
+                    totalDuplicatasOrfas > 0 ? 'bg-orange-50 font-semibold' : ''
+                  }`}
+                  title="Detectar e excluir notas duplicadas (mesmo número e prestador)"
+                >
+                  <CopyX className="mr-1.5 h-4 w-4 text-[#FF6A13]" />
+                  Excluir duplicadas
+                  {totalDuplicatasOrfas > 0 && (
+                    <span className="ml-1.5 rounded-full bg-rose-100 text-rose-800 text-[10px] px-1.5 py-0.2 font-bold">
+                      {totalDuplicatasOrfas}
+                    </span>
+                  )}
+                </Button>
+              </div>
             )}
           </div>
 
@@ -1044,6 +1058,33 @@ export function FinancePage() {
         onOpenChange={setDuplicadasModalOpen}
         notasOrfas={notasOrfas}
         onExcluirDuplicadas={handleExcluirDuplicadas}
+      />
+
+      {/* Modal de Extração de Projetos a partir das Notas Órfãs */}
+      <ExtrairProjetosModal
+        open={extrairProjetosModalOpen}
+        onOpenChange={setExtrairProjetosModalOpen}
+        notasOrfas={notasOrfas}
+        clientesExistentes={clients.data}
+        projetosExistentes={projects.data}
+        onConcluido={(resultado) => {
+          // Remove as notas processadas da lista de órfãs
+          if (resultado.idsNotasProcessadas.length > 0) {
+            const processadasSet = new Set(resultado.idsNotasProcessadas)
+            setNotasOrfas((prev) => {
+              const restantes = prev.filter((n) => !processadasSet.has(n.idTemp))
+              try {
+                sessionStorage.setItem('aerocad_nfse_orfas', JSON.stringify(restantes))
+              } catch {
+                /* intentionally ignored */
+              }
+              return restantes
+            })
+          }
+          void projects.reload()
+          void clients.reload()
+          void installments.reload()
+        }}
       />
 
       {/* Modal de Importação de NFS-e */}

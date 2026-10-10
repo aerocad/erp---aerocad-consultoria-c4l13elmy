@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-10T23:16:24.908Z",
+  "generatedAt": "2026-10-10T23:29:02.883Z",
   "collections": [
     {
       "name": "users",
@@ -854,8 +854,8 @@
       "apiRules": {
         "list": "@request.auth.id != '' && (@request.auth.role = 'admin' || @request.auth.role = 'comercial' || @request.auth.role = 'tecnico' || @request.auth.role = 'financeiro' || (@request.auth.role = 'terceiro' && @collection.ordens_servico.projeto.id ?= id && @collection.ordens_servico.prestador_usuario ?= @request.auth.id))",
         "view": "@request.auth.id != '' && (@request.auth.role = 'admin' || @request.auth.role = 'comercial' || @request.auth.role = 'tecnico' || @request.auth.role = 'financeiro' || (@request.auth.role = 'terceiro' && @collection.ordens_servico.projeto.id ?= id && @collection.ordens_servico.prestador_usuario ?= @request.auth.id))",
-        "create": "@request.auth.role = 'admin' || @request.auth.role = 'tecnico' || @request.auth.role = 'comercial'",
-        "update": "@request.auth.role = 'admin' || @request.auth.role = 'tecnico' || @request.auth.role = 'comercial'",
+        "create": "@request.auth.role = 'admin' || @request.auth.role = 'tecnico' || @request.auth.role = 'comercial' || @request.auth.role = 'financeiro'",
+        "update": "@request.auth.role = 'admin' || @request.auth.role = 'tecnico' || @request.auth.role = 'comercial' || @request.auth.role = 'financeiro'",
         "delete": "@request.auth.role = 'admin'"
       },
       "fields": [

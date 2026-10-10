@@ -52,6 +52,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useCrmData } from '@/hooks/use-crm-data'
 import { stageColors, stageLabels, trailLabels, trailPhases } from '@/lib/crm'
 import { formatCurrency, formatDate } from '@/lib/format'
+import { calcularResumoFinanceiroTodosProjetos } from '@/services/projetoFinanceiroInferidor'
 import type {
   ClienteRecord,
   ContratoRecord,
@@ -660,6 +661,29 @@ export default function ReportsPage() {
 
     const totalGeral = faturado + aReceber + vencido
 
+    // Inferência de projetos: faturados 100%, pagamento parcial e sem NFS-e
+    const resumosProjetos = calcularResumoFinanceiroTodosProjetos(
+      projetosData.data,
+      parcelasData.data,
+    )
+    let projetosFaturamentoIntegral = 0
+    let projetosPagamentoParcial = 0
+    let projetosSemNfse = 0
+    let totalFaturadoNfseProjetos = 0
+    let totalSaldoAFaturarProjetos = 0
+
+    resumosProjetos.forEach((res) => {
+      totalFaturadoNfseProjetos += res.totalFaturadoNfse
+      totalSaldoAFaturarProjetos += res.saldoAFaturar
+      if (res.statusFinanceiro === 'faturamento_integral') {
+        projetosFaturamentoIntegral++
+      } else if (res.statusFinanceiro === 'pagamento_parcial') {
+        projetosPagamentoParcial++
+      } else {
+        projetosSemNfse++
+      }
+    })
+
     // Receita por cliente com concentração
     const receitaClienteMap = new Map<
       string,
@@ -715,8 +739,13 @@ export default function ReportsPage() {
       rankingClientes,
       top3,
       concentracaoTop3,
+      projetosFaturamentoIntegral,
+      projetosPagamentoParcial,
+      projetosSemNfse,
+      totalFaturadoNfseProjetos,
+      totalSaldoAFaturarProjetos,
     }
-  }, [parcelasData.data, selectedYear, selectedPeriod])
+  }, [parcelasData.data, projetosData.data, selectedYear, selectedPeriod])
 
   // ==========================================
   // 5. PÓS-VENDA & GESTÃO CONTÍNUA
@@ -1559,6 +1588,83 @@ export default function ReportsPage() {
                 {financeiro.concentracaoTop3.toFixed(1)}%
               </p>
               <p className="mt-1 text-xs text-[#8A8A8A]">Da receita total da carteira</p>
+            </div>
+          </div>
+
+          {/* Painel de Faturamento de Projetos por NFS-e (Inferência) */}
+          <div className="crm-card p-5 bg-gradient-to-br from-white to-[#FFF9F5] border-[#FFD2B3]">
+            <div className="mb-4 flex flex-wrap items-center justify-between border-b border-[#FFD2B3]/60 pb-3 gap-2">
+              <div>
+                <p className="technical-label">STATUS DE FATURAMENTO DOS PROJETOS (NFS-E)</p>
+                <h3 className="text-base font-bold text-[#4B4B4B]">
+                  Confronto de Projetos Contratados × Faturados em Notas
+                </h3>
+              </div>
+              <Link to="/projetos" className="text-xs font-bold text-[#FF6A13] hover:underline">
+                Ver todos os projetos →
+              </Link>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-1">
+              <div className="rounded-lg bg-white p-3 border border-emerald-200">
+                <span className="text-[10px] text-emerald-800 font-bold uppercase block">
+                  100% Faturados (Integral)
+                </span>
+                <span className="mono-value font-black text-2xl text-emerald-700">
+                  {financeiro.projetosFaturamentoIntegral}
+                </span>
+                <span className="text-[11px] text-neutral-500 block mt-0.5">
+                  Projetos quitados em notas
+                </span>
+              </div>
+
+              <div className="rounded-lg bg-white p-3 border border-orange-200">
+                <span className="text-[10px] text-[#D65100] font-bold uppercase block">
+                  Pagamento Parcial
+                </span>
+                <span className="mono-value font-black text-2xl text-[#FF6A13]">
+                  {financeiro.projetosPagamentoParcial}
+                </span>
+                <span className="text-[11px] text-neutral-500 block mt-0.5">
+                  Com faturamento em andamento
+                </span>
+              </div>
+
+              <div className="rounded-lg bg-white p-3 border border-neutral-200">
+                <span className="text-[10px] text-neutral-600 font-bold uppercase block">
+                  Sem NFS-e Vinculada
+                </span>
+                <span className="mono-value font-black text-2xl text-neutral-700">
+                  {financeiro.projetosSemNfse}
+                </span>
+                <span className="text-[11px] text-neutral-500 block mt-0.5">
+                  Aguardando emissão
+                </span>
+              </div>
+
+              <div className="rounded-lg bg-white p-3 border border-neutral-200">
+                <span className="text-[10px] text-neutral-600 font-bold uppercase block">
+                  Total Faturado em NFS-e
+                </span>
+                <span className="mono-value font-bold text-lg text-emerald-700">
+                  {formatCurrency(financeiro.totalFaturadoNfseProjetos)}
+                </span>
+                <span className="text-[11px] text-neutral-500 block mt-0.5">
+                  Soma nominal das notas
+                </span>
+              </div>
+
+              <div className="rounded-lg bg-white p-3 border border-neutral-200">
+                <span className="text-[10px] text-neutral-600 font-bold uppercase block">
+                  Saldo a Faturar
+                </span>
+                <span className="mono-value font-bold text-lg text-[#FF6A13]">
+                  {formatCurrency(financeiro.totalSaldoAFaturarProjetos)}
+                </span>
+                <span className="text-[11px] text-neutral-500 block mt-0.5">
+                  Contratado restante
+                </span>
+              </div>
             </div>
           </div>
 
