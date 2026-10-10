@@ -45,7 +45,14 @@ import {
   PREFIXOS_NOMENCLATURA,
   REGRAS_GLOBAIS_AEROCAD,
   TIPOS_PROJETO_CATALOGO,
+  PALETA_AEROCAD_2026,
 } from '@/lib/documentCatalogo'
+import {
+  SERVICOS_SKILL_AEROCAD,
+  CLAUSULAS_PADRAO_AEROCAD,
+  REGRAS_PDIR_AEROCAD,
+  TEXTO_APRESENTACAO_AEROCAD,
+} from '@/lib/aerocadKnowledge'
 import { ANEXO_CATEGORIAS } from '@/services/anexos'
 import type { AnexoRecord, DocumentoRecord } from '@/types/crm'
 
@@ -554,12 +561,87 @@ export default function DocumentsPage() {
             </div>
           </div>
 
+          {/* Identidade Visual & Paleta AEROCAD 2026 */}
+          <div className="crm-card p-5">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="h-5 w-5 text-[#FF6A13]" />
+                <h3 className="font-bold text-sm text-[#333]">
+                  Identidade Visual & Paleta Oficial AEROCAD 2026
+                </h3>
+              </div>
+              <span className="text-xs font-mono text-[#888]">Manual de Marca 2026 · DPI 1200</span>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-4 lg:grid-cols-8 text-center text-xs">
+              <div
+                className="p-3 rounded-lg border"
+                style={{ backgroundColor: PALETA_AEROCAD_2026.laranja, color: '#FFFFFF' }}
+              >
+                <p className="font-bold">Laranja</p>
+                <p className="font-mono text-[11px] mt-1">#FF6A13</p>
+              </div>
+              <div
+                className="p-3 rounded-lg border text-white"
+                style={{ backgroundColor: PALETA_AEROCAD_2026.preto }}
+              >
+                <p className="font-bold">Preto</p>
+                <p className="font-mono text-[11px] mt-1">#0B0B0C</p>
+              </div>
+              <div
+                className="p-3 rounded-lg border text-white"
+                style={{ backgroundColor: PALETA_AEROCAD_2026.cinzaTexto }}
+              >
+                <p className="font-bold">Cinza Texto</p>
+                <p className="font-mono text-[11px] mt-1">#595959</p>
+              </div>
+              <div
+                className="p-3 rounded-lg border text-[#333]"
+                style={{ backgroundColor: PALETA_AEROCAD_2026.borda }}
+              >
+                <p className="font-bold">Borda</p>
+                <p className="font-mono text-[11px] mt-1">#BFBFBF</p>
+              </div>
+              <div
+                className="p-3 rounded-lg border text-[#333]"
+                style={{ backgroundColor: PALETA_AEROCAD_2026.fundoLabel }}
+              >
+                <p className="font-bold">Fundo Label</p>
+                <p className="font-mono text-[11px] mt-1">#F2F2F2</p>
+              </div>
+              <div
+                className="p-3 rounded-lg border text-[#333]"
+                style={{ backgroundColor: PALETA_AEROCAD_2026.linhaAlt1 }}
+              >
+                <p className="font-bold">Linha Alt 1</p>
+                <p className="font-mono text-[11px] mt-1">#FFEDD9</p>
+              </div>
+              <div
+                className="p-3 rounded-lg border text-[#333]"
+                style={{ backgroundColor: PALETA_AEROCAD_2026.linhaAlt2 }}
+              >
+                <p className="font-bold">Linha Alt 2</p>
+                <p className="font-mono text-[11px] mt-1">#FFF6EC</p>
+              </div>
+              <div
+                className="p-3 rounded-lg border text-[#333]"
+                style={{ backgroundColor: PALETA_AEROCAD_2026.brancoOff }}
+              >
+                <p className="font-bold">Branco Off</p>
+                <p className="font-mono text-[11px] mt-1">#F4F1EC</p>
+              </div>
+            </div>
+            <div className="mt-3 p-3 bg-gray-50 border rounded-lg text-xs text-[#555] leading-relaxed">
+              <strong>Texto Oficial de Apresentação AEROCAD (Propostas):</strong> "
+              {TEXTO_APRESENTACAO_AEROCAD}"
+            </div>
+          </div>
+
           {/* Regras Globais da Seção J */}
           <div className="crm-card p-5">
             <div className="flex items-center gap-2 mb-3">
               <ShieldCheck className="h-5 w-5 text-[#FF6A13]" />
               <h3 className="font-bold text-sm text-[#333]">
-                10 Regras Globais e Boas Práticas (Seção J)
+                10 Regras Globais e Boas Práticas (Seção J do Catálogo)
               </h3>
             </div>
             <div className="grid gap-2 sm:grid-cols-2">
@@ -574,6 +656,51 @@ export default function DocumentsPage() {
                   <span className="text-[#333] leading-relaxed">{regra}</span>
                 </div>
               ))}
+            </div>
+          </div>
+
+          {/* Catálogo de Serviços do SKILL aerocad-projetos */}
+          <div className="crm-card p-5">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Building2 className="h-5 w-5 text-[#FF6A13]" />
+                <h3 className="font-bold text-sm text-[#333]">
+                  Catálogo de Serviços Técnicos (SKILL aerocad-projetos)
+                </h3>
+              </div>
+              <span className="text-xs font-mono text-[#888]">
+                {SERVICOS_SKILL_AEROCAD.length} serviços padronizados
+              </span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-[#F8F9FA] border-b text-[#555]">
+                    <th className="py-2.5 px-3 font-bold w-[110px]">Código</th>
+                    <th className="py-2.5 px-3 font-bold w-[220px]">Serviço</th>
+                    <th className="py-2.5 px-3 font-bold w-[90px]">Prazo</th>
+                    <th className="py-2.5 px-3 font-bold w-[140px]">Faixa R$</th>
+                    <th className="py-2.5 px-3 font-bold w-[110px]">Norma</th>
+                    <th className="py-2.5 px-3 font-bold">Abrangência e Escopo</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {SERVICOS_SKILL_AEROCAD.map((item) => (
+                    <tr key={item.codigo} className="hover:bg-orange-50/30">
+                      <td className="py-2 px-3 font-bold text-[#FF6A13] font-mono">
+                        {item.codigo}
+                      </td>
+                      <td className="py-2 px-3 font-semibold text-[#333]">{item.servico}</td>
+                      <td className="py-2 px-3 font-mono text-[11px] text-[#666]">{item.prazo}</td>
+                      <td className="py-2 px-3 font-semibold text-emerald-800">
+                        {item.faixaPreco}
+                      </td>
+                      <td className="py-2 px-3 font-mono text-[11px] text-[#555]">{item.norma}</td>
+                      <td className="py-2 px-3 text-[#666]">{item.descricao}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
 
@@ -624,7 +751,7 @@ export default function DocumentsPage() {
               <div className="flex items-center gap-2">
                 <FileCheck className="h-5 w-5 text-[#FF6A13]" />
                 <h3 className="font-bold text-sm text-[#333]">
-                  Prefixos de Nomenclatura e Padrão de Arquivo
+                  Prefixos de Nomenclatura e Padrão de Arquivo 2026
                 </h3>
               </div>
               <span className="text-xs font-mono text-[#888]">
@@ -643,6 +770,68 @@ export default function DocumentsPage() {
                     <span className="text-[#333] font-semibold truncate">{pref.significado}</span>
                   </div>
                   <p className="mt-1 text-[11px] text-[#666] line-clamp-2">{pref.descricao}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Seção PDIR: Nomenclatura e Regras Específicas */}
+          <div className="crm-card p-5 border-l-4 border-l-sky-600">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Building2 className="h-5 w-5 text-sky-600" />
+                <h3 className="font-bold text-sm text-[#333]">
+                  SKILL aerocad-pdir — Nomenclatura e Regras Oficiais PDIR
+                </h3>
+              </div>
+              <span className="text-xs font-mono text-sky-700 font-bold">
+                RBAC 153 · PGI · A0 DXF/DWG
+              </span>
+            </div>
+            <div className="grid gap-3 md:grid-cols-3 text-xs mb-4">
+              <div className="p-2.5 bg-sky-50 rounded-lg border border-sky-100 font-mono">
+                <span className="text-sky-800 font-bold block mb-1">Relatório PDIR:</span>
+                <code>{REGRAS_PDIR_AEROCAD.nomenclaturaRelatorio}</code>
+              </div>
+              <div className="p-2.5 bg-sky-50 rounded-lg border border-sky-100 font-mono">
+                <span className="text-sky-800 font-bold block mb-1">
+                  Planta Caracterização Atual:
+                </span>
+                <code>{REGRAS_PDIR_AEROCAD.nomenclaturaPlantaAtual}</code>
+              </div>
+              <div className="p-2.5 bg-sky-50 rounded-lg border border-sky-100 font-mono">
+                <span className="text-sky-800 font-bold block mb-1">Planta Horizonte Futuro:</span>
+                <code>{REGRAS_PDIR_AEROCAD.nomenclaturaPlantaFutura}</code>
+              </div>
+            </div>
+            <div className="space-y-1.5 text-xs text-[#444]">
+              {REGRAS_PDIR_AEROCAD.regrasFontes.map((rf, idx) => (
+                <div key={idx} className="flex items-center gap-2">
+                  <span className="h-1.5 w-1.5 rounded-full bg-sky-500" />
+                  <span>{rf}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Cláusulas Gerais Contratuais */}
+          <div className="crm-card p-5">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="h-5 w-5 text-[#FF6A13]" />
+                <h3 className="font-bold text-sm text-[#333]">
+                  Cláusulas Gerais Padrão dos Contratos e Ordens de Serviço AEROCAD
+                </h3>
+              </div>
+              <span className="text-xs font-mono text-[#888]">
+                {CLAUSULAS_PADRAO_AEROCAD.length} cláusulas
+              </span>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {CLAUSULAS_PADRAO_AEROCAD.map((cl, idx) => (
+                <div key={idx} className="p-3 bg-gray-50 border rounded-lg text-xs">
+                  <p className="font-bold text-[#FF6A13] mb-1">{cl.titulo}</p>
+                  <p className="text-[#555] leading-relaxed">{cl.texto}</p>
                 </div>
               ))}
             </div>

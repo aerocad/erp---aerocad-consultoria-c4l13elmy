@@ -164,6 +164,17 @@ export const DOCUMENT_FAMILIES: Record<string, DocumentFamily> = {
   },
 }
 
+export const PALETA_AEROCAD_2026 = {
+  laranja: '#FF6A13', // Safety Orange (marca principal)
+  cinzaTexto: '#595959',
+  fundoLabel: '#F2F2F2',
+  borda: '#BFBFBF',
+  linhaAlt1: '#FFEDD9',
+  linhaAlt2: '#FFF6EC',
+  preto: '#0B0B0C',
+  brancoOff: '#F4F1EC', // Manual de Marca 2026
+}
+
 export const INSTITUTIONAL_DATA = {
   razaoSocial: 'AEROCAD Terraplanagem e Construção Ltda.',
   nomeFantasia: 'AEROCAD® CONSULTORIA & AEROPORTOS',
@@ -285,10 +296,10 @@ export const TIPOS_PROJETO_CATALOGO: TipoProjetoNormativa[] = [
   },
   {
     codigo: 'PDIR',
-    tipo: 'Plano Diretor Aeroportuário',
-    normativaPrincipal: 'RBAC 153 · PGI',
+    tipo: 'Plano Diretor Aeroportuário (PDIR)',
+    normativaPrincipal: 'RBAC 153 · PGI (Plano de Gestão da Infraestrutura)',
     descricao:
-      'Planejamento de longo prazo (horizontes 5, 10 e 20 anos), pranchas A0 e zoneamento.',
+      'Planejamento de longo prazo (horizontes 5, 10 e 20 anos), pranchas A0 paper space e zoneamento operacional.',
   },
   {
     codigo: 'PGI',
@@ -428,6 +439,21 @@ export const PREFIXOS_NOMENCLATURA: PrefixoNomenclatura[] = [
     prefixo: 'CHK',
     significado: 'Checklist de Inspeção',
     descricao: 'Formulário de vistoria em campo com verificação Conforme/Não Conforme.',
+  },
+  {
+    prefixo: 'EVT',
+    significado: 'Estudo de Viabilidade Técnica',
+    descricao: 'Estudo técnico preliminar com 11 seções, análise SWOT e viabilidade.',
+  },
+  {
+    prefixo: 'CL',
+    significado: 'Checklist de Inspeção (Planilha)',
+    descricao: 'Planilha técnica de vistoria com categorias documentais e físicas.',
+  },
+  {
+    prefixo: 'CFF',
+    significado: 'Cronograma Físico-Financeiro (Planilha)',
+    descricao: 'Planejamento de obras e desembolsos com Curva S integrada.',
   },
 ]
 

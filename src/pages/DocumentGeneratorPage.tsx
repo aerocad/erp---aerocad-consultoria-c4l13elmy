@@ -58,6 +58,24 @@ import {
   buildPurchaseOrderHTML,
   buildProposalEmailText,
 } from '@/lib/newDocumentBuilders'
+import {
+  buildPTMultiEtapaHorasHTML,
+  buildPCVinculadaRFSHTML,
+  buildPCMultiBlocosGanttHTML,
+  buildPC2OpcoesContratacaoHTML,
+  buildPCMedicaoItemAItemHTML,
+} from '@/lib/aerocadNewProposalsBuilder'
+import {
+  buildOficioHTML,
+  buildMemorialDescritivoHTML,
+  buildMemorialCalculoHTML,
+  buildLaudoParecerHTML,
+  buildRelatorioGerencialHTML,
+  buildAtaReuniaoHTML,
+  buildPlanoAcaoCorretivaHTML,
+  buildFichaNaoConformidadeHTML,
+  buildRequerimentoAnacDeceaHTML,
+} from '@/lib/aerocadSupportDocumentBuilders'
 import { formatCurrency, formatDate } from '@/lib/format'
 import { createOne, listAll, updateOne } from '@/services/api'
 import type {
@@ -84,6 +102,9 @@ export default function DocumentGeneratorPage() {
   const [parcelas, setParcelas] = useState<ParcelaRecord[]>([])
 
   const [familyFilter, setFamilyFilter] = useState<string>('todas')
+  const [groupFilter, setGroupFilter] = useState<
+    'todos' | 'comercial' | 'tecnico' | 'contratual' | 'regulatorio_gestao' | 'financeiro'
+  >('todos')
   const [templateId, setTemplateId] = useState('')
   const [clientId, setClientId] = useState('')
   const [projectId, setProjectId] = useState(searchParams.get('projeto') || '')
@@ -277,28 +298,45 @@ export default function DocumentGeneratorPage() {
     })
 
     // Gera o nome padronizado do documento pelo catálogo AEROCAD
+    const cat = template.categoria
     const prefix =
-      template.categoria === 'proposta'
+      cat === 'proposta'
         ? 'PC'
-        : template.categoria === 'proposta_tecnica'
+        : cat === 'proposta_tecnica'
           ? 'PT'
-          : template.categoria === 'contrato'
+          : cat === 'contrato'
             ? 'CTR'
-            : template.categoria === 'ordem_servico'
+            : cat === 'ordem_servico'
               ? 'OS'
-              : template.categoria === 'procuracao'
+              : cat === 'procuracao'
                 ? 'PR'
-                : template.categoria === 'fatura'
+                : cat === 'fatura'
                   ? 'FT'
-                  : template.categoria === 'recibo'
+                  : cat === 'recibo'
                     ? 'RB'
-                    : template.categoria === 'estudo_viabilidade'
+                    : cat === 'estudo_viabilidade'
                       ? 'EVA'
-                      : template.categoria === 'pedido_compras'
+                      : cat === 'pedido_compras'
                         ? 'PO'
-                        : template.categoria === 'email_apresentacao'
+                        : cat === 'email_apresentacao'
                           ? 'EML'
-                          : 'DOC'
+                          : cat === 'oficio'
+                            ? 'OF'
+                            : cat === 'memorial'
+                              ? 'MD'
+                              : cat === 'laudo'
+                                ? 'LT'
+                                : cat === 'relatorio_gerencial'
+                                  ? 'RG'
+                                  : cat === 'ata_reuniao'
+                                    ? 'AT'
+                                    : cat === 'pac'
+                                      ? 'PAC'
+                                      : cat === 'fnc'
+                                        ? 'FNC'
+                                        : cat === 'requerimento'
+                                          ? 'RQ'
+                                          : 'DOC'
 
     const stdFileName = formatDocumentFileName({
       prefixo: prefix,
@@ -315,15 +353,369 @@ export default function DocumentGeneratorPage() {
   const renderedContent = useMemo(() => {
     if (!template) return ''
 
+    const tplNome = template.nome.toLowerCase()
+    const currentYear = new Date().getFullYear()
+    const numDoc = project?.numero?.split('-')[1] || project?.numero || '241'
+
+    // A.1 PT Multi-Etapa por Horas (Alcoa Juruti)
+    if (
+      tplNome.includes('multi-etapa por horas') ||
+      tplNome.includes('alcoa juruti') ||
+      (template.categoria === 'proposta_tecnica' && tplNome.includes('horas'))
+    ) {
+      return buildPTMultiEtapaHorasHTML({
+        numero: numDoc,
+        ano: currentYear,
+        contratante:
+          client?.razao_social ||
+          values['cliente.razao_social'] ||
+          'ALCOA ALUMÍNIO S/A — Site Juruti/PA',
+        cnpjCpf: client?.cnpj_cpf || values['cliente.cnpj_cpf'] || '28.036.597/0001-43',
+        aerodromoOuSite:
+          project?.nome ||
+          values['projeto.nome'] ||
+          'Aeródromo de Juruti/PA (Linhas de Transmissão e Torres)',
+        objetoResumo:
+          'Estudo Técnico de Interferências de LTs e Torres sobre a Segurança Operacional',
+        taxaTecnicaHora: 217.8,
+        prazoDias: 60,
+      })
+    }
+
+    // A.2 PC Vinculada à PT + RFS (Alcoa Juruti)
+    if (
+      tplNome.includes('vinculada à pt') ||
+      tplNome.includes('rfs') ||
+      tplNome.includes('pc 231')
+    ) {
+      return buildPCVinculadaRFSHTML({
+        numero: numDoc,
+        ano: currentYear,
+        contratante:
+          client?.razao_social ||
+          values['cliente.razao_social'] ||
+          'ALCOA ALUMÍNIO S/A — Site Juruti/PA',
+        cnpjCpf: client?.cnpj_cpf || values['cliente.cnpj_cpf'] || '28.036.597/0001-43',
+        referenciaPt: `230/${currentYear}`,
+        referenciaRfs: 'JURUTI136/2026',
+        valorGlobal: 87300,
+        prazoVencimentoNfeDias: vencimentoDiasNfe === '60' ? 60 : 30,
+      })
+    }
+
+    // A.3 PC Multi-Blocos com Gantt (OCC Maragogi)
+    if (
+      tplNome.includes('multi-blocos') ||
+      tplNome.includes('maragogi') ||
+      tplNome.includes('occ')
+    ) {
+      return buildPCMultiBlocosGanttHTML({
+        numero: numDoc,
+        ano: currentYear,
+        contratante:
+          client?.razao_social ||
+          values['cliente.razao_social'] ||
+          'OCC CONSTRUÇÕES E PARTICIPAÇÕES',
+        cnpjCpf: client?.cnpj_cpf || values['cliente.cnpj_cpf'] || '33.123.456/0001-90',
+        aerodromoNome:
+          project?.nome || values['projeto.nome'] || 'Aeroporto Costa dos Corais — Maragogi/AL',
+        valorGlobal: 185000,
+      })
+    }
+
+    // A.4 PC com 2 Opções de Contratação (Bruna Rodrigues / Cantá)
+    if (
+      tplNome.includes('2 opções') ||
+      tplNome.includes('duas opções') ||
+      tplNome.includes('bruna rodrigues')
+    ) {
+      return buildPC2OpcoesContratacaoHTML({
+        numero: numDoc,
+        ano: currentYear,
+        clienteNome: client?.razao_social || values['cliente.razao_social'] || 'Bruna Rodrigues',
+        clienteCpfCnpj: client?.cnpj_cpf || values['cliente.cnpj_cpf'] || '026.721.743-93',
+        aerodromoNome:
+          project?.nome ||
+          values['projeto.nome'] ||
+          'Aeródromo Pouso da Águia (SWPD · CIAD RR0111)',
+        aeronaveCritica: 'CESSNA C408 Sky Courier (PMD 8.618 kg)',
+        valorOpcao1: 115500,
+        valorOpcao2: 108000,
+      })
+    }
+
+    // A.5 PC de Medição / Item a Item (Zurich SBVT)
+    if (
+      tplNome.includes('medição') ||
+      tplNome.includes('item a item') ||
+      tplNome.includes('sbvt') ||
+      tplNome.includes('45.092') ||
+      tplNome.includes('45.093')
+    ) {
+      return buildPCMedicaoItemAItemHTML({
+        numero: numDoc,
+        ano: currentYear,
+        contratante:
+          client?.razao_social || values['cliente.razao_social'] || 'ZURICH AIRPORT BRASIL',
+        aerodromoNome:
+          project?.nome || values['projeto.nome'] || 'Aeroporto Internacional de Vitória (SBVT)',
+        objetoResumo:
+          'Alteração Cadastral e Processo OPEA para Operação Regular do AIRBUS A330-300',
+        prazoDias: 45,
+        pcCorrelataOuNota:
+          'Proposta complementar à PC nº 45.092/2026 e aderente aos critérios DECEA/SYSAGA',
+      })
+    }
+
+    // B.1 Ofício (OF)
+    if (
+      template.categoria === 'oficio' ||
+      tplNome.includes('ofício') ||
+      tplNome.includes('oficio')
+    ) {
+      return buildOficioHTML({
+        numero: numDoc,
+        ano: currentYear,
+        destinatarioNome:
+          values['contato.nome'] || 'Superintendente de Infraestrutura Aeroportuária',
+        destinatarioCargo: 'Superintendência de Infraestrutura Aeroportuária (SIA)',
+        destinatarioOrgao: values['orgao'] || 'Agência Nacional de Aviação Civil — ANAC',
+        destinatarioCidadeUf: 'Brasília – DF',
+        assunto:
+          values['escopo'] ||
+          `Anuência técnica e regularidade de superfícies de proteção — ${project?.nome || 'Empreendimento Sítio Aeroportuário'}`,
+        formaTratamento: 'Senhor(a) Superintendente,',
+      })
+    }
+
+    // B.2 Memorial Descritivo (MD)
+    if (template.categoria === 'memorial' || tplNome.includes('memorial descritivo')) {
+      return buildMemorialDescritivoHTML({
+        numero: `${numDoc}/${currentYear}`,
+        revisao: '00',
+        empreendimentoNome:
+          project?.nome || values['projeto.nome'] || 'Aeródromo Privado / Sítio Aeroportuário',
+        clienteRazaoSocial:
+          client?.razao_social ||
+          values['cliente.razao_social'] ||
+          'Empreendimentos Aeroportuários S.A.',
+        localizacaoIcao:
+          client?.municipio && client?.uf
+            ? `${client.municipio} / ${client.uf}`
+            : 'Florianópolis / SC',
+        disciplina: 'Engenharia de Infraestrutura Aeroportuária & Superfícies OLS',
+        responsavelTecnico:
+          values['responsavel'] || INSTITUTIONAL_DATA.representantes.responsavelTecnico.nome,
+        creaNumero: INSTITUTIONAL_DATA.representantes.responsavelTecnico.crea,
+      })
+    }
+
+    // B.3 Memorial de Cálculo (MC)
+    if (tplNome.includes('memorial de cálculo') || tplNome.includes('memorial de calculo')) {
+      return buildMemorialCalculoHTML({
+        numero: `${numDoc}/${currentYear}`,
+        empreendimentoNome:
+          project?.nome || values['projeto.nome'] || 'Pista de Pouso e Pátios de Aeronaves',
+        disciplina: 'Dimensionamento de Pavimento Aeroportuário (PCR) e Cargas',
+        softwareUtilizado: 'FAARFIELD 2.0 / Mathcad / Planilha Homologada AEROCAD',
+        responsavelTecnico:
+          values['responsavel'] || INSTITUTIONAL_DATA.representantes.responsavelTecnico.nome,
+        creaNumero: INSTITUTIONAL_DATA.representantes.responsavelTecnico.crea,
+      })
+    }
+
+    // B.4 Laudo / Parecer Técnico (LT)
+    if (
+      template.categoria === 'laudo' ||
+      tplNome.includes('laudo') ||
+      tplNome.includes('parecer')
+    ) {
+      return buildLaudoParecerHTML({
+        numero: `${numDoc}/${currentYear}`,
+        tipo: tplNome.includes('vistoria')
+          ? 'Vistoria Técnica'
+          : tplNome.includes('parecer')
+            ? 'Parecer Técnico'
+            : 'Laudo Técnico',
+        solicitante:
+          client?.razao_social ||
+          values['cliente.razao_social'] ||
+          'Construtora e Incorporadora S.A.',
+        objetoExaminado:
+          project?.nome ||
+          values['projeto.nome'] ||
+          'Edificação Comercial em Zona de Proteção Aeroportuária',
+        localizacao:
+          client?.endereco || values['cliente.endereco'] || 'Setor Hoteleiro Norte, Brasília-DF',
+        dataVistoria: formatDate(new Date()),
+        responsavelTecnico:
+          values['responsavel'] || INSTITUTIONAL_DATA.representantes.responsavelTecnico.nome,
+        creaNumero: INSTITUTIONAL_DATA.representantes.responsavelTecnico.crea,
+      })
+    }
+
+    // B.5 Relatório Gerencial (RG)
+    if (
+      template.categoria === 'relatorio_gerencial' ||
+      tplNome.includes('relatório gerencial') ||
+      tplNome.includes('relatorio gerencial')
+    ) {
+      const isSnaw =
+        tplNome.includes('cni') || tplNome.includes('snaw') || tplNome.includes('ceamn')
+      return buildRelatorioGerencialHTML({
+        numero: String(new Date().getMonth() + 1).padStart(2, '0'),
+        ano: currentYear,
+        mesReferencia: 'AGOSTO/2026',
+        tipoInstalacao: 'heliponto',
+        nomeEmpreendimento: isSnaw
+          ? 'Edifício Armando Monteiro Neto (CEAMN)'
+          : project?.nome || 'Heliponto Corporativo',
+        designacaoIcao: isSnaw ? 'SNAW' : 'SNAW',
+        contratante:
+          client?.razao_social ||
+          values['cliente.razao_social'] ||
+          'Condomínio do Edifício Armando Monteiro Neto (CEAMN)',
+        cnpjContratante: client?.cnpj_cpf || values['cliente.cnpj_cpf'] || '00.000.000/0001-00',
+        coordenadas: '15°47\'26" S / 047°52\'46" W',
+        elevacao: '1.152 m MSL (3.779 ft)',
+        dimensoesMaterial: '19,50 m × 19,50 m — Concreto (CONC) — 4 t',
+        dadosSnawDefault: isSnaw,
+      })
+    }
+
+    // B.6 Ata de Reunião (AT)
+    if (
+      template.categoria === 'ata_reuniao' ||
+      tplNome.includes('ata de reunião') ||
+      tplNome.includes('ata de reuniao')
+    ) {
+      return buildAtaReuniaoHTML({
+        numero: numDoc,
+        ano: currentYear,
+        projetoNome:
+          project?.nome ||
+          values['projeto.nome'] ||
+          'Reunião Técnica de Kick-off e Alinhamento de Premissas',
+        clienteNome:
+          client?.razao_social || values['cliente.razao_social'] || 'ZURICH AIRPORT BRASIL',
+        dataHora: `${formatDate(new Date())} — 14:30 às 16:00`,
+        local: 'Videoconferência (Microsoft Teams) / Sede AEROCAD Brasília-DF',
+        pauta: [
+          'Apresentação da equipe técnica e canais oficiais de comunicação;',
+          'Alinhamento dos dados de entrada (coordenadas SIRGAS 2000, plantas e histórico cadastral);',
+          'Definição da data de envio do relatório preliminar de viabilidade (v0);',
+          'Cronograma de vistorias e checkpoints quinzenais.',
+        ],
+      })
+    }
+
+    // B.7 Plano de Ação Corretiva (PAC)
+    if (
+      template.categoria === 'pac' ||
+      tplNome.includes('plano de ação corretiva') ||
+      tplNome.includes('plano de acao corretiva')
+    ) {
+      return buildPlanoAcaoCorretivaHTML({
+        numero: numDoc,
+        ano: currentYear,
+        documentoOrigem: 'Auto de Notificação ANAC nº 045/2026 — Vistoria de Fiscalização',
+        aerodromoNome: project?.nome || values['projeto.nome'] || 'Aeródromo Privado Regional',
+        operadorNome:
+          client?.razao_social ||
+          values['cliente.razao_social'] ||
+          'Aerotrat Administração Aeroportuária',
+        causaRaiz5Porques: [
+          'Por que houve penetração no cone de aproximação? Porque árvores nativas ultrapassaram a cota da superfície horizontal interna.',
+          'Por que ultrapassaram a cota sem intervenção prévia? Porque não havia plano periódico de manejo de vegetação implementado no sítio.',
+          'Por que não havia plano de manejo? Porque a gestão não dispunha de levantamento altimétrico georreferenciado das copas.',
+          'Por que o levantamento não havia sido realizado? Porque as inspeções eram exclusivamente visuais e sem apoio topográfico de precisão.',
+          'Causa Raiz: Ausência de protocolo técnico permanente de monitoramento com drones/topografia integrado ao SGSO.',
+        ],
+        acoes: [
+          {
+            acao: 'Poda e rebaixamento imediato das copas críticas identificadas na superfície de aproximação',
+            responsavel: 'Equipe de Manutenção do Aeródromo',
+            prazo: '15 dias corridos',
+            status: 'EM ANDAMENTO',
+          },
+          {
+            acao: 'Instalação de balizamento de obstáculo no topo das árvores limítrofes até a supressão final',
+            responsavel: 'Coordenação de Operações',
+            prazo: '5 dias úteis',
+            status: 'CONCLUÍDO',
+          },
+          {
+            acao: 'Instituição de rotina semestral de monitoramento com RPA/Topografia com emissão de ART',
+            responsavel: 'AEROCAD CONSULTORIA',
+            prazo: '30 dias',
+            status: 'PROGRAMADO',
+          },
+        ],
+      })
+    }
+
+    // B.8 Ficha de Não Conformidade (FNC)
+    if (
+      template.categoria === 'fnc' ||
+      tplNome.includes('ficha de não conformidade') ||
+      tplNome.includes('ficha de nao conformidade')
+    ) {
+      return buildFichaNaoConformidadeHTML({
+        numero: numDoc,
+        ano: currentYear,
+        aerodromoNome:
+          project?.nome || values['projeto.nome'] || 'Aeródromo / Heliponto Corporativo',
+        setorInspecionado: 'Pista de Pouso e Decolagem (PPD) — Cabeceira 14 e Faixa Preparada',
+        requisitoViolado: 'RBAC 154, Tabela 3-1 e Seção 154.205 (Desobstrução da Faixa de Pista)',
+        severidade: 'ALTA',
+        descricaoNaoConformidade:
+          'Identificada presença de mourões de cerca de concreto e vegetação densa com altura de 1,80 m instalados dentro da faixa nivelada da pista, a 28 metros do eixo da PPD, violando o gabarito livre de obstáculos frangíveis.',
+        acaoRecomendada:
+          'Remoção imediata dos mourões rígidos da faixa nivelada e substituição por mourões frangíveis com fusível mecânico de rompimento, em conformidade com o Apêndice C do RBAC 154.',
+        prazoRecomendado: '10 dias corridos',
+      })
+    }
+
+    // B.9 Requerimento ANAC / DECEA (RQ)
+    if (template.categoria === 'requerimento' || tplNome.includes('requerimento')) {
+      return buildRequerimentoAnacDeceaHTML({
+        numero: numDoc,
+        ano: currentYear,
+        orgaoDestinatario: values['orgao'] || 'CINDACTA I — Serviço Regional de Proteção ao Voo',
+        requerenteRazaoSocial:
+          client?.razao_social ||
+          values['cliente.razao_social'] ||
+          'LOG CP Empreendimentos Imobiliários S.A.',
+        requerenteCnpj: client?.cnpj_cpf || values['cliente.cnpj_cpf'] || '12.345.678/0001-90',
+        requerenteEndereco:
+          client?.endereco ||
+          values['cliente.endereco'] ||
+          'Avenida das Nações, nº 1000, Brasília-DF',
+        fundamentacaoNormativa: 'Instrução do Comando da Aeronáutica (ICA 11-408/2021) e RBAC 154',
+        dosFatos:
+          'O Requerente pretende implantar empreendimento logístico com gabarito vertical de 14,80 m, cuja área de projeção situa-se no entorno do aeródromo de referência. Realizados os estudos preliminares, verificou-se que a estrutura pretendida não gera penetração nas superfícies limitadoras de aproximação e decolagem.',
+        doPedido:
+          'Requer a instauração do competente processo de análise de OPEA, culminando com a emissão do Parecer Técnico Favorável para a implantação e operação do empreendimento, conforme memorial e pranchas instrutórias em anexo.',
+        documentosAnexos: [
+          'Procuração Ad Negotia outorgando poderes à AEROCAD;',
+          'Memorial Descritivo e Memorial de Cálculo de superfícies OLS;',
+          'Planta de Localização e Implantação em coordenadas SIRGAS 2000 (DWG e PDF);',
+          'Anotação de Responsabilidade Técnica (ART) registrada no CREA.',
+        ],
+      })
+    }
+
     const isPcMultiModulo =
-      template.nome.includes('Multi-Módulo') ||
+      tplNome.includes('multi-módulo') ||
+      tplNome.includes('multi-modulo') ||
       (template.categoria === 'proposta' && pcVariant === 'multi_modulo')
     const isPcSimples =
-      template.nome.includes('Simples') ||
-      (template.categoria === 'proposta' && pcVariant === 'simples')
+      tplNome.includes('simples') || (template.categoria === 'proposta' && pcVariant === 'simples')
     const isPcDuasOpcoes = template.categoria === 'proposta' && pcVariant === 'duas_opcoes'
     const isPtFiel =
-      template.categoria === 'proposta_tecnica' || template.nome.includes('Proposta Técnica')
+      template.categoria === 'proposta_tecnica' ||
+      tplNome.includes('proposta técnica') ||
+      tplNome.includes('proposta tecnica')
     const isContrato = template.categoria === 'contrato'
     const isOS = template.categoria === 'ordem_servico'
     const isProcuracao = template.categoria === 'procuracao'
@@ -331,19 +723,16 @@ export default function DocumentGeneratorPage() {
     const isRecibo = template.categoria === 'recibo'
     const isEVA =
       template.categoria === 'estudo_viabilidade' ||
-      template.nome.toLowerCase().includes('viabilidade') ||
-      template.nome.includes('EVA')
+      tplNome.includes('viabilidade') ||
+      tplNome.includes('eva')
     const isPedidoCompras =
-      template.categoria === 'pedido_compras' ||
-      template.nome.toLowerCase().includes('pedido de compras')
+      template.categoria === 'pedido_compras' || tplNome.includes('pedido de compras')
     const isEmailApresentacao =
       template.categoria === 'email_apresentacao' ||
-      template.nome.toLowerCase().includes('e-mail de apresentação')
+      tplNome.includes('e-mail de apresentação') ||
+      tplNome.includes('email de apresentacao')
 
-    const currentYear = new Date().getFullYear()
-    const numDoc = project?.numero?.split('-')[1] || project?.numero || '241'
-
-    // 1. Proposta Comercial Fiel
+    // 1. Proposta Comercial Fiel (Multi-Módulo RFQ ou Simples)
     if (template.categoria === 'proposta') {
       return buildCommercialProposalHTML({
         tipoVariante: isPcMultiModulo ? 'multi_modulo' : isPcDuasOpcoes ? 'duas_opcoes' : 'simples',
@@ -641,11 +1030,35 @@ ${emailObj.bodyText}
     return body
   }, [template, pcVariant, project, client, values, placeholders])
 
-  // Filtragem de templates pela família
+  // Mapeamento de grupos de famílias (Comercial / Técnico / Contratual / Regulatório-Gestão / Financeiro)
+  const templateGroups: Record<string, string[]> = {
+    comercial: ['proposta', 'email_apresentacao'],
+    tecnico: ['proposta_tecnica', 'estudo_viabilidade', 'memorial', 'laudo', 'nota_tecnica'],
+    contratual: ['contrato', 'ordem_servico', 'pedido_compras'],
+    regulatorio_gestao: [
+      'oficio',
+      'procuracao',
+      'requerimento',
+      'ata_reuniao',
+      'pac',
+      'fnc',
+      'relatorio_gerencial',
+      'checklist',
+      'cronograma',
+    ],
+    financeiro: ['fatura', 'recibo'],
+  }
+
+  // Filtragem de templates pela família ou macro-família
   const filteredTemplates = useMemo(() => {
-    if (familyFilter === 'todas') return templates
-    return templates.filter((t) => t.categoria === familyFilter)
-  }, [templates, familyFilter])
+    return templates.filter((t) => {
+      const matchFamily = familyFilter === 'todas' || t.categoria === familyFilter
+      const matchGroup =
+        groupFilter === 'todos' ||
+        (templateGroups[groupFilter] && templateGroups[groupFilter].includes(t.categoria))
+      return matchFamily && matchGroup
+    })
+  }, [templates, familyFilter, groupFilter])
 
   async function generate() {
     if (!template) return toast.error('Escolha um modelo')
@@ -785,26 +1198,109 @@ ${emailObj.bodyText}
 
             <div className="space-y-3">
               <div>
-                <Label className="text-xs text-[#666]">Filtrar por Família do Catálogo</Label>
+                <Label className="text-xs text-[#666]">Organização por Família</Label>
+                <div className="grid grid-cols-3 gap-1 mt-1 text-[11px]">
+                  <Button
+                    type="button"
+                    variant={groupFilter === 'todos' ? 'default' : 'outline'}
+                    size="sm"
+                    className={`h-7 px-2 text-[10px] ${groupFilter === 'todos' ? 'bg-[#FF6A13] text-white' : ''}`}
+                    onClick={() => {
+                      setGroupFilter('todos')
+                      setFamilyFilter('todas')
+                    }}
+                  >
+                    Todos
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={groupFilter === 'comercial' ? 'default' : 'outline'}
+                    size="sm"
+                    className={`h-7 px-2 text-[10px] ${groupFilter === 'comercial' ? 'bg-[#FF6A13] text-white' : ''}`}
+                    onClick={() => {
+                      setGroupFilter('comercial')
+                      setFamilyFilter('todas')
+                    }}
+                  >
+                    Comercial
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={groupFilter === 'tecnico' ? 'default' : 'outline'}
+                    size="sm"
+                    className={`h-7 px-2 text-[10px] ${groupFilter === 'tecnico' ? 'bg-[#FF6A13] text-white' : ''}`}
+                    onClick={() => {
+                      setGroupFilter('tecnico')
+                      setFamilyFilter('todas')
+                    }}
+                  >
+                    Técnico
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={groupFilter === 'contratual' ? 'default' : 'outline'}
+                    size="sm"
+                    className={`h-7 px-2 text-[10px] ${groupFilter === 'contratual' ? 'bg-[#FF6A13] text-white' : ''}`}
+                    onClick={() => {
+                      setGroupFilter('contratual')
+                      setFamilyFilter('todas')
+                    }}
+                  >
+                    Contratual
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={groupFilter === 'regulatorio_gestao' ? 'default' : 'outline'}
+                    size="sm"
+                    className={`h-7 px-2 text-[10px] ${groupFilter === 'regulatorio_gestao' ? 'bg-[#FF6A13] text-white' : ''}`}
+                    onClick={() => {
+                      setGroupFilter('regulatorio_gestao')
+                      setFamilyFilter('todas')
+                    }}
+                  >
+                    Regulatório
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={groupFilter === 'financeiro' ? 'default' : 'outline'}
+                    size="sm"
+                    className={`h-7 px-2 text-[10px] ${groupFilter === 'financeiro' ? 'bg-[#FF6A13] text-white' : ''}`}
+                    onClick={() => {
+                      setGroupFilter('financeiro')
+                      setFamilyFilter('todas')
+                    }}
+                  >
+                    Financeiro
+                  </Button>
+                </div>
+              </div>
+
+              <div>
+                <Label className="text-xs text-[#666]">Filtrar por Categoria Específica</Label>
                 <Select value={familyFilter} onValueChange={setFamilyFilter}>
                   <SelectTrigger className="mt-1 h-9">
-                    <SelectValue placeholder="Todas as famílias" />
+                    <SelectValue placeholder="Todas as categorias" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="todas">Todas as famílias de documentos</SelectItem>
+                    <SelectItem value="todas">Todas as categorias</SelectItem>
                     <SelectItem value="proposta">PC — Proposta Comercial</SelectItem>
                     <SelectItem value="proposta_tecnica">PT — Proposta Técnica</SelectItem>
                     <SelectItem value="contrato">CT — Contratos</SelectItem>
                     <SelectItem value="ordem_servico">OS — Ordens de Serviço</SelectItem>
+                    <SelectItem value="oficio">OF — Ofícios</SelectItem>
+                    <SelectItem value="memorial">MD / MC — Memoriais</SelectItem>
+                    <SelectItem value="laudo">LT — Laudos / Pareceres</SelectItem>
+                    <SelectItem value="relatorio_gerencial">RG — Relatório Gerencial</SelectItem>
+                    <SelectItem value="ata_reuniao">AT — Atas de Reunião</SelectItem>
+                    <SelectItem value="pac">PAC — Plano de Ação Corretiva</SelectItem>
+                    <SelectItem value="fnc">FNC — Ficha Não Conformidade</SelectItem>
+                    <SelectItem value="requerimento">RQ — Requerimentos</SelectItem>
                     <SelectItem value="procuracao">PR — Procurações</SelectItem>
                     <SelectItem value="fatura">FT — Faturas</SelectItem>
                     <SelectItem value="recibo">RB — Recibos</SelectItem>
                     <SelectItem value="estudo_viabilidade">EVA — Estudo de Viabilidade</SelectItem>
                     <SelectItem value="pedido_compras">PO — Pedido de Compras</SelectItem>
                     <SelectItem value="email_apresentacao">EML — E-mail de Apresentação</SelectItem>
-                    <SelectItem value="ata_reuniao">AT — Atas de Reunião</SelectItem>
-                    <SelectItem value="requerimento">RQ — Requerimentos</SelectItem>
-                    <SelectItem value="nota_tecnica">NT — Notas Técnicas</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
