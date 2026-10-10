@@ -42,7 +42,7 @@ import { formatCurrency, formatDate } from '@/lib/format'
 import { createOne, updateOne } from '@/services/api'
 import { vincularNotaOrfaAParcela } from '@/services/nfseExecutor'
 import type { NfseDadoExtraido } from '@/services/nfseParser'
-import type { ParcelaRecord } from '@/types/crm'
+import type { ParcelaRecord, ProjetoRecord } from '@/types/crm'
 
 export default FinancePage
 
@@ -55,7 +55,6 @@ export function FinancePage() {
   })
   const projects = useCrmData<ProjetoRecord>('projetos', {
     sort: '-created',
-    fields: 'id,numero,nome,cliente',
   })
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState(params.get('status') || 'todos')
@@ -200,7 +199,7 @@ export function FinancePage() {
   }
 
   if (installments.loading && !installments.data.length) return <PageLoading />
-if (installments.error) return <ErrorState onRetry={installments.reload} />
+  if (installments.error) return <ErrorState onRetry={installments.reload} />
 
   const kpis = [
     {
@@ -232,9 +231,10 @@ if (installments.error) return <ErrorState onRetry={installments.reload} />
                 variant="outline"
                 onClick={() => setImportNfseOpen(true)}
                 className="border-[#FFD2B3] text-[#D65100] hover:bg-[#FFF6EC]"
+                title="Importar NFS-e em lotes .ZIP, múltiplos XMLs ou planilhas"
               >
                 <FileSpreadsheet className="mr-2 h-4 w-4 text-[#FF6A13]" />
-                Importar NFS-e
+                Importar NFS-e (Lotes / ZIP)
               </Button>
             )}
             <Button
@@ -272,8 +272,9 @@ if (installments.error) return <ErrorState onRetry={installments.reload} />
       <div className="mt-5 rounded-xl border border-[#FFD2B3] bg-[#FFF6EC] p-4 text-sm text-[#6A4A34] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <strong>Gatilhos automáticos & NFS-e:</strong> entradas são criadas ao iniciar a trilha e
-          saldos em protocolo/entrega/conclusão. Notas fiscais importadas via XML ou planilhas
-          correlacionam automaticamente com as parcelas e registram faturamento/baixa.
+          saldos em protocolo/entrega/conclusão. Notas fiscais importadas via lotes compactados{' '}
+          <strong>.ZIP</strong>, XMLs avulsos ou planilhas correlacionam automaticamente com as
+          parcelas e registram faturamento/baixa.
         </div>
         {canWrite && (
           <Button
@@ -282,7 +283,7 @@ if (installments.error) return <ErrorState onRetry={installments.reload} />
             className="bg-[#FF6A13] hover:bg-[#E85B06] text-white shrink-0"
           >
             <FileSpreadsheet className="mr-2 h-4 w-4" />
-            Importar NFS-e
+            Importar NFS-e (Lote / ZIP)
           </Button>
         )}
       </div>
