@@ -129,19 +129,28 @@ export default function DocumentGeneratorPage() {
     })
   }, [])
 
-  const template = templates.find((i) => i.id === templateId)
-  const client = clients.find((i) => i.id === clientId)
-  const project = projects.find((i) => i.id === projectId)
-  const process = processes.find((i) => i.id === processId)
-  const opportunity = opportunities.find((i) => i.id === project?.oportunidade)
-  const projectParcelas = parcelas.filter((p) => p.projeto === projectId)
+  const template = useMemo(
+    () => templates.find((i) => i.id === templateId),
+    [templates, templateId],
+  )
+  const client = useMemo(() => clients.find((i) => i.id === clientId), [clients, clientId])
+  const project = useMemo(() => projects.find((i) => i.id === projectId), [projects, projectId])
+  const process = useMemo(() => processes.find((i) => i.id === processId), [processes, processId])
+  const opportunity = useMemo(
+    () => opportunities.find((i) => i.id === project?.oportunidade),
+    [opportunities, project?.oportunidade],
+  )
+  const projectParcelas = useMemo(
+    () => parcelas.filter((p) => p.projeto === projectId),
+    [parcelas, projectId],
+  )
 
   // Atualiza contexto ao mudar o projeto
   useEffect(() => {
     if (projectId) {
       const p = projects.find((i) => i.id === projectId)
       if (p && p.cliente) {
-        setClientId(p.cliente)
+        setClientId((curr) => (curr !== p.cliente ? p.cliente : curr))
       }
     }
   }, [projectId, projects])
@@ -153,17 +162,24 @@ export default function DocumentGeneratorPage() {
         template.categoria === 'cronograma' ||
         template.nome.toLowerCase().includes('gantt') ||
         template.nome.toLowerCase().includes('paisagem')
-      setOrientation(isLandscape ? 'landscape' : 'portrait')
+      setOrientation((curr) =>
+        curr !== (isLandscape ? 'landscape' : 'portrait')
+          ? isLandscape
+            ? 'landscape'
+            : 'portrait'
+          : curr,
+      )
     }
   }, [template])
 
-  // Identifica placeholders
+  // Identifica placeholders de forma memoizada e estável
   const placeholders = useMemo(() => {
+    if (!template?.corpo) return []
     const found = new Set<string>()
-    for (const match of template?.corpo?.matchAll(placeholderRegex) || []) {
+    for (const match of template.corpo.matchAll(placeholderRegex)) {
       found.add(match[1].trim())
     }
-    return Array.from(found)
+    return Array.from(found).sort()
   }, [template?.corpo])
 
   // Preenchimento inteligente com dados institucionais e do CRM
@@ -228,13 +244,23 @@ export default function DocumentGeneratorPage() {
     }
 
     setValues((curr) => {
+      let changed = false
       const next = { ...curr }
       placeholders.forEach((key) => {
-        if (!next[key] || key.includes('.')) {
-          next[key] = defaults[key] || next[key] || ''
+        const fallback = defaults[key] || ''
+        if (!next[key] && fallback) {
+          next[key] = fallback
+          changed = true
+        } else if (key.includes('.')) {
+          // Mantém sincronizado com as propriedades vinculadas do CRM caso difiram
+          const newVal = defaults[key] || next[key] || ''
+          if (next[key] !== newVal) {
+            next[key] = newVal
+            changed = true
+          }
         }
       })
-      return next
+      return changed ? next : curr
     })
 
     // Gera o nome padronizado do documento pelo catálogo AEROCAD
@@ -583,7 +609,7 @@ export default function DocumentGeneratorPage() {
               <div>
                 <Label className="text-xs text-[#666]">Modelo Selecionado</Label>
                 <Select
-                  value={templateId}
+                  value={templateId || undefined}
                   onValueChange={(id) => {
                     setTemplateId(id)
                     setSaved(null)
@@ -594,11 +620,17 @@ export default function DocumentGeneratorPage() {
                     <SelectValue placeholder="Escolha o modelo" />
                   </SelectTrigger>
                   <SelectContent>
-                    {filteredTemplates.map((item) => (
-                      <SelectItem key={item.id} value={item.id}>
-                        {item.nome}
-                      </SelectItem>
-                    ))}
+                    {filteredTemplates.length > 0 ? (
+                      filteredTemplates.map((item) => (
+                        <SelectItem key={item.id} value={item.id}>
+                          {item.nome}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <div className="py-2 px-3 text-xs text-muted-foreground">
+                        Nenhum modelo nesta categoria
+                      </div>
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -642,11 +674,15 @@ export default function DocumentGeneratorPage() {
             <div className="space-y-3">
               <div>
                 <Label className="text-xs text-[#666]">Projeto Referência</Label>
-                <Select value={projectId} onValueChange={setProjectId}>
+                <Select
+                  value={projectId || undefined}
+                  onValueChange={(val) => setProjectId(val === 'none' ? '' : val)}
+                >
                   <SelectTrigger className="mt-1">
                     <SelectValue placeholder="Selecione um projeto" />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="none">Nenhum projeto (usar dados de exemplo)</SelectItem>
                     {projects.map((i) => (
                       <SelectItem key={i.id} value={i.id}>
                         {i.numero} · {i.nome}
@@ -658,11 +694,15 @@ export default function DocumentGeneratorPage() {
 
               <div>
                 <Label className="text-xs text-[#666]">Cliente / Contratante</Label>
-                <Select value={clientId} onValueChange={setClientId}>
+                <Select
+                  value={clientId || undefined}
+                  onValueChange={(val) => setClientId(val === 'none' ? '' : val)}
+                >
                   <SelectTrigger className="mt-1">
                     <SelectValue placeholder="Selecione o cliente" />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="none">Nenhum cliente (usar dados de exemplo)</SelectItem>
                     {clients.map((i) => (
                       <SelectItem key={i.id} value={i.id}>
                         {i.razao_social}
@@ -674,11 +714,15 @@ export default function DocumentGeneratorPage() {
 
               <div>
                 <Label className="text-xs text-[#666]">Processo Regulatório (Opcional)</Label>
-                <Select value={processId} onValueChange={setProcessId}>
+                <Select
+                  value={processId || undefined}
+                  onValueChange={(val) => setProcessId(val === 'none' ? '' : val)}
+                >
                   <SelectTrigger className="mt-1">
                     <SelectValue placeholder="Selecione o processo" />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="none">Nenhum processo vinculado</SelectItem>
                     {processes.map((i) => (
                       <SelectItem key={i.id} value={i.id}>
                         {i.numero_protocolo || i.orgao}
