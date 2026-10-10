@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-10T00:03:26.189Z",
+  "generatedAt": "2026-10-10T18:07:26.800Z",
   "collections": [
     {
       "name": "users",
@@ -1696,6 +1696,129 @@
         "CREATE INDEX idx_atividades_projeto ON atividades (projeto)",
         "CREATE INDEX idx_atividades_processo ON atividades (processo)",
         "CREATE INDEX idx_atividades_created ON atividades (created DESC)"
+      ]
+    },
+    {
+      "name": "anexos",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.role = 'admin' || @request.auth.role = 'comercial' || @request.auth.role = 'tecnico' || @request.auth.role = 'financeiro'",
+        "update": "@request.auth.role = 'admin' || usuario = @request.auth.id",
+        "delete": "@request.auth.role = 'admin' || usuario = @request.auth.id"
+      },
+      "fields": [
+        {
+          "name": "nome",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "descricao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "categoria",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": [
+            "orcamento",
+            "planilha",
+            "edital",
+            "projeto_tecnico",
+            "documento_cliente",
+            "laudo_relatorio",
+            "outro"
+          ]
+        },
+        {
+          "name": "arquivo",
+          "type": "file",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "tamanho_bytes",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "extensao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "cliente",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "clientes"
+        },
+        {
+          "name": "projeto",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "projetos"
+        },
+        {
+          "name": "processo",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "processos"
+        },
+        {
+          "name": "oportunidade",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "oportunidades"
+        },
+        {
+          "name": "proposta",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "propostas"
+        },
+        {
+          "name": "usuario",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_anexos_cliente ON anexos (cliente)",
+        "CREATE INDEX idx_anexos_projeto ON anexos (projeto)",
+        "CREATE INDEX idx_anexos_processo ON anexos (processo)",
+        "CREATE INDEX idx_anexos_oportunidade ON anexos (oportunidade)",
+        "CREATE INDEX idx_anexos_categoria ON anexos (categoria)",
+        "CREATE INDEX idx_anexos_usuario ON anexos (usuario)",
+        "CREATE INDEX idx_anexos_created ON anexos (created DESC)"
       ]
     }
   ]

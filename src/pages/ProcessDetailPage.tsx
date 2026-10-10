@@ -4,7 +4,9 @@ import {
   CheckCircle2,
   Clipboard,
   ExternalLink,
+  FileUp,
   Link2,
+  Paperclip,
   Plus,
   Save,
   TriangleAlert,
@@ -12,8 +14,10 @@ import {
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
+import { AnexosList } from '@/components/common/AnexosList'
 import { CrmBadge } from '@/components/common/CrmBadge'
 import { ErrorState, PageLoading } from '@/components/common/States'
+import { AnexoDialog } from '@/components/forms/AnexoDialog'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -36,7 +40,13 @@ import { useAuth } from '@/contexts/AuthContext'
 import { processStatusLabels } from '@/lib/crm'
 import { formatDate, toInputDate } from '@/lib/format'
 import { createOne, getOne, listAll, updateOne } from '@/services/api'
-import type { AtividadeRecord, ExigenciaRecord, ProcessoRecord, UserRecord } from '@/types/crm'
+import type {
+  AnexoRecord,
+  AtividadeRecord,
+  ExigenciaRecord,
+  ProcessoRecord,
+  UserRecord,
+} from '@/types/crm'
 
 export default function ProcessDetailPage() {
   const { id = '' } = useParams()
@@ -44,11 +54,13 @@ export default function ProcessDetailPage() {
   const { user } = useAuth()
   const [process, setProcess] = useState<ProcessoRecord | null>(null)
   const [requirements, setRequirements] = useState<ExigenciaRecord[]>([])
+  const [anexos, setAnexos] = useState<AnexoRecord[]>([])
   const [activities, setActivities] = useState<AtividadeRecord[]>([])
   const [users, setUsers] = useState<UserRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [failed, setFailed] = useState(false)
   const [newOpen, setNewOpen] = useState(false)
+  const [anexoOpen, setAnexoOpen] = useState(false)
   const [form, setForm] = useState({ descricao: '', prazo: '', responsavel: '', resposta: '' })
   const [links, setLinks] = useState({ link_drive: '', link_emails: '', link_ambiente: '' })
   const canWrite = user?.role === 'admin' || user?.role === 'tecnico'
@@ -64,12 +76,17 @@ export default function ProcessDetailPage() {
         link_emails: record.link_emails || '',
         link_ambiente: record.link_ambiente || record.link_sysaga || '',
       })
-      const [r, a, u] = await Promise.all([
+      const [r, an, a, u] = await Promise.all([
         listAll<ExigenciaRecord>('exigencias', {
           filter: `processo = '${id}'`,
           expand: 'responsavel',
           sort: 'prazo',
         }),
+        listAll<AnexoRecord>('anexos', {
+          filter: `processo = '${id}'`,
+          expand: 'usuario',
+          sort: '-created',
+        }).catch(() => []),
         listAll<AtividadeRecord>('atividades', {
           filter: `processo = '${id}'`,
           expand: 'usuario',
@@ -81,6 +98,7 @@ export default function ProcessDetailPage() {
         }),
       ])
       setRequirements(r)
+      setAnexos(an)
       setActivities(a)
       setUsers(u)
       setFailed(false)
@@ -304,6 +322,35 @@ export default function ProcessDetailPage() {
               </p>
             )}
           </div>
+
+          {/* Seção de Anexos do Processo Regulatório */}
+          <div className="border-t">
+            <div className="flex flex-col justify-between gap-3 p-5 sm:flex-row sm:items-center bg-[#FAFAFA]">
+              <div>
+                <p className="technical-label">PEÇAS E PROTOCOLOS</p>
+                <h3 className="font-bold text-[#333] flex items-center gap-2">
+                  Anexos e Documentos Regulatórios ({anexos.length})
+                </h3>
+              </div>
+              <Button
+                size="sm"
+                onClick={() => setAnexoOpen(true)}
+                className="bg-[#FF6A13] hover:bg-[#E85B06] text-white"
+              >
+                <FileUp className="mr-2 h-4 w-4" />
+                Anexar ao Processo
+              </Button>
+            </div>
+            <div className="p-5">
+              <AnexosList
+                anexos={anexos}
+                compact={true}
+                onReload={() => void load()}
+                onOpenUpload={() => setAnexoOpen(true)}
+                emptyMessage="Nenhum arquivo regulatório, planta ou comprovação anexada a este processo."
+              />
+            </div>
+          </div>
         </section>
         <aside className="space-y-5">
           <section className="crm-card p-5">
@@ -393,6 +440,14 @@ export default function ProcessDetailPage() {
           </form>
         </DialogContent>
       </Dialog>
+      <AnexoDialog
+        open={anexoOpen}
+        onOpenChange={setAnexoOpen}
+        presetProcesso={process.id}
+        presetProjeto={process.projeto}
+        presetCliente={process.expand?.projeto?.cliente}
+        onSuccess={() => void load()}
+      />
     </div>
   )
 }

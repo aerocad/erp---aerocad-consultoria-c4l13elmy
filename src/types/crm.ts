@@ -198,3 +198,35 @@ export interface ContratoRecord extends RecordModel {
   po_cliente: string
   link_documento_assinado: string
 }
+
+export type AnexoCategoria =
+  | 'orcamento'
+  | 'planilha'
+  | 'edital'
+  | 'projeto_tecnico'
+  | 'documento_cliente'
+  | 'laudo_relatorio'
+  | 'outro'
+
+export interface AnexoRecord extends RecordModel {
+  nome: string
+  descricao: string
+  categoria: AnexoCategoria
+  arquivo: string
+  tamanho_bytes: number
+  extensao: string
+  cliente: string
+  projeto: string
+  processo: string
+  oportunidade: string
+  proposta: string
+  usuario: string
+  expand?: {
+    cliente?: ClienteRecord
+    projeto?: ProjetoRecord
+    processo?: ProcessoRecord
+    oportunidade?: OportunidadeRecord
+    proposta?: PropostaRecord
+    usuario?: UserRecord
+  }
+}

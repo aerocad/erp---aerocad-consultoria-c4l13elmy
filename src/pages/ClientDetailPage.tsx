@@ -5,8 +5,10 @@ import {
   Copy,
   ExternalLink,
   FileText,
+  FileUp,
   Mail,
   MapPin,
+  Paperclip,
   Pencil,
   Phone,
   Plus,
@@ -16,8 +18,10 @@ import {
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
+import { AnexosList } from '@/components/common/AnexosList'
 import { CrmBadge } from '@/components/common/CrmBadge'
 import { ErrorState, PageLoading } from '@/components/common/States'
+import { AnexoDialog } from '@/components/forms/AnexoDialog'
 import { ClienteDialog } from '@/components/forms/ClienteDialog'
 import { OportunidadeDialog } from '@/components/forms/OportunidadeDialog'
 import { ProjetoDialog } from '@/components/forms/ProjetoDialog'
@@ -29,6 +33,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { formatCurrency, formatDate, initials, relativeTime } from '@/lib/format'
 import { getOne, listAll } from '@/services/api'
 import type {
+  AnexoRecord,
   AtividadeRecord,
   ClienteRecord,
   ContratoRecord,
@@ -52,19 +57,21 @@ export default function ClientDetailPage() {
   const [processes, setProcesses] = useState<ProcessoRecord[]>([])
   const [installments, setInstallments] = useState<ParcelaRecord[]>([])
   const [documents, setDocuments] = useState<DocumentoRecord[]>([])
+  const [anexos, setAnexos] = useState<AnexoRecord[]>([])
   const [activities, setActivities] = useState<AtividadeRecord[]>([])
   const [proposals, setProposals] = useState<PropostaRecord[]>([])
   const [contracts, setContracts] = useState<ContratoRecord[]>([])
   const [editOpen, setEditOpen] = useState(false)
   const [opportunityOpen, setOpportunityOpen] = useState(false)
   const [projectOpen, setProjectOpen] = useState(false)
+  const [anexoOpen, setAnexoOpen] = useState(false)
   const canWrite = user?.role === 'admin' || user?.role === 'comercial'
   const load = async () => {
     setLoading(true)
     try {
       const record = await getOne<ClienteRecord>('clientes', id)
       setClient(record)
-      const [p, o, pr, pa, d, a, prop, c] = await Promise.all([
+      const [p, o, pr, pa, d, an, a, prop, c] = await Promise.all([
         listAll<ProjetoRecord>('projetos', {
           filter: `cliente = '${id}'`,
           expand: 'responsavel_tecnico',
@@ -85,6 +92,11 @@ export default function ClientDetailPage() {
           sort: 'vencimento',
         }).catch(() => []),
         listAll<DocumentoRecord>('documentos', { filter: `cliente = '${id}'`, sort: '-created' }),
+        listAll<AnexoRecord>('anexos', {
+          filter: `cliente = '${id}'`,
+          expand: 'projeto,usuario',
+          sort: '-created',
+        }).catch(() => []),
         listAll<AtividadeRecord>('atividades', {
           filter: `cliente = '${id}'`,
           expand: 'usuario',
@@ -101,6 +113,7 @@ export default function ClientDetailPage() {
       setProcesses(pr)
       setInstallments(pa)
       setDocuments(d)
+      setAnexos(an)
       setActivities(a)
       setProposals(prop)
       setContracts(c)
@@ -168,9 +181,17 @@ export default function ClientDetailPage() {
               Oportunidade
             </Button>
             <Button
+              variant="outline"
+              onClick={() => setAnexoOpen(true)}
+              className="border-[#FF6A13] text-[#FF6A13] hover:bg-orange-50"
+            >
+              <FileUp className="mr-2 h-4 w-4" />
+              Anexar Arquivo
+            </Button>
+            <Button
               onClick={() => setProjectOpen(true)}
               disabled={!canWrite && user?.role !== 'tecnico'}
-              className="bg-[#FF6A13] hover:bg-[#E85B06]"
+              className="bg-[#FF6A13] hover:bg-[#E85B06] text-white"
             >
               <Plus className="mr-2 h-4 w-4" />
               Projeto
@@ -216,13 +237,20 @@ export default function ClientDetailPage() {
       </div>
       <Tabs defaultValue="projetos" className="mt-6">
         <TabsList className="h-auto w-full justify-start overflow-x-auto bg-white p-1">
-          <TabsTrigger value="projetos">Projetos</TabsTrigger>
-          <TabsTrigger value="oportunidades">Oportunidades</TabsTrigger>
-          <TabsTrigger value="propostas">Propostas</TabsTrigger>
-          <TabsTrigger value="contratos">Contratos</TabsTrigger>
-          <TabsTrigger value="processos">Processos</TabsTrigger>
+          <TabsTrigger value="projetos">Projetos ({projects.length})</TabsTrigger>
+          <TabsTrigger value="oportunidades">Oportunidades ({opportunities.length})</TabsTrigger>
+          <TabsTrigger value="propostas">Propostas ({proposals.length})</TabsTrigger>
+          <TabsTrigger value="contratos">Contratos ({contracts.length})</TabsTrigger>
+          <TabsTrigger value="processos">Processos ({processes.length})</TabsTrigger>
           <TabsTrigger value="financeiro">Financeiro</TabsTrigger>
-          <TabsTrigger value="documentos">Documentos</TabsTrigger>
+          <TabsTrigger
+            value="anexos"
+            className="flex items-center gap-1.5 font-semibold text-[#FF6A13]"
+          >
+            <Paperclip className="h-3.5 w-3.5" />
+            Anexos ({anexos.length})
+          </TabsTrigger>
+          <TabsTrigger value="documentos">Documentos ({documents.length})</TabsTrigger>
           <TabsTrigger value="links">Links externos</TabsTrigger>
         </TabsList>
         <TabsContent value="projetos">
@@ -290,6 +318,34 @@ export default function ClientDetailPage() {
             <Progress
               className="mt-5"
               value={financial.total ? (financial.paid / financial.total) * 100 : 0}
+            />
+          </div>
+        </TabsContent>
+        <TabsContent value="anexos">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-sm text-[#333]">
+                  Arquivos e Anexos Vinculados ({anexos.length})
+                </h3>
+                <p className="text-xs text-[#777]">
+                  Documentos, orçamentos, projetos DWG/DXF e planilhas vinculados a este cliente.
+                </p>
+              </div>
+              <Button
+                size="sm"
+                onClick={() => setAnexoOpen(true)}
+                className="bg-[#FF6A13] hover:bg-[#E85B06] text-white"
+              >
+                <FileUp className="mr-2 h-4 w-4" />
+                Novo Anexo
+              </Button>
+            </div>
+            <AnexosList
+              anexos={anexos}
+              onReload={() => void load()}
+              onOpenUpload={() => setAnexoOpen(true)}
+              emptyMessage="Nenhum arquivo ou documento anexado a este cliente."
             />
           </div>
         </TabsContent>
@@ -369,6 +425,12 @@ export default function ClientDetailPage() {
         onOpenChange={setProjectOpen}
         presetClient={id}
         onSaved={(record) => navigate(`/projetos/${record.id}`)}
+      />
+      <AnexoDialog
+        open={anexoOpen}
+        onOpenChange={setAnexoOpen}
+        presetCliente={id}
+        onSuccess={() => void load()}
       />
     </div>
   )

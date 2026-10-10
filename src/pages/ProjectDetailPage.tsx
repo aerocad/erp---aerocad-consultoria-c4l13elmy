@@ -5,7 +5,9 @@ import {
   Copy,
   ExternalLink,
   FileText,
+  FileUp,
   FolderOpen,
+  Paperclip,
   Plus,
   Send,
   WalletCards,
@@ -13,8 +15,10 @@ import {
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
+import { AnexosList } from '@/components/common/AnexosList'
 import { CrmBadge } from '@/components/common/CrmBadge'
 import { ErrorState, PageLoading } from '@/components/common/States'
+import { AnexoDialog } from '@/components/forms/AnexoDialog'
 import { ProcessDialog } from '@/components/forms/ProcessDialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -32,6 +36,7 @@ import { trailLabels, trailPhases } from '@/lib/crm'
 import { formatCurrency, formatDate } from '@/lib/format'
 import { createOne, getOne, listAll, updateOne } from '@/services/api'
 import type {
+  AnexoRecord,
   AtividadeRecord,
   DocumentoRecord,
   ParcelaRecord,
@@ -47,10 +52,12 @@ export default function ProjectDetailPage() {
   const [processes, setProcesses] = useState<ProcessoRecord[]>([])
   const [installments, setInstallments] = useState<ParcelaRecord[]>([])
   const [documents, setDocuments] = useState<DocumentoRecord[]>([])
+  const [anexos, setAnexos] = useState<AnexoRecord[]>([])
   const [activities, setActivities] = useState<AtividadeRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [failed, setFailed] = useState(false)
   const [processOpen, setProcessOpen] = useState(false)
+  const [anexoOpen, setAnexoOpen] = useState(false)
   const [note, setNote] = useState('')
   const canWrite = ['admin', 'comercial', 'tecnico'].includes(user?.role || '')
   const load = async () => {
@@ -60,13 +67,18 @@ export default function ProjectDetailPage() {
         expand: 'cliente,responsavel_tecnico,oportunidade',
       })
       setProject(record)
-      const [pr, pa, d, a] = await Promise.all([
+      const [pr, pa, d, an, a] = await Promise.all([
         listAll<ProcessoRecord>('processos', { filter: `projeto = '${id}'`, sort: '-created' }),
         listAll<ParcelaRecord>('parcelas', {
           filter: `projeto = '${id}'`,
           sort: 'vencimento',
         }).catch(() => []),
         listAll<DocumentoRecord>('documentos', { filter: `projeto = '${id}'`, sort: '-created' }),
+        listAll<AnexoRecord>('anexos', {
+          filter: `projeto = '${id}'`,
+          expand: 'usuario',
+          sort: '-created',
+        }).catch(() => []),
         listAll<AtividadeRecord>('atividades', {
           filter: `projeto = '${id}'`,
           expand: 'usuario',
@@ -76,6 +88,7 @@ export default function ProjectDetailPage() {
       setProcesses(pr)
       setInstallments(pa)
       setDocuments(d)
+      setAnexos(an)
       setActivities(a)
       setFailed(false)
     } catch {
@@ -277,7 +290,7 @@ export default function ProjectDetailPage() {
           <section className="crm-card overflow-hidden">
             <div className="border-b p-5">
               <p className="technical-label">DOCUMENTAÇÃO</p>
-              <h2 className="font-bold">Documentos</h2>
+              <h2 className="font-bold">Documentos Gerados</h2>
             </div>
             <div className="divide-y">
               {documents.map((item) => (
@@ -295,6 +308,35 @@ export default function ProjectDetailPage() {
               {!documents.length && (
                 <p className="p-8 text-center text-sm text-[#8A8A8A]">Nenhum documento gerado.</p>
               )}
+            </div>
+          </section>
+
+          {/* Seção de Arquivos e Anexos Vinculados ao Projeto */}
+          <section className="crm-card overflow-hidden">
+            <div className="flex items-center justify-between border-b p-5">
+              <div>
+                <p className="technical-label">ARQUIVOS E ANEXOS</p>
+                <h2 className="font-bold flex items-center gap-2">
+                  Anexos do Projeto ({anexos.length})
+                </h2>
+              </div>
+              <Button
+                size="sm"
+                onClick={() => setAnexoOpen(true)}
+                className="bg-[#FF6A13] hover:bg-[#E85B06] text-white"
+              >
+                <FileUp className="mr-2 h-4 w-4" />
+                Anexar Arquivo
+              </Button>
+            </div>
+            <div className="p-5">
+              <AnexosList
+                anexos={anexos}
+                compact={true}
+                onReload={() => void load()}
+                onOpenUpload={() => setAnexoOpen(true)}
+                emptyMessage="Nenhum arquivo ou projeto (DWG/DXF/PDF/XLSX) anexado a este projeto."
+              />
             </div>
           </section>
           <section className="crm-card p-5">
@@ -370,6 +412,13 @@ export default function ProjectDetailPage() {
         onOpenChange={setProcessOpen}
         presetProject={project.id}
         onSaved={(record) => navigate(`/processos/${record.id}`)}
+      />
+      <AnexoDialog
+        open={anexoOpen}
+        onOpenChange={setAnexoOpen}
+        presetProjeto={project.id}
+        presetCliente={project.cliente}
+        onSuccess={() => void load()}
       />
     </div>
   )
