@@ -127,7 +127,14 @@ export default function ClientsPage() {
                       className="cursor-pointer hover:bg-[#FFF6EC]"
                     >
                       <td className="px-5 py-4">
-                        <p className="font-semibold text-[#4B4B4B]">{item.razao_social}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-semibold text-[#4B4B4B]">{item.razao_social}</p>
+                          {item.origem === 'NFS-e' && (
+                            <CrmBadge tone="orange" className="text-[10px] py-0 px-1.5">
+                              NFS-e
+                            </CrmBadge>
+                          )}
+                        </div>
                         <p className="mt-0.5 text-xs text-[#8A8A8A]">
                           {item.segmento || 'Segmento não informado'}
                         </p>
@@ -181,7 +188,14 @@ export default function ClientsPage() {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <Building2 className="mb-2 h-5 w-5 text-[#FF6A13]" />
-                    <p className="font-semibold text-[#4B4B4B]">{item.razao_social}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="font-semibold text-[#4B4B4B]">{item.razao_social}</p>
+                      {item.origem === 'NFS-e' && (
+                        <CrmBadge tone="orange" className="text-[10px] py-0 px-1.5">
+                          NFS-e
+                        </CrmBadge>
+                      )}
+                    </div>
                     <p className="mono-value mt-1 text-xs text-[#737373]">{item.cnpj_cpf}</p>
                   </div>
                   <CrmBadge tone={item.status === 'cliente' ? 'green' : 'orange'}>

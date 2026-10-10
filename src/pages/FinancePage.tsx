@@ -42,7 +42,7 @@ import { formatCurrency, formatDate } from '@/lib/format'
 import { createOne, updateOne } from '@/services/api'
 import { vincularNotaOrfaAParcela } from '@/services/nfseExecutor'
 import type { NfseDadoExtraido } from '@/services/nfseParser'
-import type { ParcelaRecord, ProjetoRecord } from '@/types/crm'
+import type { ClienteRecord, ParcelaRecord, ProjetoRecord } from '@/types/crm'
 
 export default FinancePage
 
@@ -55,6 +55,9 @@ export function FinancePage() {
   })
   const projects = useCrmData<ProjetoRecord>('projetos', {
     sort: '-created',
+  })
+  const clients = useCrmData<ClienteRecord>('clientes', {
+    sort: 'razao_social',
   })
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState(params.get('status') || 'todos')
@@ -79,6 +82,17 @@ export function FinancePage() {
   const [vinculandoNota, setVinculandoNota] = useState<NfseDadoExtraido | null>(null)
   const [parcelaDestinoId, setParcelaDestinoId] = useState('')
   const [isVinculando, setIsVinculando] = useState(false)
+
+  // Estado para opções de criação ou vínculo de cliente ao vincular nota órfã
+  const [modoClienteOrfa, setModoClienteOrfa] = useState<'manter_atual' | 'existente' | 'novo'>(
+    'manter_atual',
+  )
+  const [clienteSelecionadoOrfaId, setClienteSelecionadoOrfaId] = useState('')
+  const [novoClienteOrfaRazao, setNovoClienteOrfaRazao] = useState('')
+  const [novoClienteOrfaCnpj, setNovoClienteOrfaCnpj] = useState('')
+  const [novoClienteOrfaEndereco, setNovoClienteOrfaEndereco] = useState('')
+  const [novoClienteOrfaMunicipio, setNovoClienteOrfaMunicipio] = useState('')
+  const [novoClienteOrfaUf, setNovoClienteOrfaUf] = useState('')
 
   const [form, setForm] = useState({
     projeto: '',
@@ -174,7 +188,30 @@ export function FinancePage() {
     }
     setIsVinculando(true)
     try {
-      await vincularNotaOrfaAParcela(vinculandoNota, parcelaDestinoId)
+      const clienteOpcao =
+        modoClienteOrfa === 'novo'
+          ? {
+              modo: 'novo' as const,
+              novoClienteDados: {
+                razaoSocial: novoClienteOrfaRazao || vinculandoNota.tomadorRazao,
+                cnpjCpf: novoClienteOrfaCnpj || vinculandoNota.tomadorCnpjCpf,
+                endereco: novoClienteOrfaEndereco || vinculandoNota.tomadorEndereco,
+                municipio: novoClienteOrfaMunicipio || vinculandoNota.tomadorMunicipio,
+                uf: novoClienteOrfaUf || vinculandoNota.tomadorUf,
+                email: vinculandoNota.tomadorEmail,
+                telefone: vinculandoNota.tomadorTelefone,
+              },
+            }
+          : modoClienteOrfa === 'existente'
+            ? {
+                modo: 'existente' as const,
+                clienteId: clienteSelecionadoOrfaId,
+              }
+            : {
+                modo: 'manter_atual' as const,
+              }
+
+      await vincularNotaOrfaAParcela(vinculandoNota, parcelaDestinoId, clienteOpcao)
       toast.success(`NFS-e nº ${vinculandoNota.numero} vinculada com sucesso!`)
 
       // Remove da lista de órfãs
@@ -189,7 +226,10 @@ export function FinancePage() {
       })
       setVinculandoNota(null)
       setParcelaDestinoId('')
+      setModoClienteOrfa('manter_atual')
+      setClienteSelecionadoOrfaId('')
       void installments.reload()
+      void clients.reload()
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
       toast.error('Erro ao vincular nota: ' + msg)
@@ -379,6 +419,31 @@ export function FinancePage() {
                       onClick={() => {
                         setVinculandoNota(nota)
                         setParcelaDestinoId('')
+                        // Verifica se o tomador já existe na base de clientes
+                        const limpo = nota.tomadorCnpjCpf
+                          ? nota.tomadorCnpjCpf.replace(/\D/g, '')
+                          : ''
+                        const cliExistente = clients.data.find(
+                          (c) =>
+                            (limpo && c.cnpj_cpf && c.cnpj_cpf.replace(/\D/g, '') === limpo) ||
+                            c.razao_social.toLowerCase() === nota.tomadorRazao.toLowerCase(),
+                        )
+                        if (cliExistente) {
+                          setModoClienteOrfa('existente')
+                          setClienteSelecionadoOrfaId(cliExistente.id)
+                        } else if (
+                          nota.tomadorRazao &&
+                          nota.tomadorRazao !== 'Tomador não informado'
+                        ) {
+                          setModoClienteOrfa('novo')
+                          setNovoClienteOrfaRazao(nota.tomadorRazao)
+                          setNovoClienteOrfaCnpj(nota.tomadorCnpjCpf || '')
+                          setNovoClienteOrfaEndereco(nota.tomadorEndereco || '')
+                          setNovoClienteOrfaMunicipio(nota.tomadorMunicipio || '')
+                          setNovoClienteOrfaUf(nota.tomadorUf || '')
+                        } else {
+                          setModoClienteOrfa('manter_atual')
+                        }
                       }}
                       className="bg-[#FF6A13] hover:bg-[#E85B06] text-white shrink-0"
                     >
@@ -715,29 +780,47 @@ export function FinancePage() {
 
       {/* Modal de Vinculação Manual de Nota Órfã */}
       <Dialog open={Boolean(vinculandoNota)} onOpenChange={(v) => !v && setVinculandoNota(null)}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Vincular Nota Órfã a uma Parcela</DialogTitle>
+            <DialogTitle>Vincular Nota Órfã & Dados do Cliente</DialogTitle>
           </DialogHeader>
           {vinculandoNota && (
             <div className="space-y-4">
               <div className="rounded-lg border bg-[#FAFAFA] p-3 text-xs space-y-1">
-                <p>
-                  <strong>NFS-e:</strong> {vinculandoNota.numero} · <strong>Valor:</strong>{' '}
-                  {formatCurrency(vinculandoNota.valorBruto)}
+                <p className="flex justify-between">
+                  <span>
+                    <strong>NFS-e:</strong> {vinculandoNota.numero}
+                  </span>
+                  <span className="mono-value font-bold text-[#FF6A13]">
+                    {formatCurrency(vinculandoNota.valorBruto)}
+                  </span>
                 </p>
                 <p>
-                  <strong>Tomador:</strong> {vinculandoNota.tomadorRazao}
+                  <strong>Tomador:</strong> {vinculandoNota.tomadorRazao}{' '}
+                  {vinculandoNota.tomadorCnpjCpf && `(${vinculandoNota.tomadorCnpjCpf})`}
                 </p>
+                {(vinculandoNota.tomadorEndereco || vinculandoNota.tomadorMunicipio) && (
+                  <p className="text-neutral-500">
+                    <strong>Endereço:</strong>{' '}
+                    {[
+                      vinculandoNota.tomadorEndereco,
+                      vinculandoNota.tomadorMunicipio,
+                      vinculandoNota.tomadorUf,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </p>
+                )}
                 <p>
                   <strong>Data de Emissão:</strong> {formatDate(vinculandoNota.dataEmissao)}
                 </p>
               </div>
 
-              <div className="space-y-2">
-                <Label>Selecione a parcela de destino *</Label>
+              {/* Seção da Parcela */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold">1. Selecione a parcela de destino *</Label>
                 <Select value={parcelaDestinoId} onValueChange={setParcelaDestinoId}>
-                  <SelectTrigger>
+                  <SelectTrigger className="h-9 text-xs">
                     <SelectValue placeholder="Selecione a parcela..." />
                   </SelectTrigger>
                   <SelectContent className="max-h-60">
@@ -749,6 +832,123 @@ export function FinancePage() {
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+
+              {/* Seção de Cliente: Manter atual, Vincular existente ou Criar a partir da nota */}
+              <div className="space-y-2 pt-2 border-t">
+                <Label className="text-xs font-bold">2. Cliente a partir dos dados da nota</Label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setModoClienteOrfa('manter_atual')}
+                    className={`p-2 text-xs font-semibold rounded-lg border text-center transition ${
+                      modoClienteOrfa === 'manter_atual'
+                        ? 'border-[#FF6A13] bg-[#FFF2E8] text-[#D65100]'
+                        : 'border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50'
+                    }`}
+                  >
+                    Manter cliente da parcela
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setModoClienteOrfa('existente')}
+                    className={`p-2 text-xs font-semibold rounded-lg border text-center transition ${
+                      modoClienteOrfa === 'existente'
+                        ? 'border-[#FF6A13] bg-[#FFF2E8] text-[#D65100]'
+                        : 'border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50'
+                    }`}
+                  >
+                    Vincular existente
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setModoClienteOrfa('novo')}
+                    className={`p-2 text-xs font-semibold rounded-lg border text-center transition ${
+                      modoClienteOrfa === 'novo'
+                        ? 'border-[#FF6A13] bg-[#FFF2E8] text-[#D65100]'
+                        : 'border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50'
+                    }`}
+                  >
+                    Criar novo cliente
+                  </button>
+                </div>
+
+                {modoClienteOrfa === 'existente' && (
+                  <div className="pt-1.5 space-y-1">
+                    <Label className="text-[11px] text-neutral-600">
+                      Selecione o cliente cadastrado:
+                    </Label>
+                    <Select
+                      value={clienteSelecionadoOrfaId}
+                      onValueChange={setClienteSelecionadoOrfaId}
+                    >
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue placeholder="Selecione o cliente..." />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-56">
+                        {clients.data.map((cli) => (
+                          <SelectItem key={cli.id} value={cli.id}>
+                            {cli.razao_social} {cli.cnpj_cpf ? `(${cli.cnpj_cpf})` : ''}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {modoClienteOrfa === 'novo' && (
+                  <div className="pt-2 p-2.5 rounded-lg border bg-neutral-50/60 space-y-2 text-xs">
+                    <p className="text-[11px] text-[#737373]">
+                      Os dados extraídos da NFS-e serão usados para cadastrar o novo cliente:
+                    </p>
+                    <div className="space-y-1">
+                      <Label className="text-[10px] uppercase font-bold text-neutral-500">
+                        Razão Social
+                      </Label>
+                      <Input
+                        value={novoClienteOrfaRazao}
+                        onChange={(e) => setNovoClienteOrfaRazao(e.target.value)}
+                        className="h-7 text-xs bg-white"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <Label className="text-[10px] uppercase font-bold text-neutral-500">
+                          CNPJ / CPF
+                        </Label>
+                        <Input
+                          value={novoClienteOrfaCnpj}
+                          onChange={(e) => setNovoClienteOrfaCnpj(e.target.value)}
+                          className="h-7 text-xs bg-white"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] uppercase font-bold text-neutral-500">
+                          Município/UF
+                        </Label>
+                        <Input
+                          value={
+                            novoClienteOrfaMunicipio && novoClienteOrfaUf
+                              ? `${novoClienteOrfaMunicipio}/${novoClienteOrfaUf}`
+                              : novoClienteOrfaMunicipio || novoClienteOrfaUf
+                          }
+                          onChange={(e) => {
+                            const val = e.target.value
+                            if (val.includes('/')) {
+                              const [m, u] = val.split('/')
+                              setNovoClienteOrfaMunicipio(m.trim())
+                              setNovoClienteOrfaUf(u.trim().toUpperCase())
+                            } else {
+                              setNovoClienteOrfaMunicipio(val)
+                            }
+                          }}
+                          placeholder="Ex: Brasília/DF"
+                          className="h-7 text-xs bg-white"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -763,7 +963,12 @@ export function FinancePage() {
             </Button>
             <Button
               onClick={() => void handleConfirmarVinculoManual()}
-              disabled={isVinculando || !parcelaDestinoId}
+              disabled={
+                isVinculando ||
+                !parcelaDestinoId ||
+                (modoClienteOrfa === 'existente' && !clienteSelecionadoOrfaId) ||
+                (modoClienteOrfa === 'novo' && !novoClienteOrfaRazao.trim())
+              }
               className="bg-[#FF6A13] hover:bg-[#E85B06] text-white"
             >
               {isVinculando ? 'Vinculando...' : 'Confirmar Vínculo'}

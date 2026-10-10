@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-10T23:01:47.250Z",
+  "generatedAt": "2026-10-10T23:06:18.399Z",
   "collections": [
     {
       "name": "users",
@@ -58,8 +58,8 @@
       "apiRules": {
         "list": "@request.auth.id != '' && (@request.auth.role = 'admin' || @request.auth.role = 'comercial' || @request.auth.role = 'tecnico' || @request.auth.role = 'financeiro')",
         "view": "@request.auth.id != '' && (@request.auth.role = 'admin' || @request.auth.role = 'comercial' || @request.auth.role = 'tecnico' || @request.auth.role = 'financeiro')",
-        "create": "@request.auth.role = 'admin' || @request.auth.role = 'comercial'",
-        "update": "@request.auth.role = 'admin' || @request.auth.role = 'comercial'",
+        "create": "@request.auth.role = 'admin' || @request.auth.role = 'comercial' || @request.auth.role = 'financeiro'",
+        "update": "@request.auth.role = 'admin' || @request.auth.role = 'comercial' || @request.auth.role = 'financeiro'",
         "delete": "@request.auth.role = 'admin' || @request.auth.role = 'comercial'"
       },
       "fields": [

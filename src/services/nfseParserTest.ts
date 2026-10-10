@@ -53,6 +53,18 @@ export function testarNfseParseConformidade(): {
           </CpfCnpj>
         </IdentificacaoTomador>
         <RazaoSocial>EMPRESA EXEMPLO LTDA</RazaoSocial>
+        <Endereco>
+          <Endereco>SCS Quadra 04 Bloco A</Endereco>
+          <Numero>100</Numero>
+          <Bairro>Asa Sul</Bairro>
+          <Municipio>Brasília</Municipio>
+          <Uf>DF</Uf>
+          <Cep>70304000</Cep>
+        </Endereco>
+        <Contato>
+          <Email>contato@exemplo.com.br</Email>
+          <Telefone>61988887777</Telefone>
+        </Contato>
       </TomadorServico>
       <Servico>
         <Discriminacao>Elaboração de PBZPA / OPEA Projeto 2026-232</Discriminacao>
@@ -75,6 +87,13 @@ export function testarNfseParseConformidade(): {
         esperado: 166.4,
         obtido: parsedXml[0].issRetido || 0,
         ok: Math.abs((parsedXml[0].issRetido || 0) - 166.4) < 0.001,
+      })
+      resultados.push({
+        teste: 'parseXmlNfse tomador município extraído',
+        esperado: 1,
+        obtido:
+          parsedXml[0].tomadorMunicipio === 'Brasília' && parsedXml[0].tomadorUf === 'DF' ? 1 : 0,
+        ok: parsedXml[0].tomadorMunicipio === 'Brasília' && parsedXml[0].tomadorUf === 'DF',
       })
     }
   } catch (err: unknown) {

@@ -20,6 +20,14 @@ export interface NfseDadoExtraido {
   csllRetido?: number
   tomadorRazao: string
   tomadorCnpjCpf: string
+  tomadorEndereco?: string
+  tomadorNumero?: string
+  tomadorBairro?: string
+  tomadorMunicipio?: string
+  tomadorUf?: string
+  tomadorCep?: string
+  tomadorEmail?: string
+  tomadorTelefone?: string
   prestadorRazao?: string
   prestadorCnpjCpf?: string
   descricaoServico?: string
@@ -112,6 +120,25 @@ export const COLUNAS_NFSE_MAPEAMENTO = {
     'CNPJ/CPF',
     'CNPJ',
   ],
+  tomadorEndereco: [
+    'Endereço Tomador',
+    'Endereco Tomador',
+    'Endereço',
+    'Endereco',
+    'Logradouro',
+    'Logradouro Tomador',
+  ],
+  tomadorMunicipio: [
+    'Município Tomador',
+    'Municipio Tomador',
+    'Município',
+    'Municipio',
+    'Cidade',
+    'Cidade Tomador',
+  ],
+  tomadorUf: ['UF Tomador', 'UF', 'Estado', 'Estado Tomador'],
+  tomadorEmail: ['E-mail Tomador', 'Email Tomador', 'E-mail', 'Email', 'Correio Eletrônico'],
+  tomadorTelefone: ['Telefone Tomador', 'Telefone', 'WhatsApp', 'Celular', 'Tel'],
   situacao: ['Situação', 'Situacao', 'Status', 'Situação da Nota', 'Status da Nota', 'Estado'],
   descricaoServico: [
     'Discriminação dos Serviços',
@@ -243,6 +270,7 @@ export function parseXmlNfse(xmlString: string, nomeArquivo?: string): NfseDadoE
       'Tomador xNome',
       'Tomador Nome',
       'DadosTomador RazaoSocial',
+      'IdentificacaoTomador RazaoSocial',
     ])
     const tomadorCnpj = getNodeText(node, [
       'TomadorServico IdentificacaoTomador CpfCnpj Cnpj',
@@ -251,13 +279,97 @@ export function parseXmlNfse(xmlString: string, nomeArquivo?: string): NfseDadoE
       'TomadorServico CpfCnpj Cnpj',
       'TomadorServico CNPJ',
       'Tomador CNPJ',
+      'IdentificacaoTomador CpfCnpj Cnpj',
+      'IdentificacaoTomador Cnpj',
     ])
     const tomadorCpf = getNodeText(node, [
       'TomadorServico IdentificacaoTomador CpfCnpj Cpf',
       'Tomador Cpf',
       'TomadorServico Cpf',
       'TomadorServico CpfCnpj Cpf',
+      'IdentificacaoTomador CpfCnpj Cpf',
+      'IdentificacaoTomador Cpf',
     ])
+
+    // Endereço e Contato do Tomador (ABRASF e layouts municipais)
+    const tomadorLogradouro = getNodeText(node, [
+      'TomadorServico Endereco Endereco',
+      'TomadorServico Endereco xLgr',
+      'Tomador Endereco Endereco',
+      'Tomador Endereco xLgr',
+      'Tomador xLgr',
+      'Endereco Tomador Endereco',
+      'Endereco Tomador Logradouro',
+      'DadosTomador Endereco',
+    ])
+    const tomadorNumero = getNodeText(node, [
+      'TomadorServico Endereco Numero',
+      'TomadorServico Endereco nro',
+      'Tomador Endereco Numero',
+      'Tomador Endereco nro',
+      'Tomador nro',
+    ])
+    const tomadorComplemento = getNodeText(node, [
+      'TomadorServico Endereco Complemento',
+      'TomadorServico Endereco xCpl',
+      'Tomador Endereco Complemento',
+      'Tomador Endereco xCpl',
+    ])
+    const tomadorBairro = getNodeText(node, [
+      'TomadorServico Endereco Bairro',
+      'TomadorServico Endereco xBairro',
+      'Tomador Endereco Bairro',
+      'Tomador Endereco xBairro',
+      'Tomador xBairro',
+    ])
+    const tomadorMunicipio = getNodeText(node, [
+      'TomadorServico Endereco Municipio',
+      'TomadorServico Endereco xMun',
+      'Tomador Endereco Municipio',
+      'Tomador Endereco xMun',
+      'Tomador xMun',
+      'TomadorServico Endereco Cidade',
+    ])
+    const tomadorUf = getNodeText(node, [
+      'TomadorServico Endereco Uf',
+      'TomadorServico Endereco UF',
+      'Tomador Endereco Uf',
+      'Tomador Endereco UF',
+      'Tomador UF',
+    ])
+    const tomadorCep = getNodeText(node, [
+      'TomadorServico Endereco Cep',
+      'TomadorServico Endereco CEP',
+      'Tomador Endereco Cep',
+      'Tomador Endereco CEP',
+      'Tomador CEP',
+    ])
+    const tomadorEmail = getNodeText(node, [
+      'TomadorServico Contato Email',
+      'TomadorServico Email',
+      'Tomador Contato Email',
+      'Tomador Email',
+      'Tomador email',
+    ])
+    const tomadorTelefone = getNodeText(node, [
+      'TomadorServico Contato Telefone',
+      'TomadorServico Telefone',
+      'Tomador Contato Telefone',
+      'Tomador Telefone',
+      'Tomador fone',
+    ])
+
+    // Monta endereço formatado
+    const partesEndereco: string[] = []
+    if (tomadorLogradouro) {
+      let linhaLgr = tomadorLogradouro
+      if (tomadorNumero) linhaLgr += `, nº ${tomadorNumero}`
+      if (tomadorComplemento) linhaLgr += ` - ${tomadorComplemento}`
+      partesEndereco.push(linhaLgr)
+    }
+    if (tomadorBairro) partesEndereco.push(tomadorBairro)
+    if (tomadorCep) partesEndereco.push(`CEP ${tomadorCep}`)
+    const enderecoFormatado = partesEndereco.join(', ')
 
     // Prestador
     const prestadorRazao = getNodeText(node, [
@@ -354,6 +466,14 @@ export function parseXmlNfse(xmlString: string, nomeArquivo?: string): NfseDadoE
       csllRetido: csllNum,
       tomadorRazao: tomadorRazao || 'Tomador não informado',
       tomadorCnpjCpf: limparDocumento(tomadorCnpj || tomadorCpf),
+      tomadorEndereco: enderecoFormatado || tomadorLogradouro,
+      tomadorNumero,
+      tomadorBairro,
+      tomadorMunicipio,
+      tomadorUf: (tomadorUf || '').toUpperCase().slice(0, 2),
+      tomadorCep,
+      tomadorEmail,
+      tomadorTelefone,
       prestadorRazao,
       prestadorCnpjCpf: limparDocumento(prestadorCnpj),
       descricaoServico,
@@ -394,6 +514,14 @@ export function parsePlanilhaNfse(
     const valorLiquidoRaw = getVal('valorLiquido')
     const tomadorRazaoRaw = String(getVal('tomadorRazao') || '').trim()
     const tomadorDocRaw = String(getVal('tomadorCnpjCpf') || '').trim()
+    const tomadorEnderecoRaw = String(getVal('tomadorEndereco') || '').trim()
+    const tomadorMunicipioRaw = String(getVal('tomadorMunicipio') || '').trim()
+    const tomadorUfRaw = String(getVal('tomadorUf') || '')
+      .trim()
+      .toUpperCase()
+      .slice(0, 2)
+    const tomadorEmailRaw = String(getVal('tomadorEmail') || '').trim()
+    const tomadorTelefoneRaw = String(getVal('tomadorTelefone') || '').trim()
     const situacaoRaw = String(getVal('situacao') || '')
       .trim()
       .toLowerCase()
@@ -438,6 +566,11 @@ export function parsePlanilhaNfse(
       retencoesTexto: retencoesRaw,
       tomadorRazao: tomadorRazaoRaw || 'Tomador não informado',
       tomadorCnpjCpf: limparDocumento(tomadorDocRaw),
+      tomadorEndereco: tomadorEnderecoRaw,
+      tomadorMunicipio: tomadorMunicipioRaw,
+      tomadorUf: tomadorUfRaw,
+      tomadorEmail: tomadorEmailRaw,
+      tomadorTelefone: tomadorTelefoneRaw,
       descricaoServico: descServicoRaw,
       situacao,
       projetoIdMencionado,
