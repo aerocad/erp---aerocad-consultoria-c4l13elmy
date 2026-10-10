@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
   Banknote,
+  BarChart3,
   Bell,
   BriefcaseBusiness,
   ChevronLeft,
@@ -49,6 +50,7 @@ const navItems = [
   { key: 'projetos', label: 'Projetos', path: '/projetos', icon: BriefcaseBusiness },
   { key: 'processos', label: 'Processos', path: '/processos', icon: Workflow },
   { key: 'financeiro', label: 'Financeiro', path: '/financeiro', icon: Banknote },
+  { key: 'relatorios', label: 'Relatórios', path: '/relatorios', icon: BarChart3 },
   { key: 'documentos', label: 'Documentos', path: '/documentos', icon: FileText },
   { key: 'configuracoes', label: 'Configurações', path: '/configuracoes', icon: Settings },
 ]
@@ -60,6 +62,7 @@ const titleMap: Record<string, string> = {
   projetos: 'Projetos',
   processos: 'Processos regulatórios',
   financeiro: 'Financeiro',
+  relatorios: 'Relatórios & Indicadores',
   documentos: 'Documentos',
   configuracoes: 'Configurações',
   importacao: 'Importação de Base Histórica',

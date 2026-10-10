@@ -14,6 +14,7 @@ import DocumentGeneratorPage from '@/pages/DocumentGeneratorPage'
 import DocumentsPage from '@/pages/DocumentsPage'
 import FinancePage from '@/pages/FinancePage'
 import FunnelPage from '@/pages/FunnelPage'
+import ReportsPage from '@/pages/ReportsPage'
 import NotFound from '@/pages/NotFound'
 import ProcessDetailPage from '@/pages/ProcessDetailPage'
 import ProcessesPage from '@/pages/ProcessesPage'
@@ -68,6 +69,9 @@ const App = () => (
                 </Route>
                 <Route element={<AreaGuard area="financeiro" />}>
                   <Route path="/financeiro" element={<FinancePage />} />
+                </Route>
+                <Route element={<AreaGuard area="relatorios" />}>
+                  <Route path="/relatorios" element={<ReportsPage />} />
                 </Route>
                 <Route element={<AreaGuard area="documentos" />}>
                   <Route path="/documentos" element={<DocumentsPage />} />

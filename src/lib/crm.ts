@@ -98,12 +98,13 @@ export const permissions: Record<Role, string[]> = {
     'projetos',
     'processos',
     'financeiro',
+    'relatorios',
     'documentos',
     'configuracoes',
   ],
   comercial: ['painel', 'funil', 'clientes', 'projetos', 'processos', 'financeiro', 'documentos'],
   tecnico: ['painel', 'clientes', 'projetos', 'processos', 'documentos'],
-  financeiro: ['painel', 'clientes', 'projetos', 'financeiro'],
+  financeiro: ['painel', 'clientes', 'projetos', 'financeiro', 'relatorios'],
   terceiro: ['terceiro-portal'],
 }
 
