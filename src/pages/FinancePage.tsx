@@ -4,6 +4,7 @@ import {
   CalendarClock,
   CheckCircle2,
   CircleDollarSign,
+  CopyX,
   FileSpreadsheet,
   Layers,
   Link as LinkIcon,
@@ -18,6 +19,7 @@ import { CrmBadge } from '@/components/common/CrmBadge'
 import { SectionHeader } from '@/components/common/SectionHeader'
 import { EmptyState, ErrorState, PageLoading } from '@/components/common/States'
 import { ImportacaoNfseModal } from '@/components/financeiro/ImportacaoNfseModal'
+import { ExcluirDuplicadasModal } from '@/components/financeiro/ExcluirDuplicadasModal'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -65,6 +67,7 @@ export function FinancePage() {
   const [projectFilter, setProjectFilter] = useState(params.get('projeto') || 'todos')
   const [activeTab, setActiveTab] = useState<'parcelas' | 'orfas'>('parcelas')
   const [importNfseOpen, setImportNfseOpen] = useState(false)
+  const [duplicadasModalOpen, setDuplicadasModalOpen] = useState(false)
   const [payment, setPayment] = useState<ParcelaRecord | null>(null)
   const [newOpen, setNewOpen] = useState(false)
   const [payDate, setPayDate] = useState(new Date().toISOString().slice(0, 10))
@@ -106,6 +109,43 @@ export function FinancePage() {
     observacoes: '',
   })
   const canWrite = user?.role === 'admin' || user?.role === 'financeiro'
+
+  // Contagem de duplicatas na lista de órfãs
+  const totalDuplicatasOrfas = useMemo(() => {
+    const contagem = new Map<string, number>()
+    for (const nota of notasOrfas) {
+      const num = (nota.numero || '').trim().toLowerCase()
+      const prestador = (nota.prestadorCnpjCpf || '').trim().toLowerCase() || 'aerocad'
+      const chave = `${num}_${prestador}`
+      contagem.set(chave, (contagem.get(chave) || 0) + 1)
+    }
+    let dupes = 0
+    for (const count of contagem.values()) {
+      if (count > 1) {
+        dupes += count - 1
+      }
+    }
+    return dupes
+  }, [notasOrfas])
+
+  const handleExcluirDuplicadas = (idsParaExcluir: string[]) => {
+    if (!idsParaExcluir || idsParaExcluir.length === 0) return
+    const idsSet = new Set(idsParaExcluir)
+    setNotasOrfas((prev) => {
+      const filtradas = prev.filter((n) => !idsSet.has(n.idTemp))
+      try {
+        sessionStorage.setItem('aerocad_nfse_orfas', JSON.stringify(filtradas))
+      } catch {
+        /* intentionally ignored */
+      }
+      return filtradas
+    })
+    toast.success(
+      `${idsParaExcluir.length} ${
+        idsParaExcluir.length === 1 ? 'nota duplicada excluída' : 'notas duplicadas excluídas'
+      } com sucesso!`,
+    )
+  }
 
   const months = useMemo(() => {
     const set = new Set<string>()
@@ -362,14 +402,35 @@ export function FinancePage() {
 
       {activeTab === 'orfas' ? (
         <div className="mt-5 space-y-4">
-          <div className="crm-card p-4 bg-sky-50/50 border-sky-200 text-xs text-sky-950 flex items-start gap-2.5">
-            <Layers className="h-5 w-5 text-sky-600 shrink-0 mt-0.5" />
-            <div>
-              <strong className="text-sm">Central de Notas Órfãs:</strong> Notas fiscais importadas
-              que não encontraram correspondência automática podem ser vinculadas manualmente a
-              qualquer parcela da operação. Ao vincular, o status da parcela é atualizado e
-              registrado no histórico do projeto.
+          <div className="crm-card p-4 bg-sky-50/50 border-sky-200 text-xs text-sky-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-start gap-2.5">
+              <Layers className="h-5 w-5 text-sky-600 shrink-0 mt-0.5" />
+              <div>
+                <strong className="text-sm">Central de Notas Órfãs:</strong> Notas fiscais
+                importadas que não encontraram correspondência automática podem ser vinculadas
+                manualmente a qualquer parcela da operação. Ao vincular, o status da parcela é
+                atualizado e registrado no histórico do projeto.
+              </div>
             </div>
+            {canWrite && notasOrfas.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setDuplicadasModalOpen(true)}
+                className={`shrink-0 border-orange-300 text-[#D65100] hover:bg-[#FFF6EC] ${
+                  totalDuplicatasOrfas > 0 ? 'bg-orange-50 font-semibold' : ''
+                }`}
+                title="Detectar e excluir notas duplicadas (mesmo número e prestador)"
+              >
+                <CopyX className="mr-1.5 h-4 w-4 text-[#FF6A13]" />
+                Excluir duplicadas
+                {totalDuplicatasOrfas > 0 && (
+                  <span className="ml-1.5 rounded-full bg-rose-100 text-rose-800 text-[10px] px-1.5 py-0.2 font-bold">
+                    {totalDuplicatasOrfas}
+                  </span>
+                )}
+              </Button>
+            )}
           </div>
 
           {!notasOrfas.length ? (
@@ -976,6 +1037,14 @@ export function FinancePage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Modal de Deduplicação de Notas Órfãs */}
+      <ExcluirDuplicadasModal
+        open={duplicadasModalOpen}
+        onOpenChange={setDuplicadasModalOpen}
+        notasOrfas={notasOrfas}
+        onExcluirDuplicadas={handleExcluirDuplicadas}
+      />
 
       {/* Modal de Importação de NFS-e */}
       <ImportacaoNfseModal
