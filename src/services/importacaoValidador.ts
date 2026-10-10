@@ -6,10 +6,10 @@ import {
   parseDataISO,
   parseNumero,
   tratarValor,
-  deduzirTrilha,
   type ItemValidado,
   type ValidacaoResultado,
 } from './importacaoParser'
+import { calcularSimilaridadeTexto } from './nfseCorrelacionador'
 
 export interface ClienteMapeado extends Record<string, unknown> {
   id_planilha: string
@@ -197,11 +197,23 @@ export async function validarClientes(
     if (docLimpo && mapaExistentesDoc.has(docLimpo)) {
       idExistente = mapaExistentesDoc.get(docLimpo)
       acao = 'atualizar'
-      conflitoDescricao = `Cliente já cadastrado no banco com este documento (${formatarDocumento(docLimpo)}). Será atualizado.`
+      conflitoDescricao = `Cliente já cadastrado no banco com este documento (${formatarDocumento(docLimpo)}). Será atualizado preservando integridade.`
     } else if (razao && mapaExistentesNome.has(razao.trim().toLowerCase())) {
       idExistente = mapaExistentesNome.get(razao.trim().toLowerCase())
       acao = 'atualizar'
-      conflitoDescricao = `Cliente já cadastrado com esta Razão Social ("${razao}"). Será atualizado.`
+      conflitoDescricao = `Cliente já cadastrado com esta Razão Social ("${razao}"). Será atualizado preservando integridade.`
+    } else if (razao) {
+      // Checa similaridade com clientes existentes no banco (ex: "Zurich Airport Brasil" vs "AEROPORTOS DO SUDESTE DO BRASIL S.A" ou variações)
+      const rzNorm = razao.trim().toLowerCase()
+      for (const [nomeExistente, id] of mapaExistentesNome.entries()) {
+        const sim = calcularSimilaridadeTexto(nomeExistente, rzNorm)
+        if (sim >= 0.88) {
+          idExistente = id
+          acao = 'atualizar'
+          conflitoDescricao = `Cliente correspondente detectado por similaridade de nome ("${nomeExistente}"). Será atualizado.`
+          break
+        }
+      }
     }
 
     const dadosMapeados: ClienteMapeado = {
@@ -268,31 +280,36 @@ export async function validarProjetos(
   const mapClientePorDoc = new Map<string, string>() // docLimpo -> id
   const mapClientePorNome = new Map<string, string>() // nomeLimpo -> id
   const mapClientePorIdPlanilha = new Map<string, string>() // ID Planilha -> id (ou nome)
+  const listaClientesParaSimilaridade: Array<{ id: string; razao: string; doc: string }> = []
 
   for (const c of clientesDb) {
     const d = limparDocumento(c.cnpj_cpf)
     if (d) mapClientePorDoc.set(d, c.id)
-    if (c.razao_social) mapClientePorNome.set(c.razao_social.trim().toLowerCase(), c.id)
+    if (c.razao_social) {
+      mapClientePorNome.set(c.razao_social.trim().toLowerCase(), c.id)
+      listaClientesParaSimilaridade.push({ id: c.id, razao: c.razao_social, doc: d })
+    }
   }
 
   // Se houver clientes validados na mesma importação, registrar também
   if (clientesValidados) {
     for (const cv of clientesValidados) {
+      const cliId = cv.idExistente || `temp_${cv.dadosMapeados.razao_social}`
       if (cv.dadosMapeados.id_planilha) {
-        mapClientePorIdPlanilha.set(
-          cv.dadosMapeados.id_planilha.trim().toLowerCase(),
-          cv.dadosMapeados.razao_social,
-        )
+        mapClientePorIdPlanilha.set(cv.dadosMapeados.id_planilha.trim().toLowerCase(), cliId)
+        mapClientePorIdPlanilha.set(cv.dadosMapeados.id_planilha.trim(), cliId)
       }
       if (cv.dadosMapeados.cnpj_cpf) {
         const d = limparDocumento(cv.dadosMapeados.cnpj_cpf)
-        if (d) mapClientePorDoc.set(d, cv.idExistente || `temp_${cv.dadosMapeados.razao_social}`)
+        if (d) mapClientePorDoc.set(d, cliId)
       }
       if (cv.dadosMapeados.razao_social) {
-        mapClientePorNome.set(
-          cv.dadosMapeados.razao_social.trim().toLowerCase(),
-          cv.idExistente || `temp_${cv.dadosMapeados.razao_social}`,
-        )
+        mapClientePorNome.set(cv.dadosMapeados.razao_social.trim().toLowerCase(), cliId)
+        listaClientesParaSimilaridade.push({
+          id: cliId,
+          razao: cv.dadosMapeados.razao_social,
+          doc: limparDocumento(cv.dadosMapeados.cnpj_cpf || ''),
+        })
       }
     }
   }
@@ -361,22 +378,22 @@ export async function validarProjetos(
     // Status mapeado para CRM
     const { statusCrm, faseCrm } = mapearStatusProjeto(statusRaw)
 
-    // Tentar resolver cliente
+    // Tentar resolver cliente em cascata robusta:
+    // (1) Por ID do Cliente da planilha (C001, etc.)
     let clienteResolvidoId: string | undefined
 
-    // 1. Por ID do Cliente da planilha
     if (idCliente) {
-      const matchDoc = mapClientePorDoc.get(limparDocumento(idCliente))
-      if (matchDoc) clienteResolvidoId = matchDoc
-      const matchIdPlan = mapClientePorIdPlanilha.get(idCliente.trim().toLowerCase())
-      if (!clienteResolvidoId && matchIdPlan) {
-        // Tentar resolver pelo nome correspondente
-        const matchPorNome = mapClientePorNome.get(matchIdPlan.trim().toLowerCase())
-        if (matchPorNome) clienteResolvidoId = matchPorNome
+      const matchIdPlan =
+        mapClientePorIdPlanilha.get(idCliente.trim().toLowerCase()) ||
+        mapClientePorIdPlanilha.get(idCliente.trim())
+      if (matchIdPlan) clienteResolvidoId = matchIdPlan
+      if (!clienteResolvidoId) {
+        const matchDoc = mapClientePorDoc.get(limparDocumento(idCliente))
+        if (matchDoc) clienteResolvidoId = matchDoc
       }
     }
 
-    // 2. Por CNPJ/CPF no clienteRef ou idCliente
+    // (2) Por CNPJ/CPF no clienteRef ou idCliente
     if (!clienteResolvidoId && clienteRef) {
       const docRef = limparDocumento(clienteRef)
       if (docRef.length === 11 || docRef.length === 14) {
@@ -384,19 +401,31 @@ export async function validarProjetos(
       }
     }
 
-    // 3. Por similaridade de nome
+    // (3) Por similaridade ou correspondência de Razão Social
     if (!clienteResolvidoId && clienteRef) {
       const nomeLimpo = clienteRef.trim().toLowerCase()
       // Exato
       if (mapClientePorNome.has(nomeLimpo)) {
         clienteResolvidoId = mapClientePorNome.get(nomeLimpo)
       } else {
-        // Busca parcial nas chaves
-        for (const [k, v] of mapClientePorNome.entries()) {
-          if (nomeLimpo.includes(k) || k.includes(nomeLimpo)) {
-            clienteResolvidoId = v
-            break
+        // Similaridade ponderada e inclusão mútua
+        let melhorMatch: { id: string; score: number; nome: string } | null = null
+        for (const c of listaClientesParaSimilaridade) {
+          const sim = calcularSimilaridadeTexto(c.razao, clienteRef)
+          const cNorm = c.razao.trim().toLowerCase()
+          const ehSubstr =
+            (nomeLimpo.length >= 4 && cNorm.includes(nomeLimpo)) ||
+            (cNorm.length >= 4 && nomeLimpo.includes(cNorm))
+          const score = ehSubstr ? Math.max(sim, 0.7) : sim
+          if (score > (melhorMatch?.score || 0)) {
+            melhorMatch = { id: c.id, score, nome: c.razao }
           }
+        }
+        if (melhorMatch && melhorMatch.score >= 0.45) {
+          clienteResolvidoId = melhorMatch.id
+          avisos.push(
+            `Cliente sugerido por similaridade (${Math.round(melhorMatch.score * 100)}%): "${melhorMatch.nome}"`,
+          )
         }
       }
     }
@@ -415,7 +444,9 @@ export async function validarProjetos(
     let conflitoDescricao: string | undefined
 
     if (idPlanilha) {
-      const projExistente = projetosDb.find((p) => p.id_planilha === idPlanilha)
+      const projExistente = projetosDb.find(
+        (p) => (p.id_planilha || '').trim().toLowerCase() === idPlanilha.trim().toLowerCase(),
+      )
       if (projExistente) {
         idExistente = projExistente.id
         acao = 'atualizar'
@@ -571,6 +602,19 @@ export async function validarFinanceiro(
       if (match) {
         projetoIdVinculado = match.id
         clienteIdVinculado = match.cliente
+      }
+    }
+
+    // Se projetos foram validados na mesma sessão, tentar resolver pelo ID de planilha deles
+    if (!projetoIdVinculado && idProjeto && projetosValidados) {
+      const matchPv = projetosValidados.find(
+        (pv) =>
+          (pv.dadosMapeados.id_planilha || '').trim().toLowerCase() ===
+          idProjeto.trim().toLowerCase(),
+      )
+      if (matchPv) {
+        projetoIdVinculado = matchPv.idExistente || `temp_${matchPv.dadosMapeados.id_planilha}`
+        clienteIdVinculado = matchPv.dadosMapeados.cliente_id_vinculado
       }
     }
 

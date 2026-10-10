@@ -5,8 +5,9 @@ import {
   type FinanceiroMapeado,
   type ProjetoMapeado,
 } from './importacaoValidador'
-import { deduzirTrilha, limparDocumento } from './importacaoParser'
+import { deduzirTrilha, formatarDocumento, limparDocumento } from './importacaoParser'
 import type { ItemValidado } from './importacaoParser'
+import { calcularSimilaridadeTexto } from './nfseCorrelacionador'
 
 export interface ProgressoImportacao {
   etapaAtual: string
@@ -37,6 +38,33 @@ export interface ImportacaoExecucaoResultado {
   logId?: string
 }
 
+/**
+ * Normaliza e trunca o nome do projeto para respeitar estritamente o limite de 220 caracteres do PocketBase.
+ * Prioridade:
+ * 1. escopo_resumido (truncado com reticências se > 218 chars)
+ * 2. tipo_servico (truncado se > 218 chars)
+ * 3. Fallback: `Projeto ${idPlanilha || 'Importado'}`
+ */
+export function normalizarNomeProjeto(
+  escopoResumido?: string,
+  tipoServico?: string,
+  idPlanilha?: string,
+): string {
+  const MAX_LEN = 218 // Deixa margem segura para max 220
+  const escopo = (escopoResumido || '').trim()
+  if (escopo) {
+    if (escopo.length <= MAX_LEN) return escopo
+    return escopo.slice(0, MAX_LEN - 3).trimEnd() + '...'
+  }
+  const servico = (tipoServico || '').trim()
+  if (servico) {
+    if (servico.length <= MAX_LEN) return servico
+    return servico.slice(0, MAX_LEN - 3).trimEnd() + '...'
+  }
+  const fallback = idPlanilha ? `Projeto ${idPlanilha.trim()}` : 'Projeto Importado'
+  return fallback.slice(0, MAX_LEN)
+}
+
 export async function executarImportacao(
   dados: {
     arquivoNome: string
@@ -63,6 +91,10 @@ export async function executarImportacao(
   // Mapeadores para referências cruzadas em runtime
   const mapClientesIdPorIdPlanilha = new Map<string, string>() // C001 -> id
   const mapClientesIdPorDoc = new Map<string, string>() // 09296159000170 -> id
+  const mapClientesRegistros = new Map<
+    string,
+    { id: string; razao_social: string; cnpj_cpf: string }
+  >() // id -> dados
   const mapClientesIdPorNome = new Map<string, string>() // zurich -> id
   const mapProjetosIdPorIdPlanilha = new Map<string, string>() // P001 -> id
   const mapProjetosIdPorNome = new Map<string, string>() // nome -> id
@@ -183,11 +215,17 @@ export async function executarImportacao(
         // Guardar nos mapas de resolução
         if (c.id_planilha) {
           mapClientesIdPorIdPlanilha.set(c.id_planilha.trim().toLowerCase(), clienteId)
+          mapClientesIdPorIdPlanilha.set(c.id_planilha.trim(), clienteId)
         }
         if (c.cnpj_cpf) {
           const doc = limparDocumento(c.cnpj_cpf)
           if (doc) mapClientesIdPorDoc.set(doc, clienteId)
         }
+        mapClientesRegistros.set(clienteId, {
+          id: clienteId,
+          razao_social: c.razao_social || '',
+          cnpj_cpf: c.cnpj_cpf || '',
+        })
         if (c.razao_social) {
           mapClientesIdPorNome.set(c.razao_social.trim().toLowerCase(), clienteId)
         }
@@ -219,16 +257,46 @@ export async function executarImportacao(
   if (dados.projetos && dados.projetos.length > 0) {
     reportarProgresso('Importando Projetos...')
 
-    // Pré-carregar clientes existentes se necessário
-    if (mapClientesIdPorNome.size === 0) {
+    // Pré-carregar ou enriquecer com clientes existentes do banco para resolução completa
+    try {
       const cls = await pb
         .collection('clientes')
-        .getFullList({ fields: 'id,razao_social,cnpj_cpf' })
+        .getFullList({ fields: 'id,razao_social,cnpj_cpf', requestKey: null })
       for (const cl of cls) {
         const d = limparDocumento(cl.cnpj_cpf)
-        if (d) mapClientesIdPorDoc.set(d, cl.id)
-        if (cl.razao_social) mapClientesIdPorNome.set(cl.razao_social.trim().toLowerCase(), cl.id)
+        if (d && !mapClientesIdPorDoc.has(d)) mapClientesIdPorDoc.set(d, cl.id)
+        if (cl.razao_social) {
+          const rz = cl.razao_social.trim().toLowerCase()
+          if (!mapClientesIdPorNome.has(rz)) mapClientesIdPorNome.set(rz, cl.id)
+        }
+        if (!mapClientesRegistros.has(cl.id)) {
+          mapClientesRegistros.set(cl.id, {
+            id: cl.id,
+            razao_social: cl.razao_social || '',
+            cnpj_cpf: cl.cnpj_cpf || '',
+          })
+        }
       }
+    } catch (errDb) {
+      console.warn('Aviso: falha ao carregar lista complementar de clientes do banco:', errDb)
+    }
+
+    // Pré-carregar projetos existentes para idempotência (id_planilha -> id)
+    try {
+      const projsExistentes = await pb
+        .collection('projetos')
+        .getFullList({ fields: 'id,id_planilha,nome,numero', requestKey: null })
+      for (const pr of projsExistentes) {
+        if (pr.id_planilha) {
+          mapProjetosIdPorIdPlanilha.set(pr.id_planilha.trim().toLowerCase(), pr.id)
+          mapProjetosIdPorIdPlanilha.set(pr.id_planilha.trim(), pr.id)
+        }
+        if (pr.nome) {
+          mapProjetosIdPorNome.set(pr.nome.trim().toLowerCase(), pr.id)
+        }
+      }
+    } catch (errDb) {
+      console.warn('Aviso: falha ao carregar lista de projetos do banco:', errDb)
     }
 
     for (const item of dados.projetos) {
@@ -243,57 +311,96 @@ export async function executarImportacao(
 
       const p = item.dadosMapeados
       try {
-        // Resolver ID do cliente
+        // Resolver ID do cliente em cascata robusta:
+        // (1) Mapa em memória da aba Clientes da mesma execução (id_planilha -> id criado)
         let clienteId = p.cliente_id_vinculado
+        let motivoVinculo = ''
 
         if (!clienteId && p.id_cliente) {
-          clienteId = mapClientesIdPorIdPlanilha.get(p.id_cliente.trim().toLowerCase())
-          if (!clienteId) {
-            const doc = limparDocumento(p.id_cliente)
-            if (doc) clienteId = mapClientesIdPorDoc.get(doc)
+          const idLimpo = p.id_cliente.trim().toLowerCase()
+          clienteId =
+            mapClientesIdPorIdPlanilha.get(idLimpo) ||
+            mapClientesIdPorIdPlanilha.get(p.id_cliente.trim())
+          if (clienteId) motivoVinculo = `id_planilha (${p.id_cliente})`
+        }
+
+        // (2) CNPJ/CPF normalizado (em id_cliente ou cliente_ref)
+        if (!clienteId && p.id_cliente) {
+          const doc = limparDocumento(p.id_cliente)
+          if (doc && (doc.length === 11 || doc.length === 14)) {
+            clienteId = mapClientesIdPorDoc.get(doc)
+            if (clienteId) motivoVinculo = `CNPJ/CPF (${doc})`
           }
         }
 
         if (!clienteId && p.cliente_ref) {
           const doc = limparDocumento(p.cliente_ref)
-          if (doc) clienteId = mapClientesIdPorDoc.get(doc)
-          if (!clienteId) {
-            clienteId = mapClientesIdPorNome.get(p.cliente_ref.trim().toLowerCase())
+          if (doc && (doc.length === 11 || doc.length === 14)) {
+            clienteId = mapClientesIdPorDoc.get(doc)
+            if (clienteId) motivoVinculo = `CNPJ/CPF (${doc})`
           }
-          if (!clienteId) {
-            // Tenta match parcial
-            for (const [k, v] of mapClientesIdPorNome.entries()) {
-              if (
-                k.includes(p.cliente_ref.trim().toLowerCase()) ||
-                p.cliente_ref.trim().toLowerCase().includes(k)
-              ) {
-                clienteId = v
-                break
+        }
+
+        // (3) Razão Social exata ou similaridade
+        if (!clienteId && p.cliente_ref) {
+          const refNorm = p.cliente_ref.trim().toLowerCase()
+          if (mapClientesIdPorNome.has(refNorm)) {
+            clienteId = mapClientesIdPorNome.get(refNorm)
+            motivoVinculo = `Razão Social exata ("${p.cliente_ref}")`
+          } else {
+            // Busca pelo calcularSimilaridadeTexto ou inclusão mútua
+            let melhorMatch: { id: string; score: number; nome: string } | null = null
+            for (const cReg of mapClientesRegistros.values()) {
+              const sim = calcularSimilaridadeTexto(cReg.razao_social, p.cliente_ref)
+              const cNorm = cReg.razao_social.trim().toLowerCase()
+              const ehSubstr =
+                (refNorm.length >= 4 && cNorm.includes(refNorm)) ||
+                (cNorm.length >= 4 && refNorm.includes(cNorm))
+              const scoreFinal = ehSubstr ? Math.max(sim, 0.7) : sim
+              if (scoreFinal > (melhorMatch?.score || 0)) {
+                melhorMatch = { id: cReg.id, score: scoreFinal, nome: cReg.razao_social }
               }
+            }
+
+            if (melhorMatch && melhorMatch.score >= 0.45) {
+              clienteId = melhorMatch.id
+              motivoVinculo = `Similaridade de nome (${Math.round(melhorMatch.score * 100)}% com "${melhorMatch.nome}")`
             }
           }
         }
 
-        // Se ainda não encontrou cliente, tenta associar ao primeiro cliente importado ou cria vínculo padrão
+        // (4) Se nenhum cliente encontrado, associar ao primeiro cliente disponível como fallback
+        // E registrar pendência explícita de validação
+        let clientePendenteManual = false
         if (!clienteId) {
-          const firstClient = mapClientesIdPorNome.values().next().value
+          const firstClient = mapClientesRegistros.values().next().value
           if (firstClient) {
-            clienteId = firstClient
+            clienteId = firstClient.id
+            clientePendenteManual = true
             resultado.avisosGerais.push(
-              `Projeto ${p.id_planilha || p.tipo_servico}: cliente "${p.cliente_ref}" associado automaticamente.`,
+              `Projeto "${p.id_planilha || p.tipo_servico || 'Linha ' + item.linhaOriginal}": Cliente original "${p.cliente_ref || p.id_cliente || 'N/A'}" não localizado. Vinculado provisoriamente a "${firstClient.razao_social}". Necessita conferência.`,
             )
           } else {
+            // Sem nenhum cliente cadastrado no banco nem na planilha
             throw new Error(
-              `Cliente não localizado para o projeto (${p.cliente_ref || p.id_cliente})`,
+              `Nenhum cliente disponível no sistema para vincular ao projeto (${p.cliente_ref || p.id_cliente || 'sem identificador'})`,
             )
           }
         }
 
+        // Truncar nome de projeto para respeitar limite de 220 caracteres (PocketBase)
+        const nomeProjetoTruncado = normalizarNomeProjeto(
+          p.escopo_resumido,
+          p.tipo_servico,
+          p.id_planilha,
+        )
         const trilha = deduzirTrilha(p.tipo_servico, p.escopo_resumido)
-        const nomeProjeto = p.escopo_resumido || p.tipo_servico || `Projeto ${p.id_planilha}`
+
+        // Limitar escopo_resumido a no máximo 1000 caracteres
+        const escopoCompleto = (p.escopo_resumido || '').slice(0, 1000)
 
         const payloadProjeto: Record<string, unknown> = {
-          nome: nomeProjeto,
+          nome: nomeProjetoTruncado,
           cliente: clienteId,
           trilha,
           fase: p.fase_crm || 'Proposta enviada',
@@ -302,7 +409,7 @@ export async function executarImportacao(
           id_planilha: p.id_planilha || '',
           numero_pc_pt: p.numero_pc_pt || '',
           tipo_servico: p.tipo_servico || '',
-          escopo_resumido: p.escopo_resumido || '',
+          escopo_resumido: escopoCompleto,
           municipio_uf: p.municipio_uf || '',
           aerodromo: p.aerodromo || '',
           prazo_dias: p.prazo_dias || 0,
@@ -320,11 +427,19 @@ export async function executarImportacao(
 
         let projetoId = item.idExistente
 
-        if (item.acao === 'atualizar' && projetoId) {
+        // Se item não tinha idExistente na pré-validação, confere no mapa carregado de projetos
+        if (!projetoId && p.id_planilha) {
+          const idPlanLimpo = p.id_planilha.trim().toLowerCase()
+          if (mapProjetosIdPorIdPlanilha.has(idPlanLimpo)) {
+            projetoId = mapProjetosIdPorIdPlanilha.get(idPlanLimpo)
+          }
+        }
+
+        if (projetoId && (item.acao === 'atualizar' || item.acao === 'criar')) {
           await pb.collection('projetos').update(projetoId, payloadProjeto)
           resultado.projetos.atualizados++
         } else {
-          // O hook numeracao_projeto.js do PocketBase gera o número AAAA-NNN automaticamente
+          // O hook numeracao_projeto.js do PocketBase gera o número AAAA-NNN sequencial global automaticamente
           // quando não enviado no payload!
           const novoProj = await pb.collection('projetos').create(payloadProjeto)
           projetoId = novoProj.id
@@ -333,19 +448,31 @@ export async function executarImportacao(
 
         if (p.id_planilha) {
           mapProjetosIdPorIdPlanilha.set(p.id_planilha.trim().toLowerCase(), projetoId)
+          mapProjetosIdPorIdPlanilha.set(p.id_planilha.trim(), projetoId)
         }
-        mapProjetosIdPorNome.set(nomeProjeto.trim().toLowerCase(), projetoId)
+        mapProjetosIdPorNome.set(nomeProjetoTruncado.trim().toLowerCase(), projetoId)
+        if (p.escopo_resumido) {
+          mapProjetosIdPorNome.set(p.escopo_resumido.trim().toLowerCase(), projetoId)
+        }
 
-        if (item.camposAValidar.length > 0) {
+        const pendencias = [...item.camposAValidar]
+        if (clientePendenteManual) {
+          pendencias.push(
+            `Vínculo de cliente a validar (original: ${p.cliente_ref || p.id_cliente || 'N/A'})`,
+          )
+        }
+
+        if (pendencias.length > 0) {
           resultado.pendenciasValidacao.push({
             colecao: 'projetos',
             id: projetoId,
-            titulo: `${p.id_planilha || ''} — ${nomeProjeto}`.trim(),
-            camposPendentes: item.camposAValidar,
+            titulo: `${p.id_planilha || ''} — ${nomeProjetoTruncado}`.trim(),
+            camposPendentes: pendencias,
             rota: `/projetos/${projetoId}`,
           })
         }
       } catch (err: unknown) {
+        // Resiliência de lote: erro em projeto individual não aborta o lote
         resultado.projetos.erros++
         const msg = err instanceof Error ? err.message : String(err)
         resultado.errosDetalhados.push(
@@ -362,16 +489,44 @@ export async function executarImportacao(
   if (dados.financeiro && dados.financeiro.length > 0) {
     reportarProgresso('Importando Financeiro...')
 
-    // Pré-carregar projetos caso não existam no mapa
-    if (mapProjetosIdPorIdPlanilha.size === 0) {
+    // Pré-carregar ou enriquecer projetos caso novos projetos tenham sido gravados ou faltem no mapa
+    try {
       const prs = await pb
         .collection('projetos')
-        .getFullList({ fields: 'id,id_planilha,cliente,nome' })
+        .getFullList({ fields: 'id,id_planilha,cliente,nome,numero', requestKey: null })
       for (const pr of prs) {
-        if (pr.id_planilha)
+        if (pr.id_planilha) {
           mapProjetosIdPorIdPlanilha.set(pr.id_planilha.trim().toLowerCase(), pr.id)
+          mapProjetosIdPorIdPlanilha.set(pr.id_planilha.trim(), pr.id)
+        }
         if (pr.nome) mapProjetosIdPorNome.set(pr.nome.trim().toLowerCase(), pr.id)
       }
+    } catch (errDb) {
+      console.warn('Aviso: falha ao recarregar projetos para etapa financeira:', errDb)
+    }
+
+    // Pré-carregar parcelas existentes por id_lancamento e nf_numero para idempotência
+    const mapParcelasExistentes = new Map<string, string>()
+    const mapParcelasPorNf = new Map<string, string>()
+    try {
+      const parcelasExistentes = await pb
+        .collection('parcelas')
+        .getFullList({ fields: 'id,id_lancamento,nf_numero,projeto', requestKey: null })
+      for (const parc of parcelasExistentes) {
+        if (parc.id_lancamento) {
+          mapParcelasExistentes.set(parc.id_lancamento.trim().toLowerCase(), parc.id)
+          mapParcelasExistentes.set(parc.id_lancamento.trim(), parc.id)
+        }
+        if (parc.nf_numero) {
+          const nfLimpa = parc.nf_numero.trim().toLowerCase()
+          mapParcelasPorNf.set(nfLimpa, parc.id)
+          if (parc.projeto) {
+            mapParcelasPorNf.set(`${parc.projeto}_${nfLimpa}`, parc.id)
+          }
+        }
+      }
+    } catch (errDb) {
+      console.warn('Aviso: falha ao carregar parcelas existentes:', errDb)
     }
 
     for (const item of dados.financeiro) {
@@ -389,34 +544,50 @@ export async function executarImportacao(
         let projetoId = f.projeto_id_vinculado
         let clienteId = f.cliente_id_vinculado
 
+        // 1. Resolver projeto por ID Planilha (P001, etc.)
         if (!projetoId && f.id_projeto) {
-          projetoId = mapProjetosIdPorIdPlanilha.get(f.id_projeto.trim().toLowerCase())
+          const idProjLimpo = f.id_projeto.trim().toLowerCase()
+          projetoId =
+            mapProjetosIdPorIdPlanilha.get(idProjLimpo) ||
+            mapProjetosIdPorIdPlanilha.get(f.id_projeto.trim())
         }
 
+        // 2. Resolver projeto por referência textual ou similaridade
         if (!projetoId && f.projeto_ref) {
           const ref = f.projeto_ref.trim().toLowerCase()
           projetoId = mapProjetosIdPorNome.get(ref)
           if (!projetoId) {
+            // Match parcial ou por similaridade
+            let melhorProjMatch: { id: string; score: number } | null = null
             for (const [k, v] of mapProjetosIdPorNome.entries()) {
               if (k.includes(ref) || ref.includes(k)) {
                 projetoId = v
                 break
               }
+              const sim = calcularSimilaridadeTexto(k, ref)
+              if (sim > (melhorProjMatch?.score || 0)) {
+                melhorProjMatch = { id: v, score: sim }
+              }
+            }
+            if (!projetoId && melhorProjMatch && melhorProjMatch.score >= 0.5) {
+              projetoId = melhorProjMatch.id
             }
           }
         }
 
+        let projetoVinculadoFallback = false
         if (!projetoId) {
           // Busca primeiro projeto disponível se nenhum informado
           const firstProj = mapProjetosIdPorIdPlanilha.values().next().value
           if (firstProj) {
             projetoId = firstProj
+            projetoVinculadoFallback = true
             resultado.avisosGerais.push(
-              `Lançamento ${f.id_lancamento}: vinculado ao projeto disponível ${firstProj}.`,
+              `Lançamento ${f.id_lancamento || 'sem ID'}: Projeto "${f.id_projeto || f.projeto_ref || 'N/A'}" não localizado. Vinculado provisoriamente ao projeto ${firstProj}.`,
             )
           } else {
             throw new Error(
-              `Projeto não localizado para o lançamento financeiro ${f.id_lancamento}`,
+              `Nenhum projeto disponível no sistema para vincular o lançamento financeiro ${f.id_lancamento || 'sem ID'}`,
             )
           }
         }
@@ -426,7 +597,7 @@ export async function executarImportacao(
           try {
             const prRecord = await pb
               .collection('projetos')
-              .getOne(projetoId, { fields: 'cliente' })
+              .getOne(projetoId, { fields: 'cliente', requestKey: null })
             clienteId = prRecord.cliente
           } catch {
             // prossegue
@@ -434,8 +605,14 @@ export async function executarImportacao(
         }
 
         if (!clienteId) {
-          const firstClient = mapClientesIdPorNome.values().next().value
-          clienteId = firstClient || ''
+          const firstClient = mapClientesRegistros.values().next().value
+          clienteId = firstClient ? firstClient.id : ''
+        }
+
+        if (!clienteId) {
+          throw new Error(
+            `Cliente não localizado para a parcela financeira ${f.id_lancamento || 'sem ID'}`,
+          )
         }
 
         // Mapear status financeiro
@@ -449,10 +626,18 @@ export async function executarImportacao(
 
         const dataVenc = f.vencimento || f.data_prevista || new Date().toISOString().split('T')[0]
 
+        // Normalização de percentual_contrato (garante número entre 0 e 100)
+        let percContrato = typeof f.percentual_contrato === 'number' ? f.percentual_contrato : 0
+        if (percContrato > 0 && percContrato <= 1) {
+          percContrato = percContrato * 100
+        }
+        if (percContrato > 100) percContrato = 100
+        if (percContrato < 0) percContrato = 0
+
         const payloadParcela: Record<string, unknown> = {
           projeto: projetoId,
           cliente: clienteId,
-          descricao: f.numero_parcela_marco || 'Parcela de contrato',
+          descricao: (f.numero_parcela_marco || 'Parcela de contrato').slice(0, 250),
           valor: f.valor || 0,
           gatilho: 'manual',
           nf_numero: f.nf_numero || '',
@@ -462,7 +647,7 @@ export async function executarImportacao(
           observacoes: f.observacoes || '',
           id_lancamento: f.id_lancamento || '',
           numero_parcela_marco: f.numero_parcela_marco || '',
-          percentual_contrato: f.percentual_contrato || 0,
+          percentual_contrato: percContrato,
           evento_comprobatorio: f.evento_comprobatorio || '',
           status_pagamento: f.status_pagamento || '',
           origem_importacao: true,
@@ -476,26 +661,50 @@ export async function executarImportacao(
         }
 
         let parcelaId = item.idExistente
+        if (!parcelaId && f.id_lancamento) {
+          const idLancLimpo = f.id_lancamento.trim().toLowerCase()
+          if (mapParcelasExistentes.has(idLancLimpo)) {
+            parcelaId = mapParcelasExistentes.get(idLancLimpo)
+          }
+        }
+        // Se ainda não encontrou por id_lancamento e tiver nf_numero vinculada ao projeto, checa idempotência
+        if (!parcelaId && f.nf_numero && projetoId) {
+          const chaveNfProj = `${projetoId}_${f.nf_numero.trim().toLowerCase()}`
+          if (mapParcelasPorNf.has(chaveNfProj)) {
+            parcelaId = mapParcelasPorNf.get(chaveNfProj)
+          }
+        }
 
-        if (item.acao === 'atualizar' && parcelaId) {
+        if (parcelaId && (item.acao === 'atualizar' || item.acao === 'criar')) {
           await pb.collection('parcelas').update(parcelaId, payloadParcela)
           resultado.financeiro.atualizados++
         } else {
           const novaParcela = await pb.collection('parcelas').create(payloadParcela)
           parcelaId = novaParcela.id
+          if (f.id_lancamento) {
+            mapParcelasExistentes.set(f.id_lancamento.trim().toLowerCase(), parcelaId)
+          }
           resultado.financeiro.criados++
         }
 
-        if (item.camposAValidar.length > 0) {
+        const pendencias = [...item.camposAValidar]
+        if (projetoVinculadoFallback) {
+          pendencias.push(
+            `Vínculo de projeto a conferir (original: ${f.id_projeto || f.projeto_ref || 'N/A'})`,
+          )
+        }
+
+        if (pendencias.length > 0) {
           resultado.pendenciasValidacao.push({
             colecao: 'parcelas',
             id: parcelaId,
-            titulo: `${f.id_lancamento || 'Lançamento'} — ${f.numero_parcela_marco}`,
-            camposPendentes: item.camposAValidar,
+            titulo: `${f.id_lancamento || 'Lançamento'} — ${f.numero_parcela_marco || 'Parcela'}`,
+            camposPendentes: pendencias,
             rota: `/financeiro`,
           })
         }
       } catch (err: unknown) {
+        // Resiliência de lote: erro em parcela individual não aborta o lote
         resultado.financeiro.erros++
         const msg = err instanceof Error ? err.message : String(err)
         resultado.errosDetalhados.push(
