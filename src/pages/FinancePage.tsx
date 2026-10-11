@@ -1,16 +1,20 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import {
   Banknote,
+  BarChart3,
   CalendarClock,
   Check,
   CheckCircle2,
   CheckSquare,
   CircleDollarSign,
   CopyX,
+  CreditCard,
   FileSpreadsheet,
+  FileText,
   Layers,
   Link as LinkIcon,
   Plus,
+  Receipt,
   RotateCcw,
   Search,
   Sparkles,
@@ -54,7 +58,20 @@ import { formatCurrency, formatDate } from '@/lib/format'
 import { createOne, updateOne } from '@/services/api'
 import { vincularNotaOrfaAParcela } from '@/services/nfseExecutor'
 import type { NfseDadoExtraido } from '@/services/nfseParser'
-import type { ClienteRecord, ParcelaRecord, ProjetoRecord } from '@/types/crm'
+import type {
+  ClienteRecord,
+  ContaPagarRecord,
+  ContaReceberRecord,
+  ExtratoRecord,
+  ExtratoTransacaoRecord,
+  ParcelaRecord,
+  ProjetoRecord,
+} from '@/types/crm'
+import { ContasPagarTab } from '@/components/financeiro/ContasPagarTab'
+import { ContasReceberTab } from '@/components/financeiro/ContasReceberTab'
+import { FluxoCaixaTab } from '@/components/financeiro/FluxoCaixaTab'
+import { ExtratosComprovantesTab } from '@/components/financeiro/ExtratosComprovantesTab'
+import { RelatoriosFinanceirosTab } from '@/components/financeiro/RelatoriosFinanceirosTab'
 
 export default FinancePage
 
@@ -72,11 +89,36 @@ export function FinancePage() {
   const clients = useCrmData<ClienteRecord>('clientes', {
     sort: 'razao_social',
   })
+  const contasPagar = useCrmData<ContaPagarRecord>('contas_pagar', {
+    sort: '-data_vencimento',
+    expand: 'cliente_fornecedor,projeto,criado_por',
+  })
+  const contasReceber = useCrmData<ContaReceberRecord>('contas_receber', {
+    sort: '-data_vencimento',
+    expand: 'cliente,projeto,criado_por',
+  })
+  const extratos = useCrmData<ExtratoRecord>('extratos', {
+    sort: '-created',
+    expand: 'usuario',
+  })
+  const extratosTransacoes = useCrmData<ExtratoTransacaoRecord>('extratos_transacoes', {
+    sort: '-data',
+    expand: 'extrato',
+  })
+
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState(params.get('status') || 'todos')
   const [month, setMonth] = useState('todos')
   const [projectFilter, setProjectFilter] = useState(params.get('projeto') || 'todos')
-  const [activeTab, setActiveTab] = useState<'parcelas' | 'orfas'>('parcelas')
+  const [activeTab, setActiveTab] = useState<
+    | 'contas_pagar'
+    | 'contas_receber'
+    | 'fluxo_caixa'
+    | 'extratos'
+    | 'relatorios'
+    | 'parcelas'
+    | 'orfas'
+  >('contas_pagar')
   const [importNfseOpen, setImportNfseOpen] = useState(false)
   const [duplicadasModalOpen, setDuplicadasModalOpen] = useState(false)
   const [extrairProjetosModalOpen, setExtrairProjetosModalOpen] = useState(false)
@@ -516,28 +558,103 @@ export function FinancePage() {
         )}
       </div>
 
-      {/* Navegação entre Parcelas e Notas Órfãs */}
-      <div className="mt-5 flex items-center gap-2 border-b">
+      {/* Navegação das Abas Principais do Módulo Financeiro */}
+      <div className="mt-6 flex flex-wrap items-center gap-2 border-b border-neutral-200">
+        <button
+          onClick={() => setActiveTab('contas_pagar')}
+          className={`pb-3 px-3 text-xs sm:text-sm font-bold border-b-2 transition flex items-center gap-1.5 ${
+            activeTab === 'contas_pagar'
+              ? 'border-[#FF6A13] text-[#FF6A13]'
+              : 'border-transparent text-[#737373] hover:text-[#333]'
+          }`}
+        >
+          <CreditCard className="h-4 w-4" />
+          Contas a Pagar
+          {contasPagar.data.length > 0 && (
+            <span className="ml-1 rounded-full bg-neutral-100 text-neutral-700 text-[10px] px-1.5 py-0.2">
+              {contasPagar.data.length}
+            </span>
+          )}
+        </button>
+
+        <button
+          onClick={() => setActiveTab('contas_receber')}
+          className={`pb-3 px-3 text-xs sm:text-sm font-bold border-b-2 transition flex items-center gap-1.5 ${
+            activeTab === 'contas_receber'
+              ? 'border-[#FF6A13] text-[#FF6A13]'
+              : 'border-transparent text-[#737373] hover:text-[#333]'
+          }`}
+        >
+          <Receipt className="h-4 w-4" />
+          Contas a Receber
+          <span className="ml-1 rounded-full bg-neutral-100 text-neutral-700 text-[10px] px-1.5 py-0.2">
+            {installments.data.length + contasReceber.data.length}
+          </span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('fluxo_caixa')}
+          className={`pb-3 px-3 text-xs sm:text-sm font-bold border-b-2 transition flex items-center gap-1.5 ${
+            activeTab === 'fluxo_caixa'
+              ? 'border-[#FF6A13] text-[#FF6A13]'
+              : 'border-transparent text-[#737373] hover:text-[#333]'
+          }`}
+        >
+          <BarChart3 className="h-4 w-4" />
+          Fluxo de Caixa
+        </button>
+
+        <button
+          onClick={() => setActiveTab('extratos')}
+          className={`pb-3 px-3 text-xs sm:text-sm font-bold border-b-2 transition flex items-center gap-1.5 ${
+            activeTab === 'extratos'
+              ? 'border-[#FF6A13] text-[#FF6A13]'
+              : 'border-transparent text-[#737373] hover:text-[#333]'
+          }`}
+        >
+          <FileSpreadsheet className="h-4 w-4" />
+          Extratos & Comprovantes
+          {extratos.data.length > 0 && (
+            <span className="ml-1 rounded-full bg-orange-100 text-[#D65100] text-[10px] px-1.5 py-0.2 font-bold">
+              {extratos.data.length}
+            </span>
+          )}
+        </button>
+
+        <button
+          onClick={() => setActiveTab('relatorios')}
+          className={`pb-3 px-3 text-xs sm:text-sm font-bold border-b-2 transition flex items-center gap-1.5 ${
+            activeTab === 'relatorios'
+              ? 'border-[#FF6A13] text-[#FF6A13]'
+              : 'border-transparent text-[#737373] hover:text-[#333]'
+          }`}
+        >
+          <FileText className="h-4 w-4" />
+          Relatórios Gerenciais & Contábeis
+        </button>
+
         <button
           onClick={() => setActiveTab('parcelas')}
-          className={`pb-3 text-sm font-bold border-b-2 transition ${
+          className={`pb-3 px-3 text-xs sm:text-sm font-bold border-b-2 transition flex items-center gap-1.5 ${
             activeTab === 'parcelas'
               ? 'border-[#FF6A13] text-[#FF6A13]'
               : 'border-transparent text-[#737373] hover:text-[#333]'
           }`}
         >
-          Parcelas Cadastradas ({installments.data.length})
+          <Layers className="h-4 w-4" />
+          Parcelas de Projetos ({installments.data.length})
         </button>
+
         {canWrite && (
           <button
             onClick={() => setActiveTab('orfas')}
-            className={`pb-3 text-sm font-bold border-b-2 flex items-center gap-1.5 transition ${
+            className={`pb-3 px-3 text-xs sm:text-sm font-bold border-b-2 flex items-center gap-1.5 transition ${
               activeTab === 'orfas'
                 ? 'border-[#FF6A13] text-[#FF6A13]'
                 : 'border-transparent text-[#737373] hover:text-[#333]'
             }`}
           >
-            <Layers className="h-4 w-4" />
+            <Sparkles className="h-4 w-4" />
             Notas Órfãs
             {notasOrfas.length > 0 && (
               <span className="ml-1 rounded-full bg-amber-100 text-amber-800 text-[10px] px-2 py-0.5">
@@ -548,7 +665,79 @@ export function FinancePage() {
         )}
       </div>
 
-      {activeTab === 'orfas' ? (
+      {activeTab === 'contas_pagar' ? (
+        <div className="mt-5">
+          <ContasPagarTab
+            contas={contasPagar.data}
+            projetos={projects.data}
+            clientes={clients.data}
+            canWrite={canWrite}
+            onReload={async () => {
+              void contasPagar.reload()
+            }}
+          />
+        </div>
+      ) : activeTab === 'contas_receber' ? (
+        <div className="mt-5">
+          <ContasReceberTab
+            parcelas={installments.data}
+            contasReceber={contasReceber.data}
+            projetos={projects.data}
+            clientes={clients.data}
+            canWrite={canWrite}
+            onReloadParcelas={async () => {
+              void installments.reload()
+            }}
+            onReloadContasReceber={async () => {
+              void contasReceber.reload()
+            }}
+          />
+        </div>
+      ) : activeTab === 'fluxo_caixa' ? (
+        <div className="mt-5">
+          <FluxoCaixaTab
+            parcelas={installments.data}
+            contasPagar={contasPagar.data}
+            contasReceber={contasReceber.data}
+          />
+        </div>
+      ) : activeTab === 'extratos' ? (
+        <div className="mt-5">
+          <ExtratosComprovantesTab
+            extratos={extratos.data}
+            transacoes={extratosTransacoes.data}
+            parcelas={installments.data}
+            contasPagar={contasPagar.data}
+            contasReceber={contasReceber.data}
+            canWrite={canWrite}
+            onReloadExtratos={async () => {
+              void extratos.reload()
+            }}
+            onReloadTransacoes={async () => {
+              void extratosTransacoes.reload()
+            }}
+            onReloadParcelas={async () => {
+              void installments.reload()
+            }}
+            onReloadContasPagar={async () => {
+              void contasPagar.reload()
+            }}
+            onReloadContasReceber={async () => {
+              void contasReceber.reload()
+            }}
+          />
+        </div>
+      ) : activeTab === 'relatorios' ? (
+        <div className="mt-5">
+          <RelatoriosFinanceirosTab
+            parcelas={installments.data}
+            contasPagar={contasPagar.data}
+            contasReceber={contasReceber.data}
+            projetos={projects.data}
+            clientes={clients.data}
+          />
+        </div>
+      ) : activeTab === 'orfas' ? (
         <div className="mt-5 space-y-4">
           <div className="crm-card p-4 bg-sky-50/50 border-sky-200 text-xs text-sky-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-start gap-2.5">

@@ -355,3 +355,119 @@ export interface TarefaRecord extends RecordModel {
   concluida?: boolean
   expand?: { responsavel?: UserRecord; projeto?: ProjetoRecord; oportunidade?: OportunidadeRecord }
 }
+
+export type CategoriaContaPagar =
+  | 'impostos'
+  | 'folha'
+  | 'terceirizados'
+  | 'despesas_operacionais'
+  | 'equipamentos'
+  | 'outros'
+
+export type StatusContaPagar = 'pendente' | 'pago' | 'cancelado'
+
+export type FormaPagamentoFinanceiro =
+  | 'pix'
+  | 'ted_doc'
+  | 'boleto'
+  | 'cartao_credito'
+  | 'cartao_debito'
+  | 'dinheiro'
+  | 'outro'
+
+export interface ContaPagarRecord extends RecordModel {
+  descricao: string
+  fornecedor: string
+  cliente_fornecedor?: string
+  categoria: CategoriaContaPagar
+  valor: number
+  data_vencimento: string
+  data_pagamento?: string
+  status: StatusContaPagar
+  forma_pagamento?: FormaPagamentoFinanceiro
+  numero_documento?: string
+  projeto?: string
+  comprovante?: string
+  observacoes?: string
+  criado_por?: string
+  expand?: {
+    cliente_fornecedor?: ClienteRecord
+    projeto?: ProjetoRecord
+    criado_por?: UserRecord
+  }
+}
+
+export type CategoriaContaReceber =
+  | 'consultoria_avulsa'
+  | 'servico_tecnico'
+  | 'honorarios'
+  | 'reembolso'
+  | 'rendimento_aplicacao'
+  | 'outros'
+
+export type StatusContaReceber = 'pendente' | 'recebido' | 'cancelado'
+
+export interface ContaReceberRecord extends RecordModel {
+  descricao: string
+  cliente_nome: string
+  cliente?: string
+  categoria: CategoriaContaReceber
+  valor: number
+  valor_recebido?: number
+  data_vencimento: string
+  data_recebimento?: string
+  status: StatusContaReceber
+  forma_recebimento?: FormaPagamentoFinanceiro
+  numero_documento?: string
+  projeto?: string
+  comprovante?: string
+  observacoes?: string
+  criado_por?: string
+  expand?: {
+    cliente?: ClienteRecord
+    projeto?: ProjetoRecord
+    criado_por?: UserRecord
+  }
+}
+
+export type ExtratoFormato = 'ofx' | 'csv' | 'xlsx'
+
+export interface ExtratoRecord extends RecordModel {
+  nome_arquivo: string
+  formato: ExtratoFormato
+  banco?: string
+  conta?: string
+  data_inicio?: string
+  data_fim?: string
+  total_transacoes: number
+  total_entradas: number
+  total_saidas: number
+  saldo_final?: number
+  arquivo?: string
+  usuario?: string
+  expand?: {
+    usuario?: UserRecord
+  }
+}
+
+export type ExtratoTransacaoTipo = 'entrada' | 'saida'
+export type ExtratoConciliacaoStatus = 'pendente' | 'conciliado' | 'ignorado'
+export type ExtratoVinculoTipo = 'parcela' | 'conta_pagar' | 'conta_receber'
+
+export interface ExtratoTransacaoRecord extends RecordModel {
+  extrato: string
+  data: string
+  descricao: string
+  valor: number
+  tipo: ExtratoTransacaoTipo
+  documento_ref?: string
+  fitid?: string
+  status_conciliacao: ExtratoConciliacaoStatus
+  vinculo_tipo?: ExtratoVinculoTipo
+  vinculo_id?: string
+  data_conciliacao?: string
+  observacoes?: string
+  expand?: {
+    extrato?: ExtratoRecord
+  }
+}

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-11T15:23:16.776Z",
+  "generatedAt": "2026-10-11T15:57:32.730Z",
   "collections": [
     {
       "name": "users",
@@ -2227,6 +2227,505 @@
       "indexes": [
         "CREATE UNIQUE INDEX idx_alertas_disp_usuario_chave ON alertas_dispensados (usuario, chave_unica)",
         "CREATE INDEX idx_alertas_disp_usuario ON alertas_dispensados (usuario)"
+      ]
+    },
+    {
+      "name": "contas_pagar",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.role = 'admin' || @request.auth.role = 'financeiro'",
+        "update": "@request.auth.role = 'admin' || @request.auth.role = 'financeiro'",
+        "delete": "@request.auth.role = 'admin' || @request.auth.role = 'financeiro'"
+      },
+      "fields": [
+        {
+          "name": "descricao",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "fornecedor",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "cliente_fornecedor",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "clientes"
+        },
+        {
+          "name": "categoria",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": [
+            "impostos",
+            "folha",
+            "terceirizados",
+            "despesas_operacionais",
+            "equipamentos",
+            "outros"
+          ]
+        },
+        {
+          "name": "valor",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "data_vencimento",
+          "type": "date",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "data_pagamento",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["pendente", "pago", "cancelado"]
+        },
+        {
+          "name": "forma_pagamento",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": [
+            "pix",
+            "ted_doc",
+            "boleto",
+            "cartao_credito",
+            "cartao_debito",
+            "dinheiro",
+            "outro"
+          ]
+        },
+        {
+          "name": "numero_documento",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "projeto",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "projetos"
+        },
+        {
+          "name": "comprovante",
+          "type": "file",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "observacoes",
+          "type": "editor",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "criado_por",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_contas_pagar_vencimento ON contas_pagar (data_vencimento)",
+        "CREATE INDEX idx_contas_pagar_status ON contas_pagar (status)",
+        "CREATE INDEX idx_contas_pagar_categoria ON contas_pagar (categoria)",
+        "CREATE INDEX idx_contas_pagar_projeto ON contas_pagar (projeto)",
+        "CREATE INDEX idx_contas_pagar_created ON contas_pagar (created DESC)"
+      ]
+    },
+    {
+      "name": "contas_receber",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.role = 'admin' || @request.auth.role = 'financeiro'",
+        "update": "@request.auth.role = 'admin' || @request.auth.role = 'financeiro'",
+        "delete": "@request.auth.role = 'admin' || @request.auth.role = 'financeiro'"
+      },
+      "fields": [
+        {
+          "name": "descricao",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "cliente_nome",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "cliente",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "clientes"
+        },
+        {
+          "name": "categoria",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": [
+            "consultoria_avulsa",
+            "servico_tecnico",
+            "honorarios",
+            "reembolso",
+            "rendimento_aplicacao",
+            "outros"
+          ]
+        },
+        {
+          "name": "valor",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "valor_recebido",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "data_vencimento",
+          "type": "date",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "data_recebimento",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["pendente", "recebido", "cancelado"]
+        },
+        {
+          "name": "forma_recebimento",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": [
+            "pix",
+            "ted_doc",
+            "boleto",
+            "cartao_credito",
+            "cartao_debito",
+            "dinheiro",
+            "outro"
+          ]
+        },
+        {
+          "name": "numero_documento",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "projeto",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "projetos"
+        },
+        {
+          "name": "comprovante",
+          "type": "file",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "observacoes",
+          "type": "editor",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "criado_por",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_contas_receber_vencimento ON contas_receber (data_vencimento)",
+        "CREATE INDEX idx_contas_receber_status ON contas_receber (status)",
+        "CREATE INDEX idx_contas_receber_categoria ON contas_receber (categoria)",
+        "CREATE INDEX idx_contas_receber_cliente ON contas_receber (cliente)",
+        "CREATE INDEX idx_contas_receber_projeto ON contas_receber (projeto)",
+        "CREATE INDEX idx_contas_receber_created ON contas_receber (created DESC)"
+      ]
+    },
+    {
+      "name": "extratos",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.role = 'admin' || @request.auth.role = 'financeiro'",
+        "update": "@request.auth.role = 'admin' || @request.auth.role = 'financeiro'",
+        "delete": "@request.auth.role = 'admin' || @request.auth.role = 'financeiro'"
+      },
+      "fields": [
+        {
+          "name": "nome_arquivo",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "formato",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["ofx", "csv", "xlsx"]
+        },
+        {
+          "name": "banco",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "conta",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "data_inicio",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "data_fim",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "total_transacoes",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "total_entradas",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "total_saidas",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "saldo_final",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "arquivo",
+          "type": "file",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "usuario",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_extratos_created ON extratos (created DESC)",
+        "CREATE INDEX idx_extratos_banco ON extratos (banco)"
+      ]
+    },
+    {
+      "name": "extratos_transacoes",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.role = 'admin' || @request.auth.role = 'financeiro'",
+        "update": "@request.auth.role = 'admin' || @request.auth.role = 'financeiro'",
+        "delete": "@request.auth.role = 'admin' || @request.auth.role = 'financeiro'"
+      },
+      "fields": [
+        {
+          "name": "extrato",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "extratos"
+        },
+        {
+          "name": "data",
+          "type": "date",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "descricao",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "valor",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "tipo",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["entrada", "saida"]
+        },
+        {
+          "name": "documento_ref",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "fitid",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "status_conciliacao",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["pendente", "conciliado", "ignorado"]
+        },
+        {
+          "name": "vinculo_tipo",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["parcela", "conta_pagar", "conta_receber"]
+        },
+        {
+          "name": "vinculo_id",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "data_conciliacao",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "observacoes",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_extratos_transacoes_extrato ON extratos_transacoes (extrato)",
+        "CREATE INDEX idx_extratos_transacoes_data ON extratos_transacoes (data DESC)",
+        "CREATE INDEX idx_extratos_transacoes_status ON extratos_transacoes (status_conciliacao)",
+        "CREATE INDEX idx_extratos_transacoes_tipo ON extratos_transacoes (tipo)"
       ]
     }
   ]
