@@ -2,15 +2,19 @@ import { useMemo, useState, type FormEvent } from 'react'
 import {
   Banknote,
   CalendarClock,
+  Check,
   CheckCircle2,
+  CheckSquare,
   CircleDollarSign,
   CopyX,
   FileSpreadsheet,
   Layers,
   Link as LinkIcon,
   Plus,
+  RotateCcw,
   Search,
   Sparkles,
+  Square,
   TriangleAlert,
 } from 'lucide-react'
 import { Link, useSearchParams } from 'react-router-dom'
@@ -75,6 +79,14 @@ export function FinancePage() {
   const [newOpen, setNewOpen] = useState(false)
   const [payDate, setPayDate] = useState(new Date().toISOString().slice(0, 10))
   const [payValue, setPayValue] = useState('')
+
+  // Estados de seleção múltipla e ações manuais de recebimento em lote
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [bulkMarkModalOpen, setBulkMarkModalOpen] = useState(false)
+  const [bulkPayDate, setBulkPayDate] = useState(new Date().toISOString().slice(0, 10))
+  const [isBulkProcessing, setIsBulkProcessing] = useState(false)
+  const [reabrirModalParcela, setReabrirModalParcela] = useState<ParcelaRecord | null>(null)
+  const [isReabrindo, setIsReabrindo] = useState(false)
 
   // Estado de Notas Órfãs em memória (persistido na sessão do navegador para vinculação manual)
   const [notasOrfas, setNotasOrfas] = useState<NfseDadoExtraido[]>(() => {
@@ -193,17 +205,135 @@ export function FinancePage() {
   async function registerPayment() {
     if (!payment) return
     try {
+      const valorRec = Number(payValue) || payment.valor
       await updateOne('parcelas', payment.id, {
         status: 'paga',
         data_pagamento: `${payDate} 12:00:00.000Z`,
-        valor_recebido: Number(payValue) || payment.valor,
+        valor_recebido: valorRec,
+        status_pagamento: payment.nf_numero ? 'Recebido (NFS-e)' : 'Recebido',
       })
-      toast.success('Pagamento registrado')
+      toast.success(
+        `Pagamento da parcela registrado com sucesso (recebido em ${formatDate(payDate)})!`,
+      )
       setPayment(null)
       void installments.reload()
     } catch {
       toast.error('Não foi possível registrar o pagamento')
     }
+  }
+
+  // Quitação rápida individual direta da linha
+  async function handleMarcarRecebidaRapido(item: ParcelaRecord) {
+    if (!canWrite) return
+    // Se tiver data de faturamento/emissão da NFS-e, pode sugerir, caso contrário hoje
+    let dataSugerida = new Date().toISOString().slice(0, 10)
+    if (item.data_faturamento) {
+      dataSugerida = item.data_faturamento.slice(0, 10)
+    } else if (item.vencimento) {
+      dataSugerida = item.vencimento.slice(0, 10)
+    }
+    setPayDate(dataSugerida)
+    setPayValue(String(item.valor_recebido || item.valor))
+    setPayment(item)
+  }
+
+  // Ação reversa: reabrir / desmarcar recebimento para correção de erro
+  async function handleConfirmarReabertura() {
+    if (!reabrirModalParcela || !canWrite) return
+    setIsReabrindo(true)
+    try {
+      const now = new Date()
+      const venc = new Date(reabrirModalParcela.vencimento)
+      const novoStatus = venc < now ? 'vencida' : 'pendente'
+
+      await updateOne('parcelas', reabrirModalParcela.id, {
+        status: novoStatus,
+        data_pagamento: null,
+        valor_recebido: 0,
+        status_pagamento: reabrirModalParcela.nf_numero ? 'Faturado com NFS-e' : 'Pendente',
+      })
+
+      toast.success(`Parcela reaberta como "${novoStatus}". Recebimento cancelado para correção.`)
+      setReabrirModalParcela(null)
+      void installments.reload()
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      toast.error('Erro ao reabrir parcela: ' + msg)
+    } finally {
+      setIsReabrindo(false)
+    }
+  }
+
+  // Ações de seleção múltipla
+  const handleToggleSelect = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id],
+    )
+  }
+
+  const handleSelectAllVisible = () => {
+    const visibleIds = rows.map((r) => r.id)
+    const allSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id))
+    if (allSelected) {
+      setSelectedIds((prev) => prev.filter((id) => !visibleIds.includes(id)))
+    } else {
+      setSelectedIds((prev) => Array.from(new Set([...prev, ...visibleIds])))
+    }
+  }
+
+  // Ação em massa: marcar selecionadas como recebidas
+  async function handleConfirmarQuitarEmMassa(alvoIds: string[]) {
+    if (!alvoIds.length || !canWrite) return
+    setIsBulkProcessing(true)
+    let sucesso = 0
+    let falhas = 0
+
+    const parcelasAlvo = installments.data.filter((p) => alvoIds.includes(p.id))
+
+    for (const p of parcelasAlvo) {
+      try {
+        let valorRec = p.valor_recebido
+        if (!valorRec || valorRec <= 0) {
+          const rawDados = (p as any).nfse_dados
+          if (rawDados) {
+            try {
+              const parsed = typeof rawDados === 'string' ? JSON.parse(rawDados) : rawDados
+              if (parsed && parsed.valorLiquido && Number(parsed.valorLiquido) > 0) {
+                valorRec = Number(parsed.valorLiquido)
+              }
+            } catch {
+              /* intentionally ignored */
+            }
+          }
+        }
+        if (!valorRec || valorRec <= 0) {
+          valorRec = p.valor
+        }
+
+        await updateOne('parcelas', p.id, {
+          status: 'paga',
+          data_pagamento: `${bulkPayDate} 12:00:00.000Z`,
+          valor_recebido: valorRec,
+          status_pagamento: p.nf_numero ? 'Recebido (NFS-e)' : 'Recebido',
+        })
+        sucesso++
+      } catch (err) {
+        falhas++
+      }
+    }
+
+    setIsBulkProcessing(false)
+    setBulkMarkModalOpen(false)
+    setSelectedIds([])
+
+    if (falhas === 0) {
+      toast.success(
+        `${sucesso} ${sucesso === 1 ? 'parcela marcada' : 'parcelas marcadas'} como recebida(s) em ${formatDate(bulkPayDate)}!`,
+      )
+    } else {
+      toast.warning(`${sucesso} parcelas atualizadas com sucesso, ${falhas} falharam.`)
+    }
+    void installments.reload()
   }
 
   async function createInstallment(event: FormEvent) {
@@ -585,6 +715,76 @@ export function FinancePage() {
             </Select>
           </div>
 
+          {/* Barra de Ações em Massa (visível para Admin e Financeiro) */}
+          {canWrite && (
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-orange-200 bg-orange-50/60 p-3 text-xs">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleSelectAllVisible}
+                  className="flex items-center gap-1.5 font-semibold text-neutral-700 hover:text-neutral-900"
+                >
+                  {rows.length > 0 && rows.every((r) => selectedIds.includes(r.id)) ? (
+                    <CheckSquare className="h-4 w-4 text-[#FF6A13]" />
+                  ) : (
+                    <Square className="h-4 w-4 text-neutral-400" />
+                  )}
+                  <span>
+                    {selectedIds.length > 0
+                      ? `${selectedIds.length} selecionada(s)`
+                      : 'Selecionar visíveis'}
+                  </span>
+                </button>
+                {selectedIds.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedIds([])}
+                    className="text-[11px] text-neutral-500 hover:underline"
+                  >
+                    (Limpar seleção)
+                  </button>
+                )}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {selectedIds.length > 0 && (
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      setBulkPayDate(new Date().toISOString().slice(0, 10))
+                      setBulkMarkModalOpen(true)
+                    }}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+                  >
+                    <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
+                    Marcar selecionadas como recebidas ({selectedIds.length})
+                  </Button>
+                )}
+
+                {/* Botão de conveniência para marcar pendentes da visualização */}
+                {rows.some((r) => r.status !== 'paga') && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      const pendentesVisiveis = rows
+                        .filter((r) => r.status !== 'paga')
+                        .map((r) => r.id)
+                      setSelectedIds(pendentesVisiveis)
+                      setBulkPayDate(new Date().toISOString().slice(0, 10))
+                      setBulkMarkModalOpen(true)
+                    }}
+                    className="border-emerald-600 text-emerald-800 hover:bg-emerald-50 bg-white"
+                  >
+                    <Check className="mr-1.5 h-3.5 w-3.5" />
+                    Marcar todas pendentes visíveis como recebidas (
+                    {rows.filter((r) => r.status !== 'paga').length})
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
+
           {!rows.length ? (
             <div className="mt-5">
               <EmptyState
@@ -598,122 +798,184 @@ export function FinancePage() {
                 <table className="w-full">
                   <thead className="border-b bg-[#FAFAFA] text-left text-[11px] uppercase tracking-wider text-[#737373]">
                     <tr>
+                      {canWrite && (
+                        <th className="w-10 px-3 py-3 text-center">
+                          <button
+                            type="button"
+                            onClick={handleSelectAllVisible}
+                            title="Selecionar todas"
+                            className="text-neutral-500 hover:text-neutral-900"
+                          >
+                            {rows.length > 0 && rows.every((r) => selectedIds.includes(r.id)) ? (
+                              <CheckSquare className="h-4 w-4 text-[#FF6A13]" />
+                            ) : (
+                              <Square className="h-4 w-4 text-neutral-400" />
+                            )}
+                          </button>
+                        </th>
+                      )}
                       <th className="px-5 py-3">Projeto / Cliente</th>
                       <th className="px-5 py-3">Descrição</th>
                       <th className="px-5 py-3">NFS-e / Faturamento</th>
                       <th className="px-5 py-3">Valor</th>
                       <th className="px-5 py-3">Vencimento / Recebimento</th>
                       <th className="px-5 py-3">Status</th>
-                      <th className="px-5 py-3">Ação</th>
+                      <th className="px-5 py-3 text-right">Ação</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
-                    {rows.map((item) => (
-                      <tr key={item.id}>
-                        <td className="px-5 py-4">
-                          <Link
-                            to={`/projetos/${item.projeto}`}
-                            className="mono-value font-bold text-[#D65100] hover:underline"
-                          >
-                            {item.expand?.projeto?.numero || 'Sem projeto'}
-                          </Link>
-                          <p className="text-xs text-[#737373]">
-                            {item.expand?.cliente?.razao_social}
-                          </p>
-                        </td>
-                        <td className="px-5 py-4 text-sm font-semibold">
-                          {item.descricao}
-                          {item.origem === 'gatilho' && (
-                            <CrmBadge tone="orange" className="ml-2">
-                              automático
-                            </CrmBadge>
+                    {rows.map((item) => {
+                      const isSelected = selectedIds.includes(item.id)
+                      return (
+                        <tr key={item.id} className={isSelected ? 'bg-orange-50/40' : undefined}>
+                          {canWrite && (
+                            <td className="px-3 py-4 text-center">
+                              <button
+                                type="button"
+                                onClick={() => handleToggleSelect(item.id)}
+                                className="text-neutral-500 hover:text-neutral-900"
+                              >
+                                {isSelected ? (
+                                  <CheckSquare className="h-4 w-4 text-[#FF6A13]" />
+                                ) : (
+                                  <Square className="h-4 w-4 text-neutral-300" />
+                                )}
+                              </button>
+                            </td>
                           )}
-                        </td>
-                        <td className="px-5 py-4 text-xs">
-                          {item.nf_numero ? (
-                            <div className="space-y-1">
-                              <span className="inline-flex items-center gap-1 font-mono font-bold text-[#FF6A13] bg-orange-50 px-2 py-0.5 rounded border border-orange-200">
-                                NFS-e nº {item.nf_numero}
-                              </span>
-                              {item.data_faturamento && (
-                                <p className="text-[11px] text-[#737373]">
-                                  Fat: {formatDate(item.data_faturamento)}
-                                </p>
-                              )}
-                              {item.retencoes && (
-                                <p
-                                  className="text-[10px] text-amber-700 line-clamp-1"
-                                  title={item.retencoes}
-                                >
-                                  Ret: {item.retencoes}
-                                </p>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="text-[#999] italic">Não faturada</span>
-                          )}
-                        </td>
-                        <td className="mono-value px-5 py-4 font-bold">
-                          {formatCurrency(item.valor)}
-                        </td>
-                        <td className="mono-value px-5 py-4 text-xs">
-                          <p>Venc: {formatDate(item.vencimento)}</p>
-                          {item.data_pagamento && (
-                            <p className="text-emerald-700 font-semibold mt-0.5">
-                              Rec: {formatDate(item.data_pagamento)}
-                            </p>
-                          )}
-                        </td>
-                        <td className="px-5 py-4">
-                          <CrmBadge
-                            tone={
-                              item.status === 'paga'
-                                ? 'green'
-                                : item.status === 'vencida'
-                                  ? 'red'
-                                  : 'amber'
-                            }
-                          >
-                            {item.status}
-                          </CrmBadge>
-                        </td>
-                        <td className="px-5 py-4">
-                          {item.status !== 'paga' && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              disabled={!canWrite}
-                              onClick={() => {
-                                setPayment(item)
-                                setPayValue(String(item.valor))
-                              }}
+                          <td className="px-5 py-4">
+                            <Link
+                              to={`/projetos/${item.projeto}`}
+                              className="mono-value font-bold text-[#D65100] hover:underline"
                             >
-                              Registrar pagamento
-                            </Button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
+                              {item.expand?.projeto?.numero || 'Sem projeto'}
+                            </Link>
+                            <p className="text-xs text-[#737373]">
+                              {item.expand?.cliente?.razao_social}
+                            </p>
+                          </td>
+                          <td className="px-5 py-4 text-sm font-semibold">
+                            {item.descricao}
+                            {item.origem === 'gatilho' && (
+                              <CrmBadge tone="orange" className="ml-2">
+                                automático
+                              </CrmBadge>
+                            )}
+                          </td>
+                          <td className="px-5 py-4 text-xs">
+                            {item.nf_numero ? (
+                              <div className="space-y-1">
+                                <span className="inline-flex items-center gap-1 font-mono font-bold text-[#FF6A13] bg-orange-50 px-2 py-0.5 rounded border border-orange-200">
+                                  NFS-e nº {item.nf_numero}
+                                </span>
+                                {item.data_faturamento && (
+                                  <p className="text-[11px] text-[#737373]">
+                                    Fat: {formatDate(item.data_faturamento)}
+                                  </p>
+                                )}
+                                {item.retencoes && (
+                                  <p
+                                    className="text-[10px] text-amber-700 line-clamp-1"
+                                    title={item.retencoes}
+                                  >
+                                    Ret: {item.retencoes}
+                                  </p>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-[#999] italic">Não faturada</span>
+                            )}
+                          </td>
+                          <td className="mono-value px-5 py-4 font-bold">
+                            {formatCurrency(item.valor)}
+                          </td>
+                          <td className="mono-value px-5 py-4 text-xs">
+                            <p>Venc: {formatDate(item.vencimento)}</p>
+                            {item.data_pagamento && (
+                              <p className="text-emerald-700 font-semibold mt-0.5">
+                                Rec: {formatDate(item.data_pagamento)}
+                              </p>
+                            )}
+                          </td>
+                          <td className="px-5 py-4">
+                            <CrmBadge
+                              tone={
+                                item.status === 'paga'
+                                  ? 'green'
+                                  : item.status === 'vencida'
+                                    ? 'red'
+                                    : 'amber'
+                              }
+                            >
+                              {item.status}
+                            </CrmBadge>
+                          </td>
+                          <td className="px-5 py-4 text-right">
+                            {canWrite && (
+                              <div className="flex items-center justify-end gap-1.5">
+                                {item.status !== 'paga' ? (
+                                  <Button
+                                    size="sm"
+                                    onClick={() => handleMarcarRecebidaRapido(item)}
+                                    className="bg-emerald-600 hover:bg-emerald-700 text-white h-8 text-xs font-semibold shadow-sm"
+                                    title="Marcar nota/parcela como recebida/paga"
+                                  >
+                                    <CheckCircle2 className="mr-1 h-3.5 w-3.5" />
+                                    Marcar como recebida
+                                  </Button>
+                                ) : (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => setReabrirModalParcela(item)}
+                                    className="border-neutral-300 text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 h-8 text-xs"
+                                    title="Desmarcar recebimento e reabrir parcela em caso de erro"
+                                  >
+                                    <RotateCcw className="mr-1 h-3 w-3 text-neutral-500" />
+                                    Reabrir / Desmarcar
+                                  </Button>
+                                )}
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>
               <div className="divide-y lg:hidden">
                 {rows.map((item) => (
-                  <div key={item.id} className="p-4">
-                    <div className="flex justify-between gap-3">
-                      <div>
-                        <Link
-                          to={`/projetos/${item.projeto}`}
-                          className="mono-value font-bold text-[#D65100]"
-                        >
-                          {item.expand?.projeto?.numero}
-                        </Link>
-                        <p className="mt-1 text-sm font-semibold">{item.descricao}</p>
-                        {item.nf_numero && (
-                          <span className="mt-1 inline-flex items-center gap-1 font-mono text-xs font-bold text-[#FF6A13] bg-orange-50 px-2 py-0.5 rounded border border-orange-200">
-                            NFS-e nº {item.nf_numero}
-                          </span>
+                  <div key={item.id} className="p-4 space-y-2">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-start gap-2">
+                        {canWrite && (
+                          <button
+                            type="button"
+                            onClick={() => handleToggleSelect(item.id)}
+                            className="mt-0.5 text-neutral-500"
+                          >
+                            {selectedIds.includes(item.id) ? (
+                              <CheckSquare className="h-4 w-4 text-[#FF6A13]" />
+                            ) : (
+                              <Square className="h-4 w-4 text-neutral-300" />
+                            )}
+                          </button>
                         )}
+                        <div>
+                          <Link
+                            to={`/projetos/${item.projeto}`}
+                            className="mono-value font-bold text-[#D65100]"
+                          >
+                            {item.expand?.projeto?.numero}
+                          </Link>
+                          <p className="mt-0.5 text-sm font-semibold">{item.descricao}</p>
+                          {item.nf_numero && (
+                            <span className="mt-1 inline-flex items-center gap-1 font-mono text-xs font-bold text-[#FF6A13] bg-orange-50 px-2 py-0.5 rounded border border-orange-200">
+                              NFS-e nº {item.nf_numero}
+                            </span>
+                          )}
+                        </div>
                       </div>
                       <CrmBadge
                         tone={
@@ -727,22 +989,42 @@ export function FinancePage() {
                         {item.status}
                       </CrmBadge>
                     </div>
-                    <div className="mt-3 flex justify-between">
-                      <span className="mono-value font-bold">{formatCurrency(item.valor)}</span>
-                      <span className="mono-value text-xs">{formatDate(item.vencimento)}</span>
+                    <div className="flex justify-between text-xs">
+                      <span className="mono-value font-bold text-sm">
+                        {formatCurrency(item.valor)}
+                      </span>
+                      <div className="text-right text-[#737373]">
+                        <p>Venc: {formatDate(item.vencimento)}</p>
+                        {item.data_pagamento && (
+                          <p className="text-emerald-700 font-semibold">
+                            Rec: {formatDate(item.data_pagamento)}
+                          </p>
+                        )}
+                      </div>
                     </div>
-                    {item.status !== 'paga' && (
-                      <Button
-                        className="mt-3 w-full"
-                        variant="outline"
-                        disabled={!canWrite}
-                        onClick={() => {
-                          setPayment(item)
-                          setPayValue(String(item.valor))
-                        }}
-                      >
-                        Registrar pagamento
-                      </Button>
+                    {canWrite && (
+                      <div className="pt-1">
+                        {item.status !== 'paga' ? (
+                          <Button
+                            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
+                            size="sm"
+                            onClick={() => handleMarcarRecebidaRapido(item)}
+                          >
+                            <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
+                            Marcar como recebida
+                          </Button>
+                        ) : (
+                          <Button
+                            className="w-full"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setReabrirModalParcela(item)}
+                          >
+                            <RotateCcw className="mr-1.5 h-3 w-3 text-neutral-500" />
+                            Reabrir / Desmarcar recebimento
+                          </Button>
+                        )}
+                      </div>
                     )}
                   </div>
                 ))}
@@ -753,31 +1035,170 @@ export function FinancePage() {
       )}
 
       <Dialog open={Boolean(payment)} onOpenChange={(v) => !v && setPayment(null)}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Registrar pagamento</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+              Marcar como recebida / Registrar pagamento
+            </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Data do pagamento</Label>
-              <Input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} />
+          {payment && (
+            <div className="space-y-4">
+              <div className="rounded-lg border bg-neutral-50 p-3 text-xs space-y-1">
+                <p className="font-semibold text-neutral-800">{payment.descricao}</p>
+                {payment.nf_numero && (
+                  <p className="font-mono text-[#FF6A13] font-bold">NFS-e nº {payment.nf_numero}</p>
+                )}
+                <div className="flex justify-between text-neutral-600 pt-1">
+                  <span>Valor total: {formatCurrency(payment.valor)}</span>
+                  <span>Vencimento: {formatDate(payment.vencimento)}</span>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold">Data do recebimento / quitação *</Label>
+                <Input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} />
+                <p className="text-[11px] text-neutral-500">
+                  Preenchimento padrão com a data informada ou data atual.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold">Valor efetivamente recebido (R$)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={payValue}
+                  onChange={(e) => setPayValue(e.target.value)}
+                />
+                <p className="text-[11px] text-neutral-500">
+                  Ao confirmar, a parcela é marcada como <strong>quitada/paga</strong> e sai dos
+                  alertas de vencimento do Painel.
+                </p>
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label>Valor recebido</Label>
-              <Input
-                type="number"
-                step="0.01"
-                value={payValue}
-                onChange={(e) => setPayValue(e.target.value)}
-              />
-            </div>
-          </div>
+          )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setPayment(null)}>
               Cancelar
             </Button>
-            <Button onClick={registerPayment} className="bg-[#FF6A13] hover:bg-[#E85B06]">
+            <Button
+              onClick={registerPayment}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+            >
               Confirmar recebimento
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Confirmação de Quitação em Massa */}
+      <Dialog open={bulkMarkModalOpen} onOpenChange={setBulkMarkModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+              Marcar parcelas em massa como recebidas
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-3 text-xs text-emerald-950 space-y-1">
+              <p className="font-bold text-sm">
+                {selectedIds.length} parcela(s) selecionada(s) para quitação imediata.
+              </p>
+              <p className="text-neutral-600">
+                Todas as notas e faturamentos selecionados serão marcados como{' '}
+                <strong>pagos/quitados</strong>, preenchendo a data de recebimento e zerando
+                pendências da Central de Alertas.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-xs font-semibold">
+                Data de recebimento aplicada a todas *
+              </Label>
+              <Input
+                type="date"
+                value={bulkPayDate}
+                onChange={(e) => setBulkPayDate(e.target.value)}
+              />
+              <p className="text-[11px] text-neutral-500">
+                Padrão: data de hoje ({formatDate(new Date())}).
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              disabled={isBulkProcessing}
+              onClick={() => setBulkMarkModalOpen(false)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => void handleConfirmarQuitarEmMassa(selectedIds)}
+              disabled={isBulkProcessing || !selectedIds.length}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+            >
+              {isBulkProcessing
+                ? 'Processando quitação...'
+                : `Confirmar quitação (${selectedIds.length})`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Reabertura / Correção de Erro */}
+      <Dialog
+        open={Boolean(reabrirModalParcela)}
+        onOpenChange={(v) => !v && setReabrirModalParcela(null)}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-rose-700">
+              <RotateCcw className="h-5 w-5" />
+              Reabrir parcela / Desmarcar recebimento
+            </DialogTitle>
+          </DialogHeader>
+          {reabrirModalParcela && (
+            <div className="space-y-3 text-xs">
+              <p className="text-neutral-700">
+                Deseja realmente desmarcar o recebimento desta parcela para correção?
+              </p>
+              <div className="rounded-lg border bg-neutral-50 p-3 space-y-1">
+                <p className="font-bold text-neutral-800">{reabrirModalParcela.descricao}</p>
+                {reabrirModalParcela.nf_numero && (
+                  <p className="font-mono text-[#FF6A13] font-semibold">
+                    NFS-e nº {reabrirModalParcela.nf_numero}
+                  </p>
+                )}
+                <p className="text-neutral-500">
+                  Valor: {formatCurrency(reabrirModalParcela.valor)} · Recebido anteriormente em:{' '}
+                  {reabrirModalParcela.data_pagamento
+                    ? formatDate(reabrirModalParcela.data_pagamento)
+                    : 'N/A'}
+                </p>
+              </div>
+              <p className="text-neutral-500 italic">
+                O status retornará para pendente (ou vencida, conforme o vencimento original) e a
+                data de pagamento será limpa.
+              </p>
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              disabled={isReabrindo}
+              onClick={() => setReabrirModalParcela(null)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => void handleConfirmarReabertura()}
+              disabled={isReabrindo}
+              className="bg-rose-600 hover:bg-rose-700 text-white"
+            >
+              {isReabrindo ? 'Reabrindo...' : 'Confirmar e Reabrir'}
             </Button>
           </DialogFooter>
         </DialogContent>
