@@ -17,6 +17,7 @@ import {
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
+import { Award, ShieldCheck } from 'lucide-react'
 import { CrmBadge } from '@/components/common/CrmBadge'
 import { EmptyState, ErrorState, PageLoading } from '@/components/common/States'
 import { SectionHeader } from '@/components/common/SectionHeader'
@@ -50,7 +51,7 @@ import {
   calcularResumoFinanceiroTodosProjetos,
   getStatusFinanceiroBadgeConfig,
 } from '@/services/projetoFinanceiroInferidor'
-import type { ParcelaRecord, ProjetoRecord } from '@/types/crm'
+import type { ColaboradorRecord, ParcelaRecord, ProjetoRecord } from '@/types/crm'
 
 export default function ProjectsPage() {
   const { user } = useAuth()
@@ -58,8 +59,13 @@ export default function ProjectsPage() {
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
   const projects = useCrmData<ProjetoRecord>('projetos', {
-    expand: 'cliente,responsavel_tecnico',
+    expand:
+      'cliente,responsavel_tecnico,coordenador_colaborador,analista_colaborador,rts_colaboradores',
     sort: '-numero',
+    realtime: true,
+  })
+  const colaboradores = useCrmData<ColaboradorRecord>('colaboradores', {
+    sort: 'nome_completo',
     realtime: true,
   })
   const installments = useCrmData<ParcelaRecord>('parcelas', {
@@ -70,6 +76,7 @@ export default function ProjectsPage() {
   const [status, setStatus] = useState('todos')
   const [priorityFilter, setPriorityFilter] = useState('todos')
   const [financialFilter, setFinancialFilter] = useState('todos')
+  const [rtFilter, setRtFilter] = useState('todos')
   const [archiveFilter, setArchiveFilter] = useState<'ativos' | 'arquivados' | 'todos'>('ativos')
   const [editingProject, setEditingProject] = useState<ProjetoRecord | null>(null)
   const [editingFullProject, setEditingFullProject] = useState<ProjetoRecord | null>(null)
@@ -173,13 +180,36 @@ export default function ProjectsPage() {
       const resumo = resumosFinanceiros.get(item.id)
       const matchFinancial =
         financialFilter === 'todos' || resumo?.statusFinanceiro === financialFilter
+
+      // Filtro por Responsável Técnico (RT)
+      let matchRt = true
+      if (rtFilter === 'meus_rts') {
+        // Apenas projetos onde o usuário logado é RT
+        const isLegacyRt = item.responsavel_tecnico === user?.id
+        const isRtUsuario =
+          Array.isArray(item.rts_usuarios) && item.rts_usuarios.includes(user?.id || '')
+        // Também conferir via colaborador associado ao usuário
+        const userColab = colaboradores.data.find((c) => c.usuario_sistema === user?.id)
+        const isRtColab =
+          userColab &&
+          Array.isArray(item.rts_colaboradores) &&
+          item.rts_colaboradores.includes(userColab.id)
+        matchRt = Boolean(isLegacyRt || isRtUsuario || isRtColab)
+      } else if (rtFilter !== 'todos') {
+        // Filtrado por um colaborador RT específico (pelo ID do colaborador ou usuário)
+        const inRtsColab =
+          Array.isArray(item.rts_colaboradores) && item.rts_colaboradores.includes(rtFilter)
+        const isLegacy = item.responsavel_tecnico === rtFilter
+        matchRt = Boolean(inRtsColab || isLegacy)
+      }
+
       const matchQuery =
         !query ||
         `${item.numero} ${item.nome} ${item.expand?.cliente?.razao_social} ${item.prioridade || ''}`
           .toLowerCase()
           .includes(query.toLowerCase())
 
-      return matchTrail && matchStatus && matchPriority && matchFinancial && matchQuery
+      return matchTrail && matchStatus && matchPriority && matchFinancial && matchRt && matchQuery
     })
 
     return [...filtered].sort((a, b) => {
@@ -243,15 +273,23 @@ export default function ProjectsPage() {
     })
   }, [
     projects.data,
+    colaboradores.data,
+    user,
     query,
     trail,
     status,
     priorityFilter,
     financialFilter,
+    rtFilter,
     archiveFilter,
     sortOrder,
     resumosFinanceiros,
   ])
+
+  // Lista de colaboradores marcados como RT (ou que constam em projetos) para o filtro
+  const rtsDisponiveis = useMemo(() => {
+    return colaboradores.data.filter((c) => c.eh_rt || c.eh_tecnico)
+  }, [colaboradores.data])
 
   // Lógica de Drag-and-Drop para ordenação manual
   const handleDragStart = (e: React.DragEvent<HTMLDivElement>, id: string) => {
@@ -575,6 +613,29 @@ export default function ProjectsPage() {
             <SelectItem value="faturamento_integral">Faturado 100%</SelectItem>
             <SelectItem value="pagamento_parcial">Pagamento parcial</SelectItem>
             <SelectItem value="sem_nfse">Sem NFS-e</SelectItem>
+          </SelectContent>
+        </Select>
+        {/* Filtro por Responsável Técnico (RT) */}
+        <Select value={rtFilter} onValueChange={setRtFilter}>
+          <SelectTrigger className="md:w-44 border-orange-200 bg-orange-50/30">
+            <div className="flex items-center gap-1.5 truncate text-left text-xs">
+              <ShieldCheck className="h-3.5 w-3.5 text-[#FF6A13] shrink-0" />
+              <SelectValue placeholder="Resp. Técnico (RT)" />
+            </div>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todos">Todos os RTs</SelectItem>
+            {user?.role === 'tecnico' && (
+              <SelectItem value="meus_rts" className="font-bold text-[#D65100]">
+                ★ Meus Projetos (como RT)
+              </SelectItem>
+            )}
+            {rtsDisponiveis.map((rt) => (
+              <SelectItem key={rt.id} value={rt.id}>
+                {rt.nome_completo}{' '}
+                {rt.registro_profissional_numero ? `(${rt.registro_profissional_numero})` : ''}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
         <Select
@@ -904,6 +965,41 @@ export default function ProjectsPage() {
                   <p className="mt-1 text-sm text-[#737373] truncate">
                     {item.expand?.cliente?.razao_social}
                   </p>
+
+                  {/* Equipe Técnica Resumida no Card */}
+                  <div className="mt-2.5 flex flex-wrap items-center gap-1.5 text-[11px]">
+                    {item.expand?.rts_colaboradores && item.expand.rts_colaboradores.length > 0 ? (
+                      item.expand.rts_colaboradores.map((rt) => (
+                        <span
+                          key={rt.id}
+                          className="inline-flex items-center gap-1 rounded bg-orange-50 border border-orange-200 px-1.5 py-0.5 text-[10px] font-semibold text-[#D65100]"
+                          title={`Responsável Técnico: ${rt.nome_completo}`}
+                        >
+                          <ShieldCheck className="h-3 w-3 text-[#FF6A13]" />
+                          <span>RT: {rt.nome_completo.split(' ')[0]}</span>
+                        </span>
+                      ))
+                    ) : item.expand?.responsavel_tecnico?.name ? (
+                      <span
+                        className="inline-flex items-center gap-1 rounded bg-orange-50 border border-orange-200 px-1.5 py-0.5 text-[10px] font-semibold text-[#D65100]"
+                        title={`Responsável Técnico: ${item.expand.responsavel_tecnico.name}`}
+                      >
+                        <ShieldCheck className="h-3 w-3 text-[#FF6A13]" />
+                        <span>RT: {item.expand.responsavel_tecnico.name.split(' ')[0]}</span>
+                      </span>
+                    ) : null}
+
+                    {item.expand?.coordenador_colaborador && (
+                      <span
+                        className="inline-flex items-center gap-1 rounded bg-neutral-100 border border-neutral-200 px-1.5 py-0.5 text-[10px] text-neutral-700"
+                        title={`Coordenador: ${item.expand.coordenador_colaborador.nome_completo}`}
+                      >
+                        <span>
+                          Coord: {item.expand.coordenador_colaborador.nome_completo.split(' ')[0]}
+                        </span>
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 <div className="mt-4">

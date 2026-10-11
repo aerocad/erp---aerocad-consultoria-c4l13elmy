@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import {
   ArrowLeft,
+  Award,
   Calendar,
   CalendarDays,
   Copy,
@@ -12,7 +13,9 @@ import {
   Paperclip,
   Plus,
   Send,
+  ShieldCheck,
   Trash2,
+  Users,
   WalletCards,
 } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
@@ -103,7 +106,7 @@ export default function ProjectDetailPage() {
   const [editNomeOpen, setEditNomeOpen] = useState(false)
   const [editProjetoModalOpen, setEditProjetoModalOpen] = useState(false)
   const [editProjetoInitialTab, setEditProjetoInitialTab] = useState<
-    'geral' | 'financeiro' | 'tecnico' | 'prazos'
+    'geral' | 'equipe' | 'financeiro' | 'tecnico' | 'prazos'
   >('geral')
   const [arquivarModalOpen, setArquivarModalOpen] = useState(false)
   const canWrite = ['admin', 'comercial', 'tecnico'].includes(user?.role || '')
@@ -124,7 +127,8 @@ export default function ProjectDetailPage() {
     setLoading(true)
     try {
       const record = await getOne<ProjetoRecord>('projetos', id, {
-        expand: 'cliente,responsavel_tecnico,oportunidade',
+        expand:
+          'cliente,responsavel_tecnico,oportunidade,coordenador_colaborador,analista_colaborador,rts_colaboradores',
       })
       setProject(record)
       const [pr, pa, d, an, a, osList] = await Promise.all([
@@ -298,6 +302,22 @@ export default function ProjectDetailPage() {
               <CrmBadge tone={project.trilha === 'registro' ? 'green' : 'orange'}>
                 {trailLabels[project.trilha]}
               </CrmBadge>
+              {project.expand?.coordenador_colaborador && (
+                <span className="inline-flex items-center gap-1 rounded-full border border-neutral-300 bg-neutral-100 px-2.5 py-0.5 text-xs text-neutral-700">
+                  <span className="text-[10px] text-neutral-400 uppercase font-semibold">
+                    Coord:
+                  </span>
+                  <strong>{project.expand.coordenador_colaborador.nome_completo}</strong>
+                </span>
+              )}
+              {project.expand?.analista_colaborador && (
+                <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-xs text-blue-900">
+                  <span className="text-[10px] text-blue-500 uppercase font-semibold">
+                    Analista:
+                  </span>
+                  <strong>{project.expand.analista_colaborador.nome_completo}</strong>
+                </span>
+              )}
               <span
                 className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${badgeFinanceiro.badgeClass}`}
                 title={badgeFinanceiro.descricao}
@@ -335,6 +355,21 @@ export default function ProjectDetailPage() {
                 >
                   <Edit3 className="h-3.5 w-3.5 mr-1.5 text-[#FF6A13]" />
                   <span className="text-xs font-semibold">Editar projeto</span>
+                </Button>
+              )}
+              {canEditProject && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setEditProjetoInitialTab('equipe')
+                    setEditProjetoModalOpen(true)
+                  }}
+                  className="h-8 px-2.5 border-orange-300 bg-white text-[#D65100] hover:bg-orange-50 shrink-0 font-medium text-xs"
+                  title="Atribuir Coordenador, Analista e RTs"
+                >
+                  <Users className="h-3.5 w-3.5 mr-1 text-[#FF6A13]" />
+                  <span>Equipe Técnica</span>
                 </Button>
               )}
             </div>
@@ -379,6 +414,74 @@ export default function ProjectDetailPage() {
                 )}
               </p>
             </div>
+          </div>
+        </div>
+
+        {/* Seção Destaque de Equipe Técnica e Responsabilidade Técnica */}
+        <div className="mt-4 pt-4 border-t border-neutral-200 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 text-xs">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-1.5 font-bold uppercase tracking-wider text-[11px] text-[#FF6A13]">
+              <ShieldCheck className="h-4 w-4" />
+              Equipe Técnica:
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-neutral-600">
+                Coordenador:{' '}
+                <strong className="text-neutral-900">
+                  {project.expand?.coordenador_colaborador?.nome_completo || 'Não definido'}
+                </strong>
+              </span>
+              <span className="text-neutral-300">•</span>
+              <span className="text-neutral-600">
+                Analista:{' '}
+                <strong className="text-neutral-900">
+                  {project.expand?.analista_colaborador?.nome_completo || 'Não definido'}
+                </strong>
+              </span>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[11px] font-semibold text-neutral-500 uppercase">RT(s):</span>
+            {project.expand?.rts_colaboradores && project.expand.rts_colaboradores.length > 0 ? (
+              project.expand.rts_colaboradores.map((rt) => {
+                const reg = rt.registro_profissional_numero
+                  ? `${rt.registro_profissional_tipo || 'CREA'} ${rt.registro_profissional_numero}${rt.registro_profissional_uf ? `/${rt.registro_profissional_uf}` : ''}`
+                  : ''
+                return (
+                  <span
+                    key={rt.id}
+                    className="inline-flex items-center gap-1 bg-orange-50 border border-orange-200 text-[#D65100] px-2 py-0.5 rounded text-[11px] font-medium"
+                  >
+                    <Award className="h-3 w-3 text-[#FF6A13]" />
+                    <strong>{rt.nome_completo}</strong>
+                    {reg && <span className="font-mono text-[10px] text-neutral-600">({reg})</span>}
+                  </span>
+                )
+              })
+            ) : project.expand?.responsavel_tecnico?.name ? (
+              <span className="inline-flex items-center gap-1 bg-orange-50 border border-orange-200 text-[#D65100] px-2 py-0.5 rounded text-[11px] font-medium">
+                <Award className="h-3 w-3 text-[#FF6A13]" />
+                <strong>{project.expand.responsavel_tecnico.name}</strong>
+                <span className="text-[10px] text-neutral-500">(Legado)</span>
+              </span>
+            ) : (
+              <span className="text-neutral-400 italic">Nenhum RT atribuído</span>
+            )}
+
+            {canEditProject && (
+              <button
+                type="button"
+                onClick={() => {
+                  setEditProjetoInitialTab('equipe')
+                  setEditProjetoModalOpen(true)
+                }}
+                className="text-[11px] text-[#FF6A13] hover:underline font-semibold ml-1"
+              >
+                Alterar
+              </button>
+            )}
           </div>
         </div>
       </header>

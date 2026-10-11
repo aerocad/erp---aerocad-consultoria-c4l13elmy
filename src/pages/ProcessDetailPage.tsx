@@ -41,11 +41,17 @@ import { Textarea } from '@/components/ui/textarea'
 import { useAuth } from '@/contexts/AuthContext'
 import { useFinanceiroVisibilidade } from '@/contexts/FinanceiroVisibilidadeContext'
 import { processStatusLabels } from '@/lib/crm'
+import { Award, ShieldCheck, Users } from 'lucide-react'
+import {
+  EquipeTecnicaSelector,
+  type EquipeTecnicaValue,
+} from '@/components/projetos/EquipeTecnicaSection'
 import { formatDate, toInputDate } from '@/lib/format'
 import { createOne, getOne, listAll, updateOne } from '@/services/api'
 import type {
   AnexoRecord,
   AtividadeRecord,
+  ColaboradorRecord,
   ExigenciaRecord,
   ProcessoRecord,
   UserRecord,
@@ -61,6 +67,14 @@ export default function ProcessDetailPage() {
   const [anexos, setAnexos] = useState<AnexoRecord[]>([])
   const [activities, setActivities] = useState<AtividadeRecord[]>([])
   const [users, setUsers] = useState<UserRecord[]>([])
+  const [colaboradores, setColaboradores] = useState<ColaboradorRecord[]>([])
+  const [editEquipeOpen, setEditEquipeOpen] = useState(false)
+  const [equipe, setEquipe] = useState<EquipeTecnicaValue>({
+    coordenadorId: undefined,
+    analistaId: undefined,
+    rtsIds: [],
+  })
+  const [salvandoEquipe, setSalvandoEquipe] = useState(false)
   const [loading, setLoading] = useState(true)
   const [failed, setFailed] = useState(false)
   const [newOpen, setNewOpen] = useState(false)
@@ -72,15 +86,21 @@ export default function ProcessDetailPage() {
     setLoading(true)
     try {
       const record = await getOne<ProcessoRecord>('processos', id, {
-        expand: 'projeto,projeto.cliente',
+        expand:
+          'projeto,projeto.cliente,coordenador_colaborador,analista_colaborador,rts_colaboradores',
       })
       setProcess(record)
+      setEquipe({
+        coordenadorId: record.coordenador_colaborador || undefined,
+        analistaId: record.analista_colaborador || undefined,
+        rtsIds: Array.isArray(record.rts_colaboradores) ? [...record.rts_colaboradores] : [],
+      })
       setLinks({
         link_drive: record.link_drive || '',
         link_emails: record.link_emails || '',
         link_ambiente: record.link_ambiente || record.link_sysaga || '',
       })
-      const [r, an, a, u] = await Promise.all([
+      const [r, an, a, u, colabs] = await Promise.all([
         listAll<ExigenciaRecord>('exigencias', {
           filter: `processo = '${id}'`,
           expand: 'responsavel',
@@ -100,11 +120,15 @@ export default function ProcessDetailPage() {
           filter: "role = 'tecnico' || role = 'admin'",
           sort: 'name',
         }),
+        listAll<ColaboradorRecord>('colaboradores', {
+          sort: 'nome_completo',
+        }),
       ])
       setRequirements(r)
       setAnexos(an)
       setActivities(a)
       setUsers(u)
+      setColaboradores(colabs)
       setFailed(false)
     } catch {
       setFailed(true)
@@ -181,6 +205,49 @@ export default function ProcessDetailPage() {
       toast.error('Não foi possível atualizar o processo')
     }
   }
+
+  async function handleSalvarEquipeProcesso() {
+    if (!process) return
+    setSalvandoEquipe(true)
+    try {
+      const rtsColabsRecords = colaboradores.filter((c) => (equipe.rtsIds || []).includes(c.id))
+      const rtsUserIds = Array.from(
+        new Set(
+          rtsColabsRecords.map((c) => c.usuario_sistema).filter((u): u is string => Boolean(u)),
+        ),
+      )
+
+      await updateOne<ProcessoRecord>('processos', process.id, {
+        coordenador_colaborador: equipe.coordenadorId || null,
+        analista_colaborador: equipe.analistaId || null,
+        rts_colaboradores: equipe.rtsIds || [],
+        rts_usuarios: rtsUserIds,
+      })
+
+      // Auditoria
+      try {
+        const nomesRts = rtsColabsRecords.map((c) => c.nome_completo).join(', ') || 'Nenhum'
+        await createOne('atividades', {
+          usuario: user?.id,
+          texto: `Atualizou a Equipe Técnica do processo ${process.numero_protocolo || process.orgao}: RTs=[${nomesRts}]`,
+          processo: process.id,
+          projeto: process.projeto,
+        })
+      } catch {
+        /* ignore */
+      }
+
+      toast.success('Equipe técnica do processo atualizada!')
+      setEditEquipeOpen(false)
+      void load()
+    } catch (err: unknown) {
+      toast.error(
+        'Erro ao salvar equipe do processo: ' + (err instanceof Error ? err.message : String(err)),
+      )
+    } finally {
+      setSalvandoEquipe(false)
+    }
+  }
   if (loading) return <PageLoading />
   if (failed || !process) return <ErrorState onRetry={() => void load()} />
   const pending = requirements.filter((i) => i.status === 'pendente')
@@ -210,12 +277,25 @@ export default function ProcessDetailPage() {
             <h1 className="mono-value mt-3 text-2xl font-bold text-[#424242]">
               {process.numero_protocolo || 'Processo a protocolar'}
             </h1>
-            <Link
-              to={`/projetos/${process.projeto}`}
-              className="mt-1 inline-block text-sm text-[#737373] hover:text-[#E85B06]"
-            >
-              {process.expand?.projeto?.numero} · {process.expand?.projeto?.nome}
-            </Link>
+            <div className="flex items-center gap-2 mt-1">
+              <Link
+                to={`/projetos/${process.projeto}`}
+                className="inline-block text-sm text-[#737373] hover:text-[#E85B06]"
+              >
+                {process.expand?.projeto?.numero} · {process.expand?.projeto?.nome}
+              </Link>
+              {canWrite && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setEditEquipeOpen(true)}
+                  className="h-7 text-xs border-orange-200 text-[#D65100] hover:bg-orange-50 ml-2"
+                >
+                  <Users className="h-3 w-3 mr-1 text-[#FF6A13]" />
+                  Designar Equipe Técnica
+                </Button>
+              )}
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="rounded-lg border p-3">
@@ -230,6 +310,80 @@ export default function ProcessDetailPage() {
                 {formatDate(process.prazo_orgao)}
               </p>
             </div>
+          </div>
+        </div>
+
+        {/* Bloco Equipe Técnica do Processo */}
+        <div className="mt-4 pt-4 border-t border-neutral-200 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 text-xs">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-1.5 font-bold uppercase tracking-wider text-[11px] text-[#FF6A13]">
+              <ShieldCheck className="h-4 w-4" />
+              Equipe do Processo:
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-neutral-600">
+                Coordenador:{' '}
+                <strong className="text-neutral-900">
+                  {process.expand?.coordenador_colaborador?.nome_completo ||
+                    process.expand?.projeto?.expand?.coordenador_colaborador?.nome_completo ||
+                    'Não definido'}
+                </strong>
+              </span>
+              <span className="text-neutral-300">•</span>
+              <span className="text-neutral-600">
+                Analista:{' '}
+                <strong className="text-neutral-900">
+                  {process.expand?.analista_colaborador?.nome_completo ||
+                    process.expand?.projeto?.expand?.analista_colaborador?.nome_completo ||
+                    'Não definido'}
+                </strong>
+              </span>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[11px] font-semibold text-neutral-500 uppercase">RT(s):</span>
+            {process.expand?.rts_colaboradores && process.expand.rts_colaboradores.length > 0 ? (
+              process.expand.rts_colaboradores.map((rt) => {
+                const reg = rt.registro_profissional_numero
+                  ? `${rt.registro_profissional_tipo || 'CREA'} ${rt.registro_profissional_numero}${rt.registro_profissional_uf ? `/${rt.registro_profissional_uf}` : ''}`
+                  : ''
+                return (
+                  <span
+                    key={rt.id}
+                    className="inline-flex items-center gap-1 bg-orange-50 border border-orange-200 text-[#D65100] px-2 py-0.5 rounded text-[11px] font-medium"
+                  >
+                    <Award className="h-3 w-3 text-[#FF6A13]" />
+                    <strong>{rt.nome_completo}</strong>
+                    {reg && <span className="font-mono text-[10px] text-neutral-600">({reg})</span>}
+                  </span>
+                )
+              })
+            ) : process.expand?.projeto?.expand?.rts_colaboradores &&
+              process.expand.projeto.expand.rts_colaboradores.length > 0 ? (
+              process.expand.projeto.expand.rts_colaboradores.map((rt) => (
+                <span
+                  key={rt.id}
+                  className="inline-flex items-center gap-1 bg-orange-50/70 border border-orange-200 text-[#D65100] px-2 py-0.5 rounded text-[11px] font-medium"
+                >
+                  <Award className="h-3 w-3 text-[#FF6A13]" />
+                  <strong>{rt.nome_completo}</strong>
+                  <span className="text-[9px] text-neutral-500">(Projeto)</span>
+                </span>
+              ))
+            ) : (
+              <span className="text-neutral-400 italic">Nenhum RT atribuído</span>
+            )}
+
+            {canWrite && (
+              <button
+                type="button"
+                onClick={() => setEditEquipeOpen(true)}
+                className="text-[11px] text-[#FF6A13] hover:underline font-semibold ml-1"
+              >
+                Alterar
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -499,6 +653,41 @@ export default function ProcessDetailPage() {
         presetCliente={process.expand?.projeto?.cliente}
         onSuccess={() => void load()}
       />
+
+      {/* Modal de Designação de Equipe Técnica do Processo */}
+      <Dialog open={editEquipeOpen} onOpenChange={setEditEquipeOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Equipe Técnica do Processo Regulatório</DialogTitle>
+          </DialogHeader>
+          <div className="py-2">
+            <EquipeTecnicaSelector
+              colaboradores={colaboradores}
+              value={equipe}
+              onChange={setEquipe}
+              disabled={salvandoEquipe}
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={salvandoEquipe}
+              onClick={() => setEditEquipeOpen(false)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              disabled={salvandoEquipe}
+              onClick={handleSalvarEquipeProcesso}
+              className="bg-[#FF6A13] hover:bg-[#E85B06] text-white font-bold"
+            >
+              {salvandoEquipe ? 'Salvando...' : 'Salvar Equipe Técnica'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

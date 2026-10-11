@@ -104,10 +104,17 @@ export interface ProjetoRecord extends RecordModel {
   data_arquivamento?: string
   sort_order?: number
   prioridade?: 'alta' | 'normal' | 'baixa'
+  coordenador_colaborador?: string
+  analista_colaborador?: string
+  rts_colaboradores?: string[]
+  rts_usuarios?: string[]
   expand?: {
     cliente?: ClienteRecord
     responsavel_tecnico?: UserRecord
     oportunidade?: OportunidadeRecord
+    coordenador_colaborador?: ColaboradorRecord
+    analista_colaborador?: ColaboradorRecord
+    rts_colaboradores?: ColaboradorRecord[]
   }
 }
 
@@ -131,7 +138,16 @@ export interface ProcessoRecord extends RecordModel {
   link_drive: string
   link_emails: string
   observacoes: string
-  expand?: { projeto?: ProjetoRecord }
+  coordenador_colaborador?: string
+  analista_colaborador?: string
+  rts_colaboradores?: string[]
+  rts_usuarios?: string[]
+  expand?: {
+    projeto?: ProjetoRecord
+    coordenador_colaborador?: ColaboradorRecord
+    analista_colaborador?: ColaboradorRecord
+    rts_colaboradores?: ColaboradorRecord[]
+  }
 }
 
 export interface ExigenciaRecord extends RecordModel {
@@ -439,6 +455,8 @@ export interface FornecedorRecord extends RecordModel {
 
 export type RegimeContratacao = 'pf_clt' | 'pf_autonomo' | 'pj'
 
+export type RegistroProfissionalTipo = 'CREA' | 'CAU' | 'CFT' | 'CRQ' | 'OUTRO'
+
 export interface ColaboradorRecord extends RecordModel {
   nome_completo: string
   cpf_cnpj: string
@@ -458,6 +476,14 @@ export interface ColaboradorRecord extends RecordModel {
   foto?: string
   observacoes?: string
   criado_por?: string
+  eh_tecnico?: boolean
+  eh_rt?: boolean
+  registro_profissional_tipo?: RegistroProfissionalTipo
+  registro_profissional_numero?: string
+  registro_profissional_uf?: string
+  formacao_academica?: string
+  area_atuacao?: string
+  rrt_art_padrao?: string
   expand?: {
     fornecedor_vinculado?: FornecedorRecord
     usuario_sistema?: UserRecord

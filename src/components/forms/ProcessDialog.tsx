@@ -20,8 +20,12 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import {
+  EquipeTecnicaSelector,
+  type EquipeTecnicaValue,
+} from '@/components/projetos/EquipeTecnicaSection'
 import { createOne, listAll } from '@/services/api'
-import type { ProcessoRecord, ProjetoRecord } from '@/types/crm'
+import type { ColaboradorRecord, ProcessoRecord, ProjetoRecord } from '@/types/crm'
 
 type Props = {
   open: boolean
@@ -31,8 +35,14 @@ type Props = {
 }
 export function ProcessDialog({ open, onOpenChange, presetProject, onSaved }: Props) {
   const [projects, setProjects] = useState<ProjetoRecord[]>([])
+  const [colaboradores, setColaboradores] = useState<ColaboradorRecord[]>([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [equipe, setEquipe] = useState<EquipeTecnicaValue>({
+    coordenadorId: undefined,
+    analistaId: undefined,
+    rtsIds: [],
+  })
   const [form, setForm] = useState({
     projeto: '',
     orgao: 'DECEA-CINDACTA',
@@ -47,20 +57,66 @@ export function ProcessDialog({ open, onOpenChange, presetProject, onSaved }: Pr
     observacoes: '',
   })
   useEffect(() => {
-    if (open) void listAll<ProjetoRecord>('projetos', { sort: '-created' }).then(setProjects)
-  }, [open])
+    if (open) {
+      void Promise.all([
+        listAll<ProjetoRecord>('projetos', { sort: '-created' }),
+        listAll<ColaboradorRecord>('colaboradores', { sort: 'nome_completo' }),
+      ]).then(([prList, colabs]) => {
+        setProjects(prList)
+        setColaboradores(colabs)
+
+        if (presetProject) {
+          const foundPr = prList.find((p) => p.id === presetProject)
+          if (foundPr) {
+            setEquipe({
+              coordenadorId: foundPr.coordenador_colaborador || undefined,
+              analistaId: foundPr.analista_colaborador || undefined,
+              rtsIds: Array.isArray(foundPr.rts_colaboradores)
+                ? [...foundPr.rts_colaboradores]
+                : [],
+            })
+          }
+        }
+      })
+    }
+  }, [open, presetProject])
+
   useEffect(
     () => setForm((value) => ({ ...value, projeto: presetProject || '' })),
     [open, presetProject],
   )
+
+  function handleSelectProjeto(projId: string) {
+    setForm((v) => ({ ...v, projeto: projId }))
+    const p = projects.find((item) => item.id === projId)
+    if (p) {
+      setEquipe({
+        coordenadorId: p.coordenador_colaborador || undefined,
+        analistaId: p.analista_colaborador || undefined,
+        rtsIds: Array.isArray(p.rts_colaboradores) ? [...p.rts_colaboradores] : [],
+      })
+    }
+  }
+
   async function submit(event: FormEvent) {
     event.preventDefault()
     if (!form.projeto || !form.orgao) return setError('Projeto e órgão são obrigatórios.')
     setSaving(true)
     setError('')
     try {
+      const rtsColabsRecords = colaboradores.filter((c) => (equipe.rtsIds || []).includes(c.id))
+      const rtsUserIds = Array.from(
+        new Set(
+          rtsColabsRecords.map((c) => c.usuario_sistema).filter((u): u is string => Boolean(u)),
+        ),
+      )
+
       const record = await createOne<ProcessoRecord>('processos', {
         ...form,
+        coordenador_colaborador: equipe.coordenadorId || null,
+        analista_colaborador: equipe.analistaId || null,
+        rts_colaboradores: equipe.rtsIds || [],
+        rts_usuarios: rtsUserIds,
         data_protocolo: form.data_protocolo ? `${form.data_protocolo} 12:00:00.000Z` : '',
         prazo_orgao: form.prazo_orgao ? `${form.prazo_orgao} 12:00:00.000Z` : '',
       })
@@ -90,7 +146,8 @@ export function ProcessDialog({ open, onOpenChange, presetProject, onSaved }: Pr
             <Label>Projeto *</Label>
             <Select
               value={form.projeto}
-              onValueChange={(projeto) => setForm((v) => ({ ...v, projeto }))}
+              disabled={Boolean(presetProject)}
+              onValueChange={handleSelectProjeto}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Selecione" />
@@ -181,6 +238,15 @@ export function ProcessDialog({ open, onOpenChange, presetProject, onSaved }: Pr
               onChange={(e) => setForm((v) => ({ ...v, link_ambiente: e.target.value }))}
             />
           </div>
+          {/* Seção Equipe Técnica do Processo Regulatório */}
+          <div className="sm:col-span-2">
+            <EquipeTecnicaSelector
+              colaboradores={colaboradores}
+              value={equipe}
+              onChange={setEquipe}
+            />
+          </div>
+
           <div className="space-y-2 sm:col-span-2">
             <Label>Observações</Label>
             <Textarea

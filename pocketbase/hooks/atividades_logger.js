@@ -217,6 +217,42 @@ onRecordAfterUpdateSuccess(
           )
         }
 
+        // 12. Equipe Técnica (Coordenador, Analista, RTs)
+        const oldCoord = orig.getString('coordenador_colaborador')
+        const newCoord = record.getString('coordenador_colaborador')
+        if (oldCoord !== newCoord) {
+          let coordNome = 'nenhum'
+          try {
+            if (newCoord) {
+              const c = $app.findRecordById('colaboradores', newCoord)
+              coordNome = c.getString('nome_completo')
+            }
+          } catch (_) {}
+          multiTexts.push('Coordenador alterado para ' + coordNome + byUser)
+        }
+
+        const oldAnalista = orig.getString('analista_colaborador')
+        const newAnalista = record.getString('analista_colaborador')
+        if (oldAnalista !== newAnalista) {
+          let analistaNome = 'nenhum'
+          try {
+            if (newAnalista) {
+              const c = $app.findRecordById('colaboradores', newAnalista)
+              analistaNome = c.getString('nome_completo')
+            }
+          } catch (_) {}
+          multiTexts.push('Analista alterado para ' + analistaNome + byUser)
+        }
+
+        // RTs colaboradores
+        try {
+          const oldRts = (orig.getStringSlice('rts_colaboradores') || []).slice().sort().join(',')
+          const newRts = (record.getStringSlice('rts_colaboradores') || []).slice().sort().join(',')
+          if (oldRts !== newRts) {
+            multiTexts.push('Responsáveis Técnicos (RTs) atualizados' + byUser)
+          }
+        } catch (_) {}
+
         // Se houver múltiplas alterações registradas, combinar em texto único ou primeiro
         if (multiTexts.length > 0) {
           text = multiTexts.join(' · ')

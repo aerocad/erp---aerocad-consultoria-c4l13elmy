@@ -1,7 +1,11 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Check, Edit3, Loader2, AlertCircle, DollarSign } from 'lucide-react'
+import { Check, Edit3, Loader2, AlertCircle, DollarSign, Users } from 'lucide-react'
 import { toast } from 'sonner'
 
+import {
+  EquipeTecnicaSelector,
+  type EquipeTecnicaValue,
+} from '@/components/projetos/EquipeTecnicaSection'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -25,13 +29,19 @@ import { useAuth } from '@/contexts/AuthContext'
 import { canAccess, canViewFinancials, trailPhases } from '@/lib/crm'
 import { formatCurrency, toInputDate } from '@/lib/format'
 import { createOne, listAll, updateOne } from '@/services/api'
-import type { ClienteRecord, ProjetoRecord, Trail, UserRecord } from '@/types/crm'
+import type {
+  ClienteRecord,
+  ColaboradorRecord,
+  ProjetoRecord,
+  Trail,
+  UserRecord,
+} from '@/types/crm'
 
 export interface EditarProjetoModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   projeto: ProjetoRecord | null
-  initialTab?: 'geral' | 'financeiro' | 'tecnico' | 'prazos'
+  initialTab?: 'geral' | 'equipe' | 'financeiro' | 'tecnico' | 'prazos'
   onSuccess?: (projetoAtualizado: ProjetoRecord) => void
 }
 
@@ -43,11 +53,17 @@ export function EditarProjetoModal({
   onSuccess,
 }: EditarProjetoModalProps) {
   const { user } = useAuth()
-  const [activeTab, setActiveTab] = useState<'geral' | 'financeiro' | 'tecnico' | 'prazos'>(
-    initialTab,
-  )
+  const [activeTab, setActiveTab] = useState<
+    'geral' | 'equipe' | 'financeiro' | 'tecnico' | 'prazos'
+  >(initialTab)
   const [clients, setClients] = useState<ClienteRecord[]>([])
   const [users, setUsers] = useState<UserRecord[]>([])
+  const [colaboradores, setColaboradores] = useState<ColaboradorRecord[]>([])
+  const [equipe, setEquipe] = useState<EquipeTecnicaValue>({
+    coordenadorId: undefined,
+    analistaId: undefined,
+    rtsIds: [],
+  })
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
 
@@ -104,10 +120,14 @@ export function EditarProjetoModal({
           filter: "role = 'tecnico' || role = 'admin'",
           sort: 'name',
         }),
+        listAll<ColaboradorRecord>('colaboradores', {
+          sort: 'nome_completo',
+        }),
       ])
-        .then(([c, u]) => {
+        .then(([c, u, colabs]) => {
           setClients(c)
           setUsers(u)
+          setColaboradores(colabs)
         })
         .catch(() => {})
     }
@@ -142,6 +162,16 @@ export function EditarProjetoModal({
         pendente_orgao: projeto.pendente_orgao || '',
         observacoes: projeto.observacoes || '',
       })
+
+      // Carregar equipe técnica existente
+      const initialRts = Array.isArray(projeto.rts_colaboradores)
+        ? [...projeto.rts_colaboradores]
+        : []
+      setEquipe({
+        coordenadorId: projeto.coordenador_colaborador || undefined,
+        analistaId: projeto.analista_colaborador || undefined,
+        rtsIds: initialRts,
+      })
       setErro(null)
     }
   }, [open, projeto])
@@ -172,6 +202,19 @@ export function EditarProjetoModal({
       const valorGlobalNum = parseFloat(formData.valor_global.replace(/\./g, '').replace(',', '.'))
       const sanitizedValor = isNaN(valorGlobalNum) ? 0 : Math.max(0, valorGlobalNum)
 
+      // Identificar usuários dos RTs colaboradores
+      const rtsColabsRecords = colaboradores.filter((c) => (equipe.rtsIds || []).includes(c.id))
+      const rtsUserIds = Array.from(
+        new Set(
+          rtsColabsRecords.map((c) => c.usuario_sistema).filter((u): u is string => Boolean(u)),
+        ),
+      )
+
+      let legacyRt = formData.responsavel_tecnico
+      if (!legacyRt && rtsUserIds.length > 0) {
+        legacyRt = rtsUserIds[0]
+      }
+
       // Monta payload respeitando regras de perfil
       const payload: Partial<ProjetoRecord> = {
         nome: nomeTrim,
@@ -180,7 +223,11 @@ export function EditarProjetoModal({
         fase: formData.fase,
         status: formData.status,
         prioridade: formData.prioridade,
-        responsavel_tecnico: formData.responsavel_tecnico || '',
+        responsavel_tecnico: legacyRt || '',
+        coordenador_colaborador: equipe.coordenadorId || null,
+        analista_colaborador: equipe.analistaId || null,
+        rts_colaboradores: equipe.rtsIds || [],
+        rts_usuarios: rtsUserIds,
         art: formData.art.trim(),
         pasta_drive_url: formData.pasta_drive_url.trim(),
         data_inicio: formData.data_inicio ? `${formData.data_inicio} 12:00:00.000Z` : '',
@@ -230,6 +277,24 @@ export function EditarProjetoModal({
       }
       if (projeto.fase !== formData.fase) {
         mudancasAudit.push(`Fase alterada de "${projeto.fase}" para "${formData.fase}"`)
+      }
+
+      // Auditoria de mudanças de Equipe Técnica
+      const rtsAnteriores = (projeto.rts_colaboradores || []).sort().join(',')
+      const rtsNovos = (equipe.rtsIds || []).sort().join(',')
+      if (rtsAnteriores !== rtsNovos) {
+        const nomesRtsNovos = rtsColabsRecords.map((c) => c.nome_completo).join(', ') || 'Nenhum'
+        mudancasAudit.push(`Equipe Técnica: RTs alterados para [${nomesRtsNovos}]`)
+      }
+      if ((projeto.coordenador_colaborador || '') !== (equipe.coordenadorId || '')) {
+        const coordNome =
+          colaboradores.find((c) => c.id === equipe.coordenadorId)?.nome_completo || 'Nenhum'
+        mudancasAudit.push(`Equipe Técnica: Coordenador definido como "${coordNome}"`)
+      }
+      if ((projeto.analista_colaborador || '') !== (equipe.analistaId || '')) {
+        const analistaNome =
+          colaboradores.find((c) => c.id === equipe.analistaId)?.nome_completo || 'Nenhum'
+        mudancasAudit.push(`Equipe Técnica: Analista definido como "${analistaNome}"`)
       }
 
       const atualizado = await updateOne<ProjetoRecord>('projetos', projeto.id, payload)
@@ -296,11 +361,11 @@ export function EditarProjetoModal({
         </DialogHeader>
 
         {/* Abas de navegação interna para organização */}
-        <div className="flex border-b border-neutral-200 mt-2">
+        <div className="flex border-b border-neutral-200 mt-2 overflow-x-auto">
           <button
             type="button"
             onClick={() => setActiveTab('geral')}
-            className={`px-3 py-2 text-xs font-semibold border-b-2 -mb-px transition-colors ${
+            className={`px-3 py-2 text-xs font-semibold border-b-2 -mb-px transition-colors shrink-0 ${
               activeTab === 'geral'
                 ? 'border-[#FF6A13] text-[#FF6A13]'
                 : 'border-transparent text-neutral-600 hover:text-neutral-900'
@@ -308,11 +373,23 @@ export function EditarProjetoModal({
           >
             Dados Principais & Prioridade
           </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('equipe')}
+            className={`px-3 py-2 text-xs font-semibold border-b-2 -mb-px transition-colors flex items-center gap-1 shrink-0 ${
+              activeTab === 'equipe'
+                ? 'border-[#FF6A13] text-[#FF6A13]'
+                : 'border-transparent text-neutral-600 hover:text-neutral-900'
+            }`}
+          >
+            <Users className="h-3.5 w-3.5" />
+            Equipe Técnica (Coord, Analista, RTs)
+          </button>
           {canSeeFinanceTab && (
             <button
               type="button"
               onClick={() => setActiveTab('financeiro')}
-              className={`px-3 py-2 text-xs font-semibold border-b-2 -mb-px transition-colors flex items-center gap-1 ${
+              className={`px-3 py-2 text-xs font-semibold border-b-2 -mb-px transition-colors flex items-center gap-1 shrink-0 ${
                 activeTab === 'financeiro'
                   ? 'border-[#FF6A13] text-[#FF6A13]'
                   : 'border-transparent text-neutral-600 hover:text-neutral-900'
@@ -325,7 +402,7 @@ export function EditarProjetoModal({
           <button
             type="button"
             onClick={() => setActiveTab('tecnico')}
-            className={`px-3 py-2 text-xs font-semibold border-b-2 -mb-px transition-colors ${
+            className={`px-3 py-2 text-xs font-semibold border-b-2 -mb-px transition-colors shrink-0 ${
               activeTab === 'tecnico'
                 ? 'border-[#FF6A13] text-[#FF6A13]'
                 : 'border-transparent text-neutral-600 hover:text-neutral-900'
@@ -336,7 +413,7 @@ export function EditarProjetoModal({
           <button
             type="button"
             onClick={() => setActiveTab('prazos')}
-            className={`px-3 py-2 text-xs font-semibold border-b-2 -mb-px transition-colors ${
+            className={`px-3 py-2 text-xs font-semibold border-b-2 -mb-px transition-colors shrink-0 ${
               activeTab === 'prazos'
                 ? 'border-[#FF6A13] text-[#FF6A13]'
                 : 'border-transparent text-neutral-600 hover:text-neutral-900'
@@ -534,6 +611,28 @@ export function EditarProjetoModal({
             </div>
           )}
 
+          {/* TAB NOVO: EQUIPE TÉCNICA */}
+          {activeTab === 'equipe' && (
+            <div className="space-y-3.5">
+              <EquipeTecnicaSelector
+                colaboradores={colaboradores}
+                value={equipe}
+                onChange={(newEq) => {
+                  setEquipe(newEq)
+                  if (newEq.rtsIds.length > 0) {
+                    const firstRt = colaboradores.find((c) => c.id === newEq.rtsIds[0])
+                    if (firstRt?.usuario_sistema) {
+                      setFormData((prev) => ({
+                        ...prev,
+                        responsavel_tecnico: firstRt.usuario_sistema || prev.responsavel_tecnico,
+                      }))
+                    }
+                  }
+                }}
+                disabled={salvando || !canEditGeneral}
+              />
+            </div>
+          )}
           {/* TAB 2: VALORES & CONTRATO */}
           {activeTab === 'financeiro' && (
             <div className="space-y-3.5">

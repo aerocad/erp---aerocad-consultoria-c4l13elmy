@@ -1,6 +1,10 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { toast } from 'sonner'
 
+import {
+  EquipeTecnicaSelector,
+  type EquipeTecnicaValue,
+} from '@/components/projetos/EquipeTecnicaSection'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -25,6 +29,7 @@ import { trailPhases } from '@/lib/crm'
 import { createOne, listAll } from '@/services/api'
 import type {
   ClienteRecord,
+  ColaboradorRecord,
   OportunidadeRecord,
   ProjetoRecord,
   Trail,
@@ -43,8 +48,14 @@ export function ProjetoDialog({ open, onOpenChange, presetClient, oportunidade, 
   const { user } = useAuth()
   const [clients, setClients] = useState<ClienteRecord[]>([])
   const [users, setUsers] = useState<UserRecord[]>([])
+  const [colaboradores, setColaboradores] = useState<ColaboradorRecord[]>([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [equipe, setEquipe] = useState<EquipeTecnicaValue>({
+    coordenadorId: undefined,
+    analistaId: undefined,
+    rtsIds: [],
+  })
   const [form, setForm] = useState({
     nome: '',
     cliente: '',
@@ -67,13 +78,30 @@ export function ProjetoDialog({ open, onOpenChange, presetClient, oportunidade, 
           filter: "role = 'tecnico' || role = 'admin'",
           sort: 'name',
         }),
+        listAll<ColaboradorRecord>('colaboradores', {
+          sort: 'nome_completo',
+        }),
       ])
-        .then(([c, u]) => {
+        .then(([c, u, colabs]) => {
           setClients(c)
           setUsers(u)
+          setColaboradores(colabs)
+
+          // Se o usuário logado for técnico ou RT, pré-selecionar nos RTs
+          const colabCorrespondente = colabs.find(
+            (item) =>
+              item.usuario_sistema === user?.id || (user?.email && item.email === user.email),
+          )
+          if (colabCorrespondente && colabCorrespondente.eh_rt) {
+            setEquipe((eq) => ({
+              ...eq,
+              rtsIds: eq.rtsIds.length === 0 ? [colabCorrespondente.id] : eq.rtsIds,
+            }))
+          }
         })
         .catch(() => {})
-  }, [open])
+  }, [open, user])
+
   useEffect(() => {
     const trail = oportunidade?.trilha_prevista || 'opea'
     setForm({
@@ -97,8 +125,28 @@ export function ProjetoDialog({ open, onOpenChange, presetClient, oportunidade, 
     setSaving(true)
     setError('')
     try {
+      // Mapear os RTs colaboradores para seus usuários correspondentes (para regras de acesso)
+      const rtsColabsRecords = colaboradores.filter((c) => equipe.rtsIds.includes(c.id))
+      const rtsUserIds = Array.from(
+        new Set(
+          rtsColabsRecords.map((c) => c.usuario_sistema).filter((u): u is string => Boolean(u)),
+        ),
+      )
+
+      // Garantir compatibilidade com o campo legado responsavel_tecnico
+      // Se não houver responsavel_tecnico direto preenchido mas tiver RT selecionado com usuário, usar o primeiro
+      let legacyRt = form.responsavel_tecnico
+      if (!legacyRt && rtsUserIds.length > 0) {
+        legacyRt = rtsUserIds[0]
+      }
+
       const record = await createOne<ProjetoRecord>('projetos', {
         ...form,
+        responsavel_tecnico: legacyRt,
+        coordenador_colaborador: equipe.coordenadorId || null,
+        analista_colaborador: equipe.analistaId || null,
+        rts_colaboradores: equipe.rtsIds,
+        rts_usuarios: rtsUserIds,
         data_inicio: form.data_inicio ? `${form.data_inicio} 12:00:00.000Z` : '',
         prazo: form.prazo ? `${form.prazo} 12:00:00.000Z` : '',
         percentual_concluido: Number(form.percentual_concluido),
@@ -184,26 +232,27 @@ export function ProjetoDialog({ open, onOpenChange, presetClient, oportunidade, 
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-2">
-            <Label>Responsável técnico</Label>
-            <Select
-              value={form.responsavel_tecnico}
-              onValueChange={(responsavel_tecnico) =>
-                setForm((v) => ({ ...v, responsavel_tecnico }))
-              }
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione" />
-              </SelectTrigger>
-              <SelectContent>
-                {users.map((item) => (
-                  <SelectItem key={item.id} value={item.id}>
-                    {item.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          {/* Seção Completa de Equipe Técnica: Coordenador, Analista e RTs */}
+          <div className="sm:col-span-2">
+            <EquipeTecnicaSelector
+              colaboradores={colaboradores}
+              value={equipe}
+              onChange={(newEq) => {
+                setEquipe(newEq)
+                // Se o RT selecionado possuir vínculo de usuário, preenche responsavel_tecnico legado para compatibilidade imediata
+                if (newEq.rtsIds.length > 0) {
+                  const firstRt = colaboradores.find((c) => c.id === newEq.rtsIds[0])
+                  if (firstRt?.usuario_sistema) {
+                    setForm((v) => ({
+                      ...v,
+                      responsavel_tecnico: firstRt.usuario_sistema || v.responsavel_tecnico,
+                    }))
+                  }
+                }
+              }}
+            />
           </div>
+
           <div className="space-y-2">
             <Label>Status</Label>
             <Select

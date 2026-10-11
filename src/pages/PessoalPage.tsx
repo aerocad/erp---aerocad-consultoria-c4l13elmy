@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import {
+  Award,
   Briefcase,
   Building2,
   Calendar,
@@ -7,10 +8,12 @@ import {
   DollarSign,
   Edit2,
   Filter,
+  GraduationCap,
   Mail,
   Phone,
   Plus,
   Search,
+  ShieldCheck,
   Trash2,
   User,
   UserCheck,
@@ -22,7 +25,9 @@ import { toast } from 'sonner'
 
 import { CrmBadge } from '@/components/common/CrmBadge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
@@ -50,6 +55,7 @@ import type {
   ColaboradorRecord,
   FornecedorRecord,
   RegimeContratacao,
+  RegistroProfissionalTipo,
   UserRecord,
 } from '@/types/crm'
 
@@ -76,6 +82,14 @@ interface ColaboradorFormData {
   remuneracao_base: string
   chave_pix: string
   observacoes: string
+  eh_tecnico: boolean
+  eh_rt: boolean
+  registro_profissional_tipo: RegistroProfissionalTipo | 'OUTRO' | ''
+  registro_profissional_numero: string
+  registro_profissional_uf: string
+  formacao_academica: string
+  area_atuacao: string
+  rrt_art_padrao: string
 }
 
 const emptyForm: ColaboradorFormData = {
@@ -95,6 +109,14 @@ const emptyForm: ColaboradorFormData = {
   remuneracao_base: '',
   chave_pix: '',
   observacoes: '',
+  eh_tecnico: false,
+  eh_rt: false,
+  registro_profissional_tipo: 'CREA',
+  registro_profissional_numero: '',
+  registro_profissional_uf: 'DF',
+  formacao_academica: '',
+  area_atuacao: '',
+  rrt_art_padrao: '',
 }
 
 export default function PessoalPage() {
@@ -124,6 +146,7 @@ export default function PessoalPage() {
   const [regimeFiltro, setRegimeFiltro] = useState<string>('todos')
   const [situacaoFiltro, setSituacaoFiltro] = useState<string>('todos')
   const [cargoFiltro, setCargoFiltro] = useState<string>('todos')
+  const [perfilTecnicoFiltro, setPerfilTecnicoFiltro] = useState<string>('todos')
 
   // Modais
   const [modalOpen, setModalOpen] = useState(false)
@@ -157,10 +180,20 @@ export default function PessoalPage() {
       const matchRegime = regimeFiltro === 'todos' || c.regime_contratacao === regimeFiltro
       const matchSituacao = situacaoFiltro === 'todos' || c.situacao === situacaoFiltro
       const matchCargo = cargoFiltro === 'todos' || c.cargo === cargoFiltro
+      const matchPerfilTecnico =
+        perfilTecnicoFiltro === 'todos'
+          ? true
+          : perfilTecnicoFiltro === 'rt'
+            ? !!c.eh_rt
+            : perfilTecnicoFiltro === 'tecnico'
+              ? !!c.eh_tecnico
+              : perfilTecnicoFiltro === 'administrativo'
+                ? !c.eh_tecnico && !c.eh_rt
+                : true
 
-      return matchBusca && matchRegime && matchSituacao && matchCargo
+      return matchBusca && matchRegime && matchSituacao && matchCargo && matchPerfilTecnico
     })
-  }, [colaboradores, busca, regimeFiltro, situacaoFiltro, cargoFiltro])
+  }, [colaboradores, busca, regimeFiltro, situacaoFiltro, cargoFiltro, perfilTecnicoFiltro])
 
   function handleOpenCreate() {
     setEditingItem(null)
@@ -187,6 +220,14 @@ export default function PessoalPage() {
       remuneracao_base: item.remuneracao_base ? String(item.remuneracao_base) : '',
       chave_pix: item.chave_pix || '',
       observacoes: item.observacoes || '',
+      eh_tecnico: !!item.eh_tecnico,
+      eh_rt: !!item.eh_rt,
+      registro_profissional_tipo: item.registro_profissional_tipo || 'CREA',
+      registro_profissional_numero: item.registro_profissional_numero || '',
+      registro_profissional_uf: item.registro_profissional_uf || 'DF',
+      formacao_academica: item.formacao_academica || '',
+      area_atuacao: item.area_atuacao || '',
+      rrt_art_padrao: item.rrt_art_padrao || '',
     })
     setModalOpen(true)
   }
@@ -221,6 +262,17 @@ export default function PessoalPage() {
         remuneracao_base: Number(formData.remuneracao_base) || 0,
         chave_pix: formData.chave_pix.trim(),
         observacoes: formData.observacoes.trim(),
+        eh_tecnico: formData.eh_tecnico || formData.eh_rt,
+        eh_rt: formData.eh_rt,
+        registro_profissional_tipo:
+          formData.eh_rt || formData.eh_tecnico
+            ? formData.registro_profissional_tipo || 'CREA'
+            : '',
+        registro_profissional_numero: formData.registro_profissional_numero.trim(),
+        registro_profissional_uf: formData.registro_profissional_uf.trim().toUpperCase(),
+        formacao_academica: formData.formacao_academica.trim(),
+        area_atuacao: formData.area_atuacao.trim(),
+        rrt_art_padrao: formData.rrt_art_padrao.trim(),
       }
 
       if (editingItem) {
@@ -340,6 +392,19 @@ export default function PessoalPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <Select value={perfilTecnicoFiltro} onValueChange={setPerfilTecnicoFiltro}>
+            <SelectTrigger className="w-[170px] h-9 text-xs">
+              <ShieldCheck className="mr-1.5 h-3.5 w-3.5 text-[#FF6A13]" />
+              <SelectValue placeholder="Perfil Técnico" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todos os perfis</SelectItem>
+              <SelectItem value="rt">Apenas RT (Resp. Técnico)</SelectItem>
+              <SelectItem value="tecnico">Corpo Técnico (RT + Técnicos)</SelectItem>
+              <SelectItem value="administrativo">Administrativo / Financeiro</SelectItem>
+            </SelectContent>
+          </Select>
+
           <Select value={regimeFiltro} onValueChange={setRegimeFiltro}>
             <SelectTrigger className="w-[170px] h-9 text-xs">
               <Filter className="mr-1.5 h-3.5 w-3.5 text-neutral-400" />
@@ -424,16 +489,51 @@ export default function PessoalPage() {
                           </AvatarFallback>
                         </Avatar>
                         <div>
-                          <div className="font-bold text-neutral-900">{item.nome_completo}</div>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-bold text-neutral-900">{item.nome_completo}</span>
+                            {item.eh_rt && (
+                              <Badge className="bg-[#FF6A13] hover:bg-[#E85B06] text-white text-[9px] px-1.5 py-0 h-4 font-bold uppercase tracking-wider">
+                                RT Habilitado
+                              </Badge>
+                            )}
+                            {item.eh_tecnico && !item.eh_rt && (
+                              <Badge
+                                variant="outline"
+                                className="border-blue-400 text-blue-700 bg-blue-50 text-[9px] px-1.5 py-0 h-4 font-medium"
+                              >
+                                Técnico
+                              </Badge>
+                            )}
+                          </div>
                           <div className="font-mono text-[11px] text-neutral-500">
                             {item.cpf_cnpj}
                           </div>
+                          {item.registro_profissional_numero && (
+                            <div className="text-[10px] text-neutral-600 font-medium flex items-center gap-1 mt-0.5">
+                              <Award className="h-3 w-3 text-[#FF6A13]" />
+                              <span>
+                                {item.registro_profissional_tipo || 'CREA'}:{' '}
+                                {item.registro_profissional_numero}
+                                {item.registro_profissional_uf
+                                  ? `/${item.registro_profissional_uf}`
+                                  : ''}
+                              </span>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </td>
                     <td className="px-4 py-3">
                       <div className="font-semibold text-neutral-800">{item.cargo}</div>
                       <div className="text-[11px] text-neutral-500">{item.funcao || '—'}</div>
+                      {item.area_atuacao && (
+                        <div
+                          className="text-[10px] text-neutral-500 italic truncate max-w-[200px]"
+                          title={item.area_atuacao}
+                        >
+                          {item.area_atuacao}
+                        </div>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <span className="inline-flex rounded-full bg-neutral-100 text-neutral-800 text-[10px] font-semibold px-2 py-0.5 border border-neutral-200">
@@ -529,6 +629,157 @@ export default function PessoalPage() {
             </DialogHeader>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-4 text-xs">
+              {/* Seção Destaque de Perfil Técnico e RT */}
+              <div className="sm:col-span-2 p-3.5 rounded-lg border border-[#FF6A13]/30 bg-gradient-to-r from-[#FFFBF8] to-[#FFF5ED] space-y-3">
+                <div className="flex items-center gap-2 text-neutral-800 font-bold text-xs">
+                  <ShieldCheck className="h-4 w-4 text-[#FF6A13]" />
+                  <span>Enquadramento Técnico & Responsabilidade Técnica (RT)</span>
+                </div>
+                <p className="text-[11px] text-neutral-600">
+                  Marque se este colaborador compõe a equipe técnica dos projetos/processos ou se é
+                  legalmente habilitado como <strong>Responsável Técnico (RT)</strong> perante
+                  CREA/CAU/CFT para emissão de ART/RRT e assunção técnica.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <label className="flex items-start gap-2.5 p-2 rounded border border-neutral-200 bg-white cursor-pointer hover:bg-neutral-50">
+                    <Checkbox
+                      checked={formData.eh_tecnico}
+                      onCheckedChange={(c) =>
+                        setFormData({
+                          ...formData,
+                          eh_tecnico: !!c,
+                          eh_rt: !c ? false : formData.eh_rt,
+                        })
+                      }
+                      className="mt-0.5 data-[state=checked]:bg-[#FF6A13] data-[state=checked]:border-[#FF6A13]"
+                    />
+                    <div>
+                      <div className="text-xs font-semibold text-neutral-900">Pessoal Técnico</div>
+                      <div className="text-[10px] text-neutral-500">
+                        Atua como Analista, Coordenador Técnico ou Projetista
+                      </div>
+                    </div>
+                  </label>
+
+                  <label className="flex items-start gap-2.5 p-2 rounded border border-orange-200 bg-orange-50/50 cursor-pointer hover:bg-orange-50">
+                    <Checkbox
+                      checked={formData.eh_rt}
+                      onCheckedChange={(c) =>
+                        setFormData({
+                          ...formData,
+                          eh_rt: Boolean(c),
+                          eh_tecnico: c ? true : formData.eh_tecnico,
+                        })
+                      }
+                      className="mt-0.5 data-[state=checked]:bg-[#FF6A13] data-[state=checked]:border-[#FF6A13]"
+                    />
+                    <div>
+                      <div className="text-xs font-bold text-[#D65100]">
+                        Responsável Técnico (RT)
+                      </div>
+                      <div className="text-[10px] text-neutral-600">
+                        Habilitado a ser atribuído como RT em projetos e processos regulatórios
+                      </div>
+                    </div>
+                  </label>
+                </div>
+
+                {(formData.eh_tecnico || formData.eh_rt) && (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-2 border-t border-[#FF6A13]/20">
+                    <div>
+                      <Label className="text-[11px] font-semibold">Conselho Profissional</Label>
+                      <Select
+                        value={formData.registro_profissional_tipo || 'CREA'}
+                        onValueChange={(val) =>
+                          setFormData({
+                            ...formData,
+                            registro_profissional_tipo: val as RegistroProfissionalTipo,
+                          })
+                        }
+                      >
+                        <SelectTrigger className="h-8 text-xs bg-white">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="CREA">CREA (Engenharia / Agronomia)</SelectItem>
+                          <SelectItem value="CAU">CAU (Arquitetura e Urbanismo)</SelectItem>
+                          <SelectItem value="CFT">CFT (Conselho Federal Técnicos)</SelectItem>
+                          <SelectItem value="CRQ">CRQ (Química)</SelectItem>
+                          <SelectItem value="OUTRO">Outro Conselho</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div>
+                      <Label className="text-[11px] font-semibold">Nº Registro Profissional</Label>
+                      <Input
+                        value={formData.registro_profissional_numero}
+                        onChange={(e) =>
+                          setFormData({ ...formData, registro_profissional_numero: e.target.value })
+                        }
+                        placeholder="Ex: 12345/D ou 54321"
+                        className="h-8 text-xs bg-white font-mono"
+                      />
+                    </div>
+
+                    <div>
+                      <Label className="text-[11px] font-semibold">UF Registro</Label>
+                      <Input
+                        maxLength={2}
+                        value={formData.registro_profissional_uf}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            registro_profissional_uf: e.target.value.toUpperCase(),
+                          })
+                        }
+                        placeholder="DF, SP, RJ..."
+                        className="h-8 text-xs bg-white font-mono uppercase"
+                      />
+                    </div>
+
+                    <div className="sm:col-span-2">
+                      <Label className="text-[11px] font-semibold flex items-center gap-1">
+                        <GraduationCap className="h-3 w-3 text-neutral-500" />
+                        Formação Acadêmica / Titulação
+                      </Label>
+                      <Input
+                        value={formData.formacao_academica}
+                        onChange={(e) =>
+                          setFormData({ ...formData, formacao_academica: e.target.value })
+                        }
+                        placeholder="Ex: Engenharia Cartográfica, Civil, Arquitetura..."
+                        className="h-8 text-xs bg-white"
+                      />
+                    </div>
+
+                    <div>
+                      <Label className="text-[11px] font-semibold">ART / RRT Padrão</Label>
+                      <Input
+                        value={formData.rrt_art_padrao}
+                        onChange={(e) =>
+                          setFormData({ ...formData, rrt_art_padrao: e.target.value })
+                        }
+                        placeholder="Ex: ART Múltipla Mensal"
+                        className="h-8 text-xs bg-white"
+                      />
+                    </div>
+
+                    <div className="sm:col-span-3">
+                      <Label className="text-[11px] font-semibold">
+                        Área de Atuação / Competência Técnica
+                      </Label>
+                      <Input
+                        value={formData.area_atuacao}
+                        onChange={(e) => setFormData({ ...formData, area_atuacao: e.target.value })}
+                        placeholder="Ex: Espaço Aéreo DECEA, OPEA, Levantamentos Topográficos, PBZPA..."
+                        className="h-8 text-xs bg-white"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div className="sm:col-span-2 space-y-1">
                 <Label className="text-xs font-semibold">Nome Completo *</Label>
                 <Input

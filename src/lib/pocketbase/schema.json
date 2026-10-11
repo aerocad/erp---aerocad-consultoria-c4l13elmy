@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-11T22:19:34.180Z",
+  "generatedAt": "2026-10-11T22:30:25.954Z",
   "collections": [
     {
       "name": "users",
@@ -1090,6 +1090,34 @@
           "required": false,
           "system": false,
           "selectValues": ["alta", "normal", "baixa"]
+        },
+        {
+          "name": "coordenador_colaborador",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "colaboradores"
+        },
+        {
+          "name": "analista_colaborador",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "colaboradores"
+        },
+        {
+          "name": "rts_colaboradores",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "colaboradores"
+        },
+        {
+          "name": "rts_usuarios",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "users"
         }
       ],
       "indexes": [
@@ -1099,7 +1127,9 @@
         "CREATE INDEX idx_projetos_cliente ON projetos (cliente)",
         "CREATE INDEX `idx_projetos_arquivado` ON `projetos` (arquivado)",
         "CREATE INDEX `idx_projetos_sort_order` ON `projetos` (sort_order)",
-        "CREATE INDEX `idx_projetos_prioridade` ON `projetos` (prioridade)"
+        "CREATE INDEX `idx_projetos_prioridade` ON `projetos` (prioridade)",
+        "CREATE INDEX `idx_projetos_coordenador` ON `projetos` (coordenador_colaborador)",
+        "CREATE INDEX `idx_projetos_analista` ON `projetos` (analista_colaborador)"
       ]
     },
     {
@@ -1215,12 +1245,42 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "coordenador_colaborador",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "colaboradores"
+        },
+        {
+          "name": "analista_colaborador",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "colaboradores"
+        },
+        {
+          "name": "rts_colaboradores",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "colaboradores"
+        },
+        {
+          "name": "rts_usuarios",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "users"
         }
       ],
       "indexes": [
         "CREATE INDEX idx_processos_projeto ON processos (projeto)",
         "CREATE INDEX idx_processos_status ON processos (status)",
-        "CREATE INDEX idx_processos_prazo ON processos (prazo_orgao)"
+        "CREATE INDEX idx_processos_prazo ON processos (prazo_orgao)",
+        "CREATE INDEX `idx_processos_coordenador` ON `processos` (coordenador_colaborador)",
+        "CREATE INDEX `idx_processos_analista` ON `processos` (analista_colaborador)"
       ]
     },
     {
@@ -1666,8 +1726,8 @@
       "name": "documentos",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != '' && (@request.auth.role = 'admin' || @request.auth.role = 'comercial' || @request.auth.role = 'financeiro' || (@request.auth.role = 'tecnico' && (projeto.responsavel_tecnico = @request.auth.id || processo.projeto.responsavel_tecnico = @request.auth.id)))",
-        "view": "@request.auth.id != '' && (@request.auth.role = 'admin' || @request.auth.role = 'comercial' || @request.auth.role = 'financeiro' || (@request.auth.role = 'tecnico' && (projeto.responsavel_tecnico = @request.auth.id || processo.projeto.responsavel_tecnico = @request.auth.id)))",
+        "list": "@request.auth.id != '' && (@request.auth.role = 'admin' || @request.auth.role = 'comercial' || @request.auth.role = 'financeiro' || (@request.auth.role = 'tecnico' && (projeto.responsavel_tecnico = @request.auth.id || projeto.rts_usuarios ?= @request.auth.id || processo.projeto.responsavel_tecnico = @request.auth.id || processo.projeto.rts_usuarios ?= @request.auth.id || processo.rts_usuarios ?= @request.auth.id)))",
+        "view": "@request.auth.id != '' && (@request.auth.role = 'admin' || @request.auth.role = 'comercial' || @request.auth.role = 'financeiro' || (@request.auth.role = 'tecnico' && (projeto.responsavel_tecnico = @request.auth.id || projeto.rts_usuarios ?= @request.auth.id || processo.projeto.responsavel_tecnico = @request.auth.id || processo.projeto.rts_usuarios ?= @request.auth.id || processo.rts_usuarios ?= @request.auth.id)))",
         "create": "@request.auth.id != ''",
         "update": "@request.auth.id != ''",
         "delete": "@request.auth.role = 'admin'"
@@ -1967,8 +2027,8 @@
       "name": "anexos",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != '' && (@request.auth.role = 'admin' || @request.auth.role = 'comercial' || @request.auth.role = 'financeiro' || (@request.auth.role = 'tecnico' && (extensao = 'docx' || extensao = 'pdf' || extensao = 'dwg' || extensao = 'dxf') && (projeto.responsavel_tecnico = @request.auth.id || processo.projeto.responsavel_tecnico = @request.auth.id || usuario = @request.auth.id)) || (@request.auth.role = 'terceiro' && (extensao = 'docx' || extensao = 'pdf' || extensao = 'dwg' || extensao = 'dxf') && (@collection.ordens_servico.projeto ?= projeto && @collection.ordens_servico.prestador_usuario ?= @request.auth.id)))",
-        "view": "@request.auth.id != '' && (@request.auth.role = 'admin' || @request.auth.role = 'comercial' || @request.auth.role = 'financeiro' || (@request.auth.role = 'tecnico' && (extensao = 'docx' || extensao = 'pdf' || extensao = 'dwg' || extensao = 'dxf') && (projeto.responsavel_tecnico = @request.auth.id || processo.projeto.responsavel_tecnico = @request.auth.id || usuario = @request.auth.id)) || (@request.auth.role = 'terceiro' && (extensao = 'docx' || extensao = 'pdf' || extensao = 'dwg' || extensao = 'dxf') && (@collection.ordens_servico.projeto ?= projeto && @collection.ordens_servico.prestador_usuario ?= @request.auth.id)))",
+        "list": "@request.auth.id != '' && (@request.auth.role = 'admin' || @request.auth.role = 'comercial' || @request.auth.role = 'financeiro' || (@request.auth.role = 'tecnico' && (extensao = 'docx' || extensao = 'pdf' || extensao = 'dwg' || extensao = 'dxf') && (projeto.responsavel_tecnico = @request.auth.id || projeto.rts_usuarios ?= @request.auth.id || processo.projeto.responsavel_tecnico = @request.auth.id || processo.projeto.rts_usuarios ?= @request.auth.id || processo.rts_usuarios ?= @request.auth.id || usuario = @request.auth.id)) || (@request.auth.role = 'terceiro' && (extensao = 'docx' || extensao = 'pdf' || extensao = 'dwg' || extensao = 'dxf') && (@collection.ordens_servico.projeto ?= projeto && @collection.ordens_servico.prestador_usuario ?= @request.auth.id)))",
+        "view": "@request.auth.id != '' && (@request.auth.role = 'admin' || @request.auth.role = 'comercial' || @request.auth.role = 'financeiro' || (@request.auth.role = 'tecnico' && (extensao = 'docx' || extensao = 'pdf' || extensao = 'dwg' || extensao = 'dxf') && (projeto.responsavel_tecnico = @request.auth.id || projeto.rts_usuarios ?= @request.auth.id || processo.projeto.responsavel_tecnico = @request.auth.id || processo.projeto.rts_usuarios ?= @request.auth.id || processo.rts_usuarios ?= @request.auth.id || usuario = @request.auth.id)) || (@request.auth.role = 'terceiro' && (extensao = 'docx' || extensao = 'pdf' || extensao = 'dwg' || extensao = 'dxf') && (@collection.ordens_servico.projeto ?= projeto && @collection.ordens_servico.prestador_usuario ?= @request.auth.id)))",
         "create": "@request.auth.id != '' && (@request.auth.role = 'admin' || @request.auth.role = 'comercial' || @request.auth.role = 'financeiro' || ((@request.auth.role = 'tecnico' || @request.auth.role = 'terceiro') && (@request.body.extensao = 'docx' || @request.body.extensao = 'pdf' || @request.body.extensao = 'dwg' || @request.body.extensao = 'dxf')))",
         "update": "@request.auth.role = 'admin' || usuario = @request.auth.id",
         "delete": "@request.auth.role = 'admin' || usuario = @request.auth.id"
@@ -2994,6 +3054,55 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "eh_tecnico",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "eh_rt",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "registro_profissional_tipo",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["CREA", "CAU", "CFT", "CRQ", "OUTRO"]
+        },
+        {
+          "name": "registro_profissional_numero",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "registro_profissional_uf",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "formacao_academica",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "area_atuacao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "rrt_art_padrao",
+          "type": "text",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
@@ -3001,7 +3110,9 @@
         "CREATE INDEX idx_colaboradores_nome ON colaboradores (nome_completo)",
         "CREATE INDEX idx_colaboradores_regime ON colaboradores (regime_contratacao)",
         "CREATE INDEX idx_colaboradores_situacao ON colaboradores (situacao)",
-        "CREATE INDEX idx_colaboradores_cargo ON colaboradores (cargo)"
+        "CREATE INDEX idx_colaboradores_cargo ON colaboradores (cargo)",
+        "CREATE INDEX `idx_colaboradores_eh_tecnico` ON `colaboradores` (eh_tecnico)",
+        "CREATE INDEX `idx_colaboradores_eh_rt` ON `colaboradores` (eh_rt)"
       ]
     },
     {
