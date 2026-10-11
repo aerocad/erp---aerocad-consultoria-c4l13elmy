@@ -240,23 +240,118 @@ export function FinancePage() {
     })
   }, [installments.data, query, status, month, projectFilter])
 
+  // Anos disponíveis para filtro no bloco de resumo (dedup e ordenado desc)
+  const availableYears = useMemo(() => {
+    const yearsSet = new Set<string>()
+    for (const p of installments.data) {
+      if (p.vencimento) {
+        const y = p.vencimento.slice(0, 4)
+        if (/^\d{4}$/.test(y)) yearsSet.add(y)
+      }
+      if (p.data_pagamento) {
+        const y = p.data_pagamento.slice(0, 4)
+        if (/^\d{4}$/.test(y)) yearsSet.add(y)
+      }
+      if (p.data_faturamento) {
+        const y = p.data_faturamento.slice(0, 4)
+        if (/^\d{4}$/.test(y)) yearsSet.add(y)
+      }
+      const raw = (p as any).nfse_dados
+      if (raw) {
+        try {
+          const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
+          const dtNfse = parsed?.dataRecebimento || parsed?.dataEmissao
+          if (dtNfse && typeof dtNfse === 'string') {
+            const y = dtNfse.slice(0, 4)
+            if (/^\d{4}$/.test(y)) yearsSet.add(y)
+          }
+        } catch {
+          /* intentionally ignored */
+        }
+      }
+    }
+    return Array.from(yearsSet).sort().reverse()
+  }, [installments.data])
+
+  // Ano selecionado para o bloco de resumo (persiste opcionalmente em localStorage)
+  const [selectedYear, setSelectedYear] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('aerocad_financeiro_kpi_ano')
+      if (saved) return saved
+    } catch {
+      /* intentionally ignored */
+    }
+    return 'todos'
+  })
+
+  const handleYearChange = (year: string) => {
+    setSelectedYear(year)
+    try {
+      localStorage.setItem('aerocad_financeiro_kpi_ano', year)
+    } catch {
+      /* intentionally ignored */
+    }
+  }
+
   const { total, paid, open, overdue } = useMemo(() => {
     const now = new Date()
     return installments.data.reduce(
       (acc, item) => {
-        acc.total += item.valor
+        // Extrai anos de referência da parcela
+        const anoVencimento = item.vencimento ? item.vencimento.slice(0, 4) : ''
+
+        // Data de recebimento: data_pagamento || data da NFS-e (dataRecebimento ou dataEmissao) || data_faturamento
+        let anoRecebimento = item.data_pagamento ? item.data_pagamento.slice(0, 4) : ''
+        if (!anoRecebimento) {
+          const raw = (item as any).nfse_dados
+          if (raw) {
+            try {
+              const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
+              const dt = parsed?.dataRecebimento || parsed?.dataEmissao
+              if (dt && typeof dt === 'string') {
+                anoRecebimento = dt.slice(0, 4)
+              }
+            } catch {
+              /* intentionally ignored */
+            }
+          }
+        }
+        if (!anoRecebimento && item.data_faturamento) {
+          anoRecebimento = item.data_faturamento.slice(0, 4)
+        }
+        if (!anoRecebimento && anoVencimento) {
+          anoRecebimento = anoVencimento
+        }
+
+        const matchYearPrevisto = selectedYear === 'todos' || anoVencimento === selectedYear
+        const matchYearRecebido = selectedYear === 'todos' || anoRecebimento === selectedYear
+
+        // Total Previsto: soma das parcelas com vencimento no ano
+        if (matchYearPrevisto) {
+          acc.total += item.valor
+        }
+
+        // Recebido: soma das parcelas quitadas com data de recebimento / NFS-e no ano
         if (item.status === 'paga') {
-          acc.paid += item.valor_recebido || item.valor
+          if (matchYearRecebido) {
+            acc.paid += item.valor_recebido || item.valor
+          }
         } else if (item.status === 'vencida' || new Date(item.vencimento) < now) {
-          acc.overdue += item.valor
+          // Em atraso: parcelas vencidas cujo vencimento pertence ao ano filtrado
+          if (matchYearPrevisto) {
+            acc.overdue += item.valor
+          }
         } else {
-          acc.open += item.valor
+          // A receber (em aberto e a vencer): parcelas a vencer com vencimento no ano
+          if (matchYearPrevisto) {
+            acc.open += item.valor
+          }
         }
         return acc
       },
       { total: 0, paid: 0, open: 0, overdue: 0 },
     )
-  }, [installments.data, ocultarValores])
+  }, [installments.data, selectedYear, ocultarValores])
 
   async function registerPayment() {
     if (!payment) return
@@ -500,7 +595,28 @@ export function FinancePage() {
         title="Financeiro"
         description="Parcelas, gatilhos e recebimentos da operação."
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Seletor de Exercício / Ano do Bloco de Totais de Resumo */}
+            <div className="flex items-center gap-1.5 rounded-lg border border-neutral-300 bg-white px-2 py-1 shadow-sm">
+              <Calendar className="h-4 w-4 text-[#FF6A13]" />
+              <span className="text-xs font-semibold text-neutral-600">Ano:</span>
+              <Select value={selectedYear} onValueChange={handleYearChange}>
+                <SelectTrigger className="h-7 w-[130px] border-none bg-transparent text-xs font-bold text-neutral-800 shadow-none focus:ring-0 focus:ring-offset-0 px-1">
+                  <SelectValue placeholder="Ano" />
+                </SelectTrigger>
+                <SelectContent align="end">
+                  <SelectItem value="todos" className="text-xs font-semibold">
+                    Todos os anos
+                  </SelectItem>
+                  {availableYears.map((y) => (
+                    <SelectItem key={y} value={y} className="text-xs">
+                      Ano {y}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             {canWrite && (
               <Button
                 variant="outline"
@@ -523,6 +639,34 @@ export function FinancePage() {
           </div>
         }
       />
+
+      {/* Indicador de filtro ativo no cabeçalho do resumo quando um ano específico estiver selecionado */}
+      <div className="mb-3 flex items-center justify-between">
+        <div className="flex items-center gap-2 text-xs text-neutral-600">
+          <span className="font-semibold text-neutral-800 uppercase tracking-wider text-[11px]">
+            Resumo Operacional
+          </span>
+          <span className="text-neutral-400">•</span>
+          <span>
+            {selectedYear === 'todos' ? (
+              <span className="text-neutral-500 font-medium">Consolidado (Todos os anos)</span>
+            ) : (
+              <span className="inline-flex items-center gap-1 font-bold text-[#FF6A13] bg-[#FFF6EC] px-2 py-0.5 rounded border border-[#FFD2B3]">
+                Exercício {selectedYear}
+              </span>
+            )}
+          </span>
+        </div>
+        {selectedYear !== 'todos' && (
+          <button
+            type="button"
+            onClick={() => handleYearChange('todos')}
+            className="text-[11px] font-medium text-[#D65100] hover:underline"
+          >
+            Ver todos os anos
+          </button>
+        )}
+      </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {kpis.map(({ label, value, icon: Icon, color }) => (
