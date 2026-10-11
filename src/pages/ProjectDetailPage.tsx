@@ -25,6 +25,7 @@ import { OrdemServicoDialog } from '@/components/forms/OrdemServicoDialog'
 import { ProcessDialog } from '@/components/forms/ProcessDialog'
 import { ArquivarProjetoModal } from '@/components/projetos/ArquivarProjetoModal'
 import { EditarNomeProjetoModal } from '@/components/projetos/EditarNomeProjetoModal'
+import { EditarProjetoModal } from '@/components/projetos/EditarProjetoModal'
 import { ExcluirProjetoModal } from '@/components/projetos/ExcluirProjetoModal'
 import { Button } from '@/components/ui/button'
 import { Archive, ArchiveRestore } from 'lucide-react'
@@ -78,11 +79,16 @@ export default function ProjectDetailPage() {
   const [note, setNote] = useState('')
   const [excluirModalOpen, setExcluirModalOpen] = useState(false)
   const [editNomeOpen, setEditNomeOpen] = useState(false)
+  const [editProjetoModalOpen, setEditProjetoModalOpen] = useState(false)
+  const [editProjetoInitialTab, setEditProjetoInitialTab] = useState<
+    'geral' | 'financeiro' | 'tecnico' | 'prazos'
+  >('geral')
   const [arquivarModalOpen, setArquivarModalOpen] = useState(false)
   const canWrite = ['admin', 'comercial', 'tecnico'].includes(user?.role || '')
   const isAdmin = user?.role === 'admin'
   const canManageOS = ['admin', 'tecnico'].includes(user?.role || '')
   const canEditName = ['admin', 'tecnico'].includes(user?.role || '')
+  const canEditProject = ['admin', 'tecnico', 'financeiro'].includes(user?.role || '')
   const canArchive = ['admin', 'tecnico'].includes(user?.role || '')
 
   const load = async () => {
@@ -269,20 +275,37 @@ export default function ProjectDetailPage() {
               >
                 {badgeFinanceiro.label}
               </span>
+              {project.prioridade && (
+                <span
+                  className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider ${
+                    project.prioridade === 'alta'
+                      ? 'bg-red-50 text-red-700 border-red-200'
+                      : project.prioridade === 'baixa'
+                        ? 'bg-neutral-100 text-neutral-600 border-neutral-200'
+                        : 'bg-neutral-50 text-neutral-700 border-neutral-300'
+                  }`}
+                  title={`Prioridade ${project.prioridade}`}
+                >
+                  Prioridade: {project.prioridade}
+                </span>
+              )}
             </div>
             <div className="mt-2 flex items-center gap-2 group">
               <h1 className="text-2xl font-bold text-[#424242]">{project.nome}</h1>
-              {canEditName && (
+              {canEditProject && (
                 <Button
-                  variant="ghost"
+                  variant="outline"
                   size="sm"
-                  onClick={() => setEditNomeOpen(true)}
-                  className="h-8 px-2 text-[#737373] hover:text-[#D65100] hover:bg-orange-50 shrink-0"
-                  title="Editar nome do projeto"
-                  aria-label="Editar nome do projeto"
+                  onClick={() => {
+                    setEditProjetoInitialTab('geral')
+                    setEditProjetoModalOpen(true)
+                  }}
+                  className="h-8 px-2.5 border-orange-200 bg-orange-50/60 text-[#D65100] hover:bg-orange-100 hover:text-[#B23B00] shrink-0 font-medium"
+                  title="Editar projeto completo (valores, prazos, dados)"
+                  aria-label="Editar projeto completo"
                 >
-                  <Edit3 className="h-4 w-4 mr-1 text-[#FF6A13]" />
-                  <span className="text-xs font-semibold">Editar nome</span>
+                  <Edit3 className="h-3.5 w-3.5 mr-1.5 text-[#FF6A13]" />
+                  <span className="text-xs font-semibold">Editar projeto</span>
                 </Button>
               )}
             </div>
@@ -326,9 +349,27 @@ export default function ProjectDetailPage() {
       </header>
       <section className="crm-card mt-5 overflow-hidden">
         <div className="border-b p-5">
-          <p className="technical-label">TRILHA DE EXECUÇÃO</p>
-          <h2 className="font-bold">{trailLabels[project.trilha]}</h2>
-        </div>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="technical-label">TRILHA DE EXECUÇÃO</p>
+              <h2 className="font-bold">{trailLabels[project.trilha]}</h2>
+            </div>
+            {canEditProject && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setEditProjetoInitialTab('tecnico')
+                  setEditProjetoModalOpen(true)
+                }}
+                className="h-7 text-xs text-neutral-500 hover:text-[#FF6A13]"
+              >
+                <Edit3 className="mr-1 h-3.5 w-3.5" />
+                Editar escopo / trilha
+              </Button>
+            )}
+          </div>
+        </div>{' '}
         <div className="overflow-x-auto p-6">
           <div className="flex min-w-[780px] items-start">
             {phases.map((phase, index) => (
@@ -636,7 +677,24 @@ export default function ProjectDetailPage() {
                 <p className="technical-label">FINANCEIRO & FATURAMENTO</p>
                 <h2 className="font-bold">Resumo do projeto</h2>
               </div>
-              <WalletCards className="h-5 w-5 text-[#FF6A13]" />
+              <div className="flex items-center gap-1.5">
+                {canEditProject && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setEditProjetoInitialTab('financeiro')
+                      setEditProjetoModalOpen(true)
+                    }}
+                    className="h-7 px-2 text-xs text-[#FF6A13] hover:bg-orange-50"
+                    title="Editar valor global e faturamento"
+                  >
+                    <Edit3 className="mr-1 h-3.5 w-3.5" />
+                    Editar valor
+                  </Button>
+                )}
+                <WalletCards className="h-5 w-5 text-[#FF6A13]" />
+              </div>
             </div>
 
             {/* Bloco de Confronto: Contratado × Faturado em Notas × Saldo */}
@@ -818,14 +876,26 @@ export default function ProjectDetailPage() {
         </div>
       )}
 
-      {/* Modal de Edição de Nome do Projeto */}
+      {/* Modal de Edição Completa do Projeto (Valores, Prazos, Status, Prioridade, Auditoria) */}
+      <EditarProjetoModal
+        open={editProjetoModalOpen}
+        onOpenChange={setEditProjetoModalOpen}
+        projeto={project}
+        initialTab={editProjetoInitialTab}
+        onSuccess={(atualizado) => {
+          setProject((prev) => (prev ? { ...prev, ...atualizado } : atualizado))
+          // Recarregar dados completos do projeto e a timeline de atividades
+          void load()
+        }}
+      />
+
+      {/* Modal de Edição Rápida de Nome do Projeto */}
       <EditarNomeProjetoModal
         open={editNomeOpen}
         onOpenChange={setEditNomeOpen}
         projeto={project}
         onSuccess={(atualizado) => {
           setProject((prev) => (prev ? { ...prev, nome: atualizado.nome } : atualizado))
-          // Recarregar lista de atividades / timeline para refletir a nova atividade gerada pelo hook
           void load()
         }}
       />

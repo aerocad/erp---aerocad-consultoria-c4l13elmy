@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-11T13:27:26.174Z",
+  "generatedAt": "2026-10-11T14:09:45.440Z",
   "collections": [
     {
       "name": "users",
@@ -1077,6 +1077,19 @@
           "type": "date",
           "required": false,
           "system": false
+        },
+        {
+          "name": "sort_order",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "prioridade",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["alta", "normal", "baixa"]
         }
       ],
       "indexes": [
@@ -1084,7 +1097,9 @@
         "CREATE INDEX idx_projetos_trilha ON projetos (trilha)",
         "CREATE INDEX idx_projetos_status ON projetos (status)",
         "CREATE INDEX idx_projetos_cliente ON projetos (cliente)",
-        "CREATE INDEX `idx_projetos_arquivado` ON `projetos` (arquivado)"
+        "CREATE INDEX `idx_projetos_arquivado` ON `projetos` (arquivado)",
+        "CREATE INDEX `idx_projetos_sort_order` ON `projetos` (sort_order)",
+        "CREATE INDEX `idx_projetos_prioridade` ON `projetos` (prioridade)"
       ]
     },
     {

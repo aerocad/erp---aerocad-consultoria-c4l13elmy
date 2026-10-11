@@ -102,6 +102,8 @@ export interface ProjetoRecord extends RecordModel {
   origem_importacao?: boolean
   arquivado?: boolean
   data_arquivamento?: string
+  sort_order?: number
+  prioridade?: 'alta' | 'normal' | 'baixa'
   expand?: {
     cliente?: ClienteRecord
     responsavel_tecnico?: UserRecord

@@ -13,6 +13,7 @@ import {
   X,
 } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { toast } from 'sonner'
 
 import { CrmBadge } from '@/components/common/CrmBadge'
 import { EmptyState, ErrorState, PageLoading } from '@/components/common/States'
@@ -20,6 +21,7 @@ import { SectionHeader } from '@/components/common/SectionHeader'
 import { ArquivarLoteProjetosModal } from '@/components/projetos/ArquivarLoteProjetosModal'
 import { ArquivarProjetoModal } from '@/components/projetos/ArquivarProjetoModal'
 import { EditarNomeProjetoModal } from '@/components/projetos/EditarNomeProjetoModal'
+import { EditarProjetoModal } from '@/components/projetos/EditarProjetoModal'
 import { ProjetoDialog } from '@/components/forms/ProjetoDialog'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -40,6 +42,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext'
 import { useCrmData } from '@/hooks/use-crm-data'
 import { formatCurrency, formatDate } from '@/lib/format'
+import { updateOne } from '@/services/api'
 import {
   calcularResumoFinanceiroTodosProjetos,
   getStatusFinanceiroBadgeConfig,
@@ -61,17 +64,27 @@ export default function ProjectsPage() {
   const [query, setQuery] = useState('')
   const [trail, setTrail] = useState('todos')
   const [status, setStatus] = useState('todos')
+  const [priorityFilter, setPriorityFilter] = useState('todos')
   const [financialFilter, setFinancialFilter] = useState('todos')
   const [archiveFilter, setArchiveFilter] = useState<'ativos' | 'arquivados' | 'todos'>('ativos')
   const [editingProject, setEditingProject] = useState<ProjetoRecord | null>(null)
+  const [editingFullProject, setEditingFullProject] = useState<ProjetoRecord | null>(null)
   const [archivingProject, setArchivingProject] = useState<ProjetoRecord | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [batchAction, setBatchAction] = useState<'arquivar' | 'desarquivar' | null>(null)
+
+  // Drag and drop state
+  const [draggedId, setDraggedId] = useState<string | null>(null)
+  const [dragOverId, setDragOverId] = useState<string | null>(null)
+  const [savingOrder, setSavingOrder] = useState(false)
+
   const [sortOrder, setSortOrder] = useState<
-    'recentes' | 'cronologica' | 'numero_desc' | 'numero_asc'
+    'manual' | 'prioridade' | 'recentes' | 'cronologica' | 'numero_desc' | 'numero_asc'
   >(() => {
     const saved = localStorage.getItem('crm_projetos_ordem')
     if (
+      saved === 'manual' ||
+      saved === 'prioridade' ||
       saved === 'recentes' ||
       saved === 'cronologica' ||
       saved === 'numero_desc' ||
@@ -83,7 +96,9 @@ export default function ProjectsPage() {
   })
   const [dialog, setDialog] = useState(params.get('novo') === '1')
 
-  const handleSortChange = (val: 'recentes' | 'cronologica' | 'numero_desc' | 'numero_asc') => {
+  const handleSortChange = (
+    val: 'manual' | 'prioridade' | 'recentes' | 'cronologica' | 'numero_desc' | 'numero_asc',
+  ) => {
     setSortOrder(val)
     try {
       localStorage.setItem('crm_projetos_ordem', val)
@@ -96,6 +111,7 @@ export default function ProjectsPage() {
   }, [params])
   const canWrite = ['admin', 'comercial', 'tecnico', 'financeiro'].includes(user?.role || '')
   const canEditName = ['admin', 'tecnico'].includes(user?.role || '')
+  const canEditFull = ['admin', 'tecnico', 'financeiro'].includes(user?.role || '')
   const canArchive = ['admin', 'tecnico'].includes(user?.role || '')
 
   // Alterna seleção individual de projeto de forma confiável
@@ -148,21 +164,51 @@ export default function ProjectsPage() {
 
       const matchTrail = trail === 'todos' || item.trilha === trail
       const matchStatus = status === 'todos' || item.status === status
+      const matchPriority =
+        priorityFilter === 'todos' || (item.prioridade || 'normal') === priorityFilter
       const resumo = resumosFinanceiros.get(item.id)
       const matchFinancial =
         financialFilter === 'todos' || resumo?.statusFinanceiro === financialFilter
       const matchQuery =
         !query ||
-        `${item.numero} ${item.nome} ${item.expand?.cliente?.razao_social}`
+        `${item.numero} ${item.nome} ${item.expand?.cliente?.razao_social} ${item.prioridade || ''}`
           .toLowerCase()
           .includes(query.toLowerCase())
 
-      return matchTrail && matchStatus && matchFinancial && matchQuery
+      return matchTrail && matchStatus && matchPriority && matchFinancial && matchQuery
     })
 
-    return filtered.sort((a, b) => {
+    return [...filtered].sort((a, b) => {
       const orderA = parseProjectOrder(a)
       const orderB = parseProjectOrder(b)
+
+      // 1. Ordem manual (persistida em sort_order)
+      if (sortOrder === 'manual') {
+        const sA = a.sort_order ?? 999999
+        const sB = b.sort_order ?? 999999
+        if (sA !== sB) return sA - sB
+        // desempate por numero desc
+        if (orderA.ano !== orderB.ano) return orderB.ano - orderA.ano
+        if (orderA.seq !== orderB.seq) return orderB.seq - orderA.seq
+        return (b.numero || '').localeCompare(a.numero || '', undefined, { numeric: true })
+      }
+
+      // 2. Por prioridade (Alta -> Normal -> Baixa), depois mais recentes
+      if (sortOrder === 'prioridade') {
+        const pesoPrioridade = (p?: string) => {
+          if (p === 'alta') return 1
+          if (p === 'normal' || !p) return 2
+          if (p === 'baixa') return 3
+          return 2
+        }
+        const pesoA = pesoPrioridade(a.prioridade)
+        const pesoB = pesoPrioridade(b.prioridade)
+        if (pesoA !== pesoB) return pesoA - pesoB
+        // desempate por numero desc
+        if (orderA.ano !== orderB.ano) return orderB.ano - orderA.ano
+        if (orderA.seq !== orderB.seq) return orderB.seq - orderA.seq
+        return (b.numero || '').localeCompare(a.numero || '', undefined, { numeric: true })
+      }
 
       if (sortOrder === 'cronologica' || sortOrder === 'numero_asc') {
         // Mais antigos primeiro (Ordem cronológica crescente: ex.: 2024-06 -> 2026-01 -> 2026-286)
@@ -196,11 +242,84 @@ export default function ProjectsPage() {
     query,
     trail,
     status,
+    priorityFilter,
     financialFilter,
     archiveFilter,
     sortOrder,
     resumosFinanceiros,
   ])
+
+  // Lógica de Drag-and-Drop para ordenação manual
+  const handleDragStart = (e: React.DragEvent<HTMLDivElement>, id: string) => {
+    setDraggedId(id)
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', id)
+  }
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>, targetId: string) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    if (dragOverId !== targetId) {
+      setDragOverId(targetId)
+    }
+  }
+
+  const handleDragLeave = () => {
+    // mantem feedback visual suave
+  }
+
+  const handleDragEnd = () => {
+    setDraggedId(null)
+    setDragOverId(null)
+  }
+
+  const handleDrop = async (e: React.DragEvent<HTMLDivElement>, targetId: string) => {
+    e.preventDefault()
+    const sourceId = draggedId || e.dataTransfer.getData('text/plain')
+    setDraggedId(null)
+    setDragOverId(null)
+
+    if (!sourceId || sourceId === targetId) return
+
+    // Se o usuário ainda não estiver no modo de ordenação manual, alternar automaticamente
+    if (sortOrder !== 'manual') {
+      handleSortChange('manual')
+    }
+
+    const currentRows = [...rows]
+    const sourceIndex = currentRows.findIndex((r) => r.id === sourceId)
+    const targetIndex = currentRows.findIndex((r) => r.id === targetId)
+
+    if (sourceIndex === -1 || targetIndex === -1) return
+
+    // Reordenar a lista localmente
+    const reordered = [...currentRows]
+    const [moved] = reordered.splice(sourceIndex, 1)
+    reordered.splice(targetIndex, 0, moved)
+
+    setSavingOrder(true)
+    try {
+      // Atualizar sort_order no banco para os itens afetados (atribuindo 1, 2, 3...)
+      const updates = reordered
+        .map((item, index) => {
+          const newOrder = index + 1
+          if (item.sort_order === newOrder) return null
+          return updateOne<ProjetoRecord>('projetos', item.id, { sort_order: newOrder })
+        })
+        .filter(Boolean)
+
+      if (updates.length > 0) {
+        await Promise.all(updates)
+        toast.success('Ordem manual atualizada com sucesso!')
+      }
+      void projects.reload()
+    } catch (err) {
+      console.error('Erro ao salvar nova ordem manual:', err)
+      toast.error('Não foi possível salvar a nova ordem dos projetos.')
+    } finally {
+      setSavingOrder(false)
+    }
+  }
 
   // Projetos selecionados a partir do conjunto de IDs
   const selectedProjects = useMemo(() => {
@@ -391,7 +510,7 @@ export default function ProjectsPage() {
           </SelectContent>
         </Select>
         <Select value={status} onValueChange={setStatus}>
-          <SelectTrigger className="md:w-44">
+          <SelectTrigger className="md:w-36">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -400,6 +519,17 @@ export default function ProjectsPage() {
             <SelectItem value="suspenso">Suspenso</SelectItem>
             <SelectItem value="concluido">Concluído</SelectItem>
             <SelectItem value="cancelado">Cancelado</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={priorityFilter} onValueChange={setPriorityFilter}>
+          <SelectTrigger className="md:w-36">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todos">Prioridade: Todas</SelectItem>
+            <SelectItem value="alta">Prioridade: Alta</SelectItem>
+            <SelectItem value="normal">Prioridade: Normal</SelectItem>
+            <SelectItem value="baixa">Prioridade: Baixa</SelectItem>
           </SelectContent>
         </Select>
         <Select value={financialFilter} onValueChange={setFinancialFilter}>
@@ -416,16 +546,36 @@ export default function ProjectsPage() {
         <Select
           value={sortOrder}
           onValueChange={(val) =>
-            handleSortChange(val as 'recentes' | 'cronologica' | 'numero_desc' | 'numero_asc')
+            handleSortChange(
+              val as
+                | 'manual'
+                | 'prioridade'
+                | 'recentes'
+                | 'cronologica'
+                | 'numero_desc'
+                | 'numero_asc',
+            )
           }
         >
           <SelectTrigger className="md:w-56">
             <div className="flex items-center gap-1.5 truncate text-left">
-              <ArrowUpDown className="h-3.5 w-3.5 text-[#9A9A9A] shrink-0" />
+              <ArrowUpDown className="h-3.5 w-3.5 text-[#FF6A13] shrink-0" />
               <SelectValue placeholder="Ordenação" />
             </div>
           </SelectTrigger>
           <SelectContent align="end">
+            <SelectItem value="manual">
+              <div className="flex flex-col">
+                <span className="font-medium text-[#D65100]">★ Ordem manual (Drag-and-Drop)</span>
+                <span className="text-[11px] text-[#8A8A8A]">Arraste os cards para ordenar</span>
+              </div>
+            </SelectItem>
+            <SelectItem value="prioridade">
+              <div className="flex flex-col">
+                <span className="font-medium">Por prioridade</span>
+                <span className="text-[11px] text-[#8A8A8A]">Alta → Normal → Baixa</span>
+              </div>
+            </SelectItem>
             <SelectItem value="recentes">
               <div className="flex flex-col">
                 <span className="font-medium">Mais recentes</span>
@@ -455,6 +605,20 @@ export default function ProjectsPage() {
           </SelectContent>
         </Select>
       </div>
+
+      {/* Dica amigável de Drag-and-Drop quando no modo manual */}
+      {sortOrder === 'manual' && rows.length > 1 && (
+        <div className="mb-4 flex items-center justify-between rounded-lg bg-orange-50/70 border border-orange-200/80 px-3.5 py-2 text-xs text-[#B23B00]">
+          <span className="flex items-center gap-1.5 font-medium">
+            <ArrowUpDown className="h-3.5 w-3.5" />
+            Modo de ordenação manual ativo: clique e arraste um card para posicioná-lo na frente de
+            outro.
+          </span>
+          {savingOrder && (
+            <span className="font-semibold text-xs animate-pulse">Gravando ordem...</span>
+          )}
+        </div>
+      )}
       {!rows.length ? (
         <EmptyState
           title="Nenhum projeto encontrado"
@@ -465,17 +629,30 @@ export default function ProjectsPage() {
           {rows.map((item) => {
             const resumo = resumosFinanceiros.get(item.id)
             const badgeFinanceiro = getStatusFinanceiroBadgeConfig(resumo)
+            const isDragging = draggedId === item.id
+            const isOver = dragOverId === item.id && draggedId !== item.id
+            const prioridade = item.prioridade || 'normal'
 
             return (
               <div
                 key={item.id}
+                draggable={canWrite}
+                onDragStart={(e) => handleDragStart(e, item.id)}
+                onDragOver={(e) => handleDragOver(e, item.id)}
+                onDragLeave={handleDragLeave}
+                onDragEnd={handleDragEnd}
+                onDrop={(e) => handleDrop(e, item.id)}
                 onClick={() => navigate(`/projetos/${item.id}`)}
-                className={`crm-card p-5 text-left cursor-pointer transition-all hover:shadow-md flex flex-col justify-between relative group ${
-                  selectedIds.has(item.id)
-                    ? 'ring-2 ring-[#FF6A13] border-[#FF6A13] bg-orange-50/30'
-                    : item.arquivado
-                      ? 'opacity-70 bg-neutral-50/90 border-dashed border-neutral-300 hover:opacity-100'
-                      : ''
+                className={`crm-card p-5 text-left cursor-pointer transition-all hover:shadow-md flex flex-col justify-between relative group select-none ${
+                  isDragging
+                    ? 'opacity-40 scale-[0.98] ring-2 ring-dashed ring-[#FF6A13]'
+                    : isOver
+                      ? 'border-2 border-[#FF6A13] bg-orange-50/40 shadow-lg scale-[1.01]'
+                      : selectedIds.has(item.id)
+                        ? 'ring-2 ring-[#FF6A13] border-[#FF6A13] bg-orange-50/30'
+                        : item.arquivado
+                          ? 'opacity-70 bg-neutral-50/90 border-dashed border-neutral-300 hover:opacity-100'
+                          : ''
                 }`}
               >
                 <div>
@@ -521,6 +698,20 @@ export default function ProjectsPage() {
                           Arquivado
                         </span>
                       )}
+
+                      {/* Badge de Prioridade Colorido no Card */}
+                      <span
+                        className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                          prioridade === 'alta'
+                            ? 'bg-red-50 text-red-700 border-red-200'
+                            : prioridade === 'baixa'
+                              ? 'bg-neutral-100 text-neutral-500 border-neutral-200'
+                              : 'bg-neutral-50 text-neutral-600 border-neutral-200'
+                        }`}
+                        title={`Prioridade ${prioridade}`}
+                      >
+                        {prioridade}
+                      </span>
                     </div>
                     <div className="flex items-center gap-1.5">
                       <span
@@ -542,7 +733,7 @@ export default function ProjectsPage() {
                       </CrmBadge>
 
                       {/* Menu de ações por linha / card */}
-                      {(canEditName || canArchive) && (
+                      {(canEditFull || canEditName || canArchive) && (
                         <DropdownMenu>
                           <DropdownMenuTrigger
                             asChild
@@ -560,6 +751,18 @@ export default function ProjectsPage() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                            {canEditFull && (
+                              <DropdownMenuItem
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setEditingFullProject(item)
+                                }}
+                                className="text-xs flex items-center gap-2 cursor-pointer font-medium"
+                              >
+                                <Edit3 className="h-3.5 w-3.5 text-[#FF6A13]" />
+                                Editar projeto completo
+                              </DropdownMenuItem>
+                            )}
                             {canEditName && (
                               <DropdownMenuItem
                                 onClick={(e) => {
@@ -568,10 +771,70 @@ export default function ProjectsPage() {
                                 }}
                                 className="text-xs flex items-center gap-2 cursor-pointer"
                               >
-                                <Edit3 className="h-3.5 w-3.5 text-[#FF6A13]" />
-                                Editar nome do projeto
+                                <Edit3 className="h-3.5 w-3.5 text-neutral-500" />
+                                Editar apenas nome
                               </DropdownMenuItem>
                             )}
+
+                            {/* Acesso rápido para trocar prioridade diretamente no menu */}
+                            {canWrite && (
+                              <>
+                                <div className="my-1 border-t border-neutral-100" />
+                                <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-neutral-400">
+                                  Definir prioridade
+                                </div>
+                                <DropdownMenuItem
+                                  onClick={async (e) => {
+                                    e.stopPropagation()
+                                    try {
+                                      await updateOne('projetos', item.id, { prioridade: 'alta' })
+                                      toast.success('Prioridade definida como ALTA')
+                                      void projects.reload()
+                                    } catch {
+                                      toast.error('Erro ao alterar prioridade')
+                                    }
+                                  }}
+                                  className="text-xs flex items-center gap-2 cursor-pointer text-red-700"
+                                >
+                                  <span className="h-2 w-2 rounded-full bg-red-500" />
+                                  Prioridade Alta
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={async (e) => {
+                                    e.stopPropagation()
+                                    try {
+                                      await updateOne('projetos', item.id, { prioridade: 'normal' })
+                                      toast.success('Prioridade definida como NORMAL')
+                                      void projects.reload()
+                                    } catch {
+                                      toast.error('Erro ao alterar prioridade')
+                                    }
+                                  }}
+                                  className="text-xs flex items-center gap-2 cursor-pointer text-neutral-700"
+                                >
+                                  <span className="h-2 w-2 rounded-full bg-neutral-400" />
+                                  Prioridade Normal
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={async (e) => {
+                                    e.stopPropagation()
+                                    try {
+                                      await updateOne('projetos', item.id, { prioridade: 'baixa' })
+                                      toast.success('Prioridade definida como BAIXA')
+                                      void projects.reload()
+                                    } catch {
+                                      toast.error('Erro ao alterar prioridade')
+                                    }
+                                  }}
+                                  className="text-xs flex items-center gap-2 cursor-pointer text-neutral-500"
+                                >
+                                  <span className="h-2 w-2 rounded-full bg-neutral-300" />
+                                  Prioridade Baixa
+                                </DropdownMenuItem>
+                                <div className="my-1 border-t border-neutral-100" />
+                              </>
+                            )}
+
                             {canArchive && (
                               <DropdownMenuItem
                                 onClick={(e) => {
@@ -655,6 +918,18 @@ export default function ProjectsPage() {
           }
         }}
         onSaved={(record) => navigate(`/projetos/${record.id}`)}
+      />
+
+      {/* Modal de Edição Completa do Projeto (Valores, Dados, Escopo, Prioridade, Auditoria) */}
+      <EditarProjetoModal
+        open={Boolean(editingFullProject)}
+        onOpenChange={(open) => {
+          if (!open) setEditingFullProject(null)
+        }}
+        projeto={editingFullProject}
+        onSuccess={() => {
+          void projects.reload()
+        }}
       />
 
       {/* Modal para editar nome do projeto diretamente da listagem */}
