@@ -6,6 +6,8 @@ import {
   CalendarDays,
   CheckSquare,
   Edit3,
+  Eye,
+  EyeOff,
   MoreVertical,
   Plus,
   Search,
@@ -40,6 +42,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useAuth } from '@/contexts/AuthContext'
+import { useFinanceiroVisibilidade } from '@/contexts/FinanceiroVisibilidadeContext'
 import { useCrmData } from '@/hooks/use-crm-data'
 import { formatCurrency, formatDate } from '@/lib/format'
 import { updateOne } from '@/services/api'
@@ -51,6 +54,7 @@ import type { ParcelaRecord, ProjetoRecord } from '@/types/crm'
 
 export default function ProjectsPage() {
   const { user } = useAuth()
+  const { ocultarValores, toggleOcultarValores } = useFinanceiroVisibilidade()
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
   const projects = useCrmData<ProjetoRecord>('projetos', {
@@ -367,14 +371,44 @@ export default function ProjectsPage() {
         title="Projetos"
         description="Trilhas, fases e prazos sob controle AEROCAD."
         actions={
-          <Button
-            disabled={!canWrite}
-            onClick={() => setDialog(true)}
-            className="bg-[#FF6A13] hover:bg-[#E85B06]"
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            Novo projeto
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={toggleOcultarValores}
+              className={`h-10 px-3 text-xs font-semibold gap-1.5 border-neutral-300 transition-colors ${
+                ocultarValores
+                  ? 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100'
+                  : 'text-neutral-700 hover:text-neutral-900 hover:bg-neutral-100'
+              }`}
+              title={
+                ocultarValores
+                  ? 'Exibir valores financeiros (Cards e Ficha)'
+                  : 'Ocultar valores financeiros (Cards e Ficha)'
+              }
+            >
+              {ocultarValores ? (
+                <>
+                  <EyeOff className="h-4 w-4 text-amber-700" />
+                  <span>Valores Ocultos</span>
+                </>
+              ) : (
+                <>
+                  <Eye className="h-4 w-4 text-neutral-600" />
+                  <span>Ocultar Valores</span>
+                </>
+              )}
+            </Button>
+            <Button
+              disabled={!canWrite}
+              onClick={() => setDialog(true)}
+              className="bg-[#FF6A13] hover:bg-[#E85B06]"
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Novo projeto
+            </Button>
+          </div>
         }
       />
       {/* Barra de Ações em Massa (quando há seleção de projetos) */}

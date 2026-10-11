@@ -3,7 +3,51 @@ export const currency = new Intl.NumberFormat('pt-BR', {
   currency: 'BRL',
 })
 
-export function formatCurrency(value?: number | null) {
+export const VALOR_MASCARADO = 'R$ •••••'
+
+// Estado global de ocultação de valores financeiros
+let _globalOcultarValores = false
+const _listeners = new Set<(ocultar: boolean) => void>()
+
+export function isValoresOcultos(): boolean {
+  return _globalOcultarValores
+}
+
+export function setGlobalOcultarValores(ocultar: boolean): void {
+  if (_globalOcultarValores !== ocultar) {
+    _globalOcultarValores = ocultar
+    _listeners.forEach((listener) => {
+      try {
+        listener(ocultar)
+      } catch {
+        // Ignora erros de listeners
+      }
+    })
+  }
+}
+
+export function subscribeFinanceiroVisibilidade(listener: (ocultar: boolean) => void): () => void {
+  _listeners.add(listener)
+  return () => {
+    _listeners.delete(listener)
+  }
+}
+
+/**
+ * Formata moeda em BRL (R$ 0,00).
+ * Se ocultarValores estiver ativo e options.forceShow não for true, retorna 'R$ •••••'.
+ */
+export function formatCurrency(value?: number | null, options?: { forceShow?: boolean }) {
+  if (_globalOcultarValores && !options?.forceShow) {
+    return VALOR_MASCARADO
+  }
+  return currency.format(Number(value || 0))
+}
+
+/**
+ * Retorna o valor cru formatado em moeda BRL ignorando o toggle de privacidade (ex.: geração de documentos).
+ */
+export function formatCurrencyRaw(value?: number | null) {
   return currency.format(Number(value || 0))
 }
 

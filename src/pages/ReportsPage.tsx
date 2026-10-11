@@ -1068,7 +1068,7 @@ export default function ReportsPage() {
                       />
                       <YAxis
                         tick={{ fill: '#737373', fontSize: 11 }}
-                        tickFormatter={(val) => `R$ ${(val / 1000).toFixed(0)}k`}
+                        tickFormatter={(val) => formatCurrency(val)}
                       />
                       <Tooltip
                         formatter={(val: number) => [formatCurrency(val), 'Valor Total']}
@@ -1708,7 +1708,7 @@ export default function ReportsPage() {
                   <XAxis dataKey="mes" tick={{ fill: '#737373', fontSize: 11 }} />
                   <YAxis
                     tick={{ fill: '#737373', fontSize: 11 }}
-                    tickFormatter={(val) => `R$ ${(val / 1000).toFixed(0)}k`}
+                    tickFormatter={(val) => formatCurrency(val)}
                   />
                   <Tooltip
                     formatter={(val: number) => [formatCurrency(val)]}

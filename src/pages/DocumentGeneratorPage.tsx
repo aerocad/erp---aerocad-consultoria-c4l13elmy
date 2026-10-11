@@ -76,7 +76,7 @@ import {
   buildFichaNaoConformidadeHTML,
   buildRequerimentoAnacDeceaHTML,
 } from '@/lib/aerocadSupportDocumentBuilders'
-import { formatCurrency, formatDate } from '@/lib/format'
+import { formatCurrencyRaw as formatCurrency, formatDate } from '@/lib/format'
 import { createOne, listAll, updateOne } from '@/services/api'
 import type {
   ClienteRecord,

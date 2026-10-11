@@ -1,5 +1,5 @@
 import { dataHojeExtenso, INSTITUTIONAL_DATA } from './documentCatalogo'
-import { formatCurrency } from './format'
+import { formatCurrencyRaw as formatCurrency } from './format'
 
 export interface ContractDocumentData {
   numeroContrato: string

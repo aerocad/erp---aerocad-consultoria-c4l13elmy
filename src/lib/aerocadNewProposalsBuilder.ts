@@ -1,4 +1,4 @@
-import { formatCurrency } from './format'
+import { formatCurrencyRaw as formatCurrency } from './format'
 import { dataHojeExtenso, INSTITUTIONAL_DATA, PALETA_AEROCAD_2026 } from './documentCatalogo'
 
 // ==========================================

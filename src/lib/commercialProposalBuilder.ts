@@ -1,4 +1,4 @@
-import { formatCurrency } from './format'
+import { formatCurrencyRaw as formatCurrency } from './format'
 import { dataHojeExtenso, INSTITUTIONAL_DATA } from './documentCatalogo'
 
 export interface MarcoFaturamento {

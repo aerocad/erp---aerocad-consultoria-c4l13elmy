@@ -8,6 +8,8 @@ import {
   ChevronLeft,
   ChevronRight,
   CircleGauge,
+  Eye,
+  EyeOff,
   FileSpreadsheet,
   FileText,
   FolderKanban,
@@ -34,9 +36,11 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { AlertasDrawer } from '@/components/common/AlertasDrawer'
 import { useAlertas } from '@/contexts/AlertasContext'
 import { useAuth } from '@/contexts/AuthContext'
+import { useFinanceiroVisibilidade } from '@/contexts/FinanceiroVisibilidadeContext'
 import { canAccess, roleLabels } from '@/lib/crm'
 import { escapeFilter, initials } from '@/lib/format'
 import pb from '@/lib/pocketbase/client'
@@ -72,6 +76,7 @@ type SearchResult = { id: string; label: string; meta: string; path: string; typ
 
 export default function AppLayout() {
   const { user, logout } = useAuth()
+  const { ocultarValores, toggleOcultarValores } = useFinanceiroVisibilidade()
   const {
     alertas,
     dispensados,
@@ -357,6 +362,33 @@ export default function AppLayout() {
             >
               <Search className="h-4 w-4" />
             </Button>
+
+            {/* Toggle de Privacidade / Ocultar Valores Financeiros */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={toggleOcultarValores}
+                  className={cn(
+                    'relative border-[#DEDEDE] transition-colors',
+                    ocultarValores
+                      ? 'bg-amber-50/80 text-amber-700 border-amber-300 hover:bg-amber-100 hover:text-amber-800'
+                      : 'text-[#555] hover:border-[#FF6A13] hover:text-[#FF6A13]',
+                  )}
+                  aria-label={ocultarValores ? 'Exibir valores' : 'Ocultar valores'}
+                >
+                  {ocultarValores ? (
+                    <EyeOff className="h-4 w-4 text-amber-700" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                <p>{ocultarValores ? 'Exibir valores' : 'Ocultar valores'}</p>
+              </TooltipContent>
+            </Tooltip>
 
             {/* Sininho de Notificações / Alertas por Prazo */}
             {role !== 'terceiro' && (
