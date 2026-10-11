@@ -9,13 +9,19 @@ export interface XLSXLib {
     data: ArrayBuffer | string | Uint8Array,
     opts?: { type?: 'array' | 'binary' | 'buffer' | 'base64' | 'string' },
   ) => XLSXWorkbook
+  write: (
+    workbook: XLSXWorkbook,
+    opts?: { bookType?: string; type?: 'array' | 'base64' | 'binary' | 'buffer' | 'string' },
+  ) => ArrayBuffer | Uint8Array | string
+  writeFile: (workbook: XLSXWorkbook, filename: string, opts?: { bookType?: string }) => void
   utils: {
     sheet_to_json: <T = Record<string, unknown>>(
       worksheet: XLSXWorksheet,
       opts?: { header?: number | string[]; defval?: unknown; blankrows?: boolean; raw?: boolean },
     ) => T[]
     book_new: () => XLSXWorkbook
-    aoa_to_sheet: (data: unknown[][]) => XLSXWorksheet
+    aoa_to_sheet: (data: unknown[][], opts?: Record<string, unknown>) => XLSXWorksheet
+    json_to_sheet: (data: unknown[], opts?: Record<string, unknown>) => XLSXWorksheet
     book_append_sheet: (workbook: XLSXWorkbook, worksheet: XLSXWorksheet, name?: string) => void
   }
 }

@@ -22,6 +22,7 @@ import {
   Square,
   Trash2,
   TriangleAlert,
+  Scale,
 } from 'lucide-react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -73,6 +74,7 @@ import { ContasPagarTab } from '@/components/financeiro/ContasPagarTab'
 import { ContasReceberTab } from '@/components/financeiro/ContasReceberTab'
 import { FluxoCaixaTab } from '@/components/financeiro/FluxoCaixaTab'
 import { ExtratosComprovantesTab } from '@/components/financeiro/ExtratosComprovantesTab'
+import { BalancetesTab } from '@/components/financeiro/BalancetesTab'
 import { RelatoriosFinanceirosTab } from '@/components/financeiro/RelatoriosFinanceirosTab'
 
 export default FinancePage
@@ -117,6 +119,7 @@ export function FinancePage() {
     | 'contas_receber'
     | 'fluxo_caixa'
     | 'extratos'
+    | 'balancetes'
     | 'relatorios'
     | 'parcelas'
     | 'orfas'
@@ -771,6 +774,18 @@ export function FinancePage() {
         </button>
 
         <button
+          onClick={() => setActiveTab('balancetes')}
+          className={`pb-3 px-3 text-xs sm:text-sm font-bold border-b-2 transition flex items-center gap-1.5 ${
+            activeTab === 'balancetes'
+              ? 'border-[#FF6A13] text-[#FF6A13]'
+              : 'border-transparent text-[#737373] hover:text-[#333]'
+          }`}
+        >
+          <Scale className="h-4 w-4" />
+          Balancetes Mensais
+        </button>
+
+        <button
           onClick={() => setActiveTab('relatorios')}
           className={`pb-3 px-3 text-xs sm:text-sm font-bold border-b-2 transition flex items-center gap-1.5 ${
             activeTab === 'relatorios'
@@ -874,6 +889,15 @@ export function FinancePage() {
             onReloadContasReceber={async () => {
               void contasReceber.reload()
             }}
+          />
+        </div>
+      ) : activeTab === 'balancetes' ? (
+        <div className="mt-5">
+          <BalancetesTab
+            parcelas={installments.data}
+            contasPagar={contasPagar.data}
+            contasReceber={contasReceber.data}
+            projetos={projects.data}
           />
         </div>
       ) : activeTab === 'relatorios' ? (

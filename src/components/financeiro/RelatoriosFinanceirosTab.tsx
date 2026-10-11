@@ -30,8 +30,12 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useFinanceiroVisibilidade } from '@/contexts/FinanceiroVisibilidadeContext'
+import { useAuth } from '@/contexts/AuthContext'
 import { formatCurrency, formatCurrencyRaw, formatDate } from '@/lib/format'
 import { CATEGORIA_PAGAR_LABELS } from './ContasPagarTab'
+import { exportarTabelaParaXlsx, ColunaXlsx } from '@/services/aerocadXlsxExporter'
+import { AerocadRelatorioA4 } from '@/components/financeiro/AerocadRelatorioA4'
+import { Dialog, DialogContent } from '@/components/ui/dialog'
 import type {
   ClienteRecord,
   ContaPagarRecord,
@@ -64,9 +68,11 @@ export function RelatoriosFinanceirosTab({
   projetos,
   clientes,
 }: RelatoriosFinanceirosTabProps) {
+  const { user } = useAuth()
   const { ocultarValores } = useFinanceiroVisibilidade()
   const [subTipo, setSubTipo] = useState<SubRelatorio>('dre')
   const [periodoAno, setPeriodoAno] = useState<string>('2026')
+  const [previewModalOpen, setPreviewModalOpen] = useState(false)
 
   // Filtra dados pelo ano selecionado ou todos
   const parcelasAno = useMemo(() => {
@@ -399,7 +405,187 @@ export function RelatoriosFinanceirosTab({
 
   // Exportação para impressão / PDF (janela A4 padrão AEROCAD)
   function handleImprimirRelatorio() {
-    window.print()
+    setPreviewModalOpen(true)
+  }
+
+  // Exportação para planilha XLSX (Excel nativo com SheetJS)
+  async function handleExportarXlsx() {
+    try {
+      if (subTipo === 'dre') {
+        const linhas: Record<string, unknown>[] = []
+        linhas.push({
+          rubrica: 'RECEITA OPERACIONAL BRUTA',
+          previsto: dreCalculada.receitaBrutaPrevista,
+          realizado: dreCalculada.receitaBrutaRealizada,
+        })
+        for (const [k, v] of Object.entries(dreCalculada.despesasPorCat)) {
+          linhas.push({
+            rubrica: `(-) ${CATEGORIA_PAGAR_LABELS[k as any] || k}`,
+            previsto: -v.prevista,
+            realizado: -v.realizada,
+          })
+        }
+        await exportarTabelaParaXlsx({
+          nomeArquivo: `dre_aerocad_${periodoAno}`,
+          tituloRelatorio: `DEMONSTRATIVO DE RESULTADO DO EXERCÍCIO (DRE) — ${periodoAno}`,
+          subtitulo: `Resultado Líquido do Período: ${formatCurrency(dreCalculada.resultadoLiquidoRealizado)}`,
+          usuarioNome: user?.name,
+          userRole: user?.role,
+          colunas: [
+            { header: 'Rubrica Contábil', key: 'rubrica', width: 40 },
+            { header: 'Valor Previsto (R$)', key: 'previsto', width: 22, tipo: 'moeda' },
+            { header: 'Valor Realizado (R$)', key: 'realizado', width: 22, tipo: 'moeda' },
+          ],
+          linhas,
+          totais: {
+            previsto: dreCalculada.resultadoLiquidoPrevisto,
+            realizado: dreCalculada.resultadoLiquidoRealizado,
+          },
+        })
+      } else if (subTipo === 'faturamento_cliente') {
+        const linhas = faturamentoPorCliente.map((fc) => ({
+          cliente: fc.clienteNome,
+          qtdNfse: fc.qtdNfse,
+          previsto: fc.totalPrevisto,
+          faturado: fc.totalFaturado,
+          recebido: fc.totalPago,
+        }))
+        const totalRecebido = faturamentoPorCliente.reduce((acc, c) => acc + c.totalPago, 0)
+        const totalFaturado = faturamentoPorCliente.reduce((acc, c) => acc + c.totalFaturado, 0)
+        const totalPrevisto = faturamentoPorCliente.reduce((acc, c) => acc + c.totalPrevisto, 0)
+
+        await exportarTabelaParaXlsx({
+          nomeArquivo: `faturamento_clientes_aerocad_${periodoAno}`,
+          tituloRelatorio: `FATURAMENTO CONSOLIDADO POR CLIENTE — ${periodoAno}`,
+          subtitulo: `Total Recebido: ${formatCurrency(totalRecebido)}`,
+          usuarioNome: user?.name,
+          userRole: user?.role,
+          colunas: [
+            { header: 'Cliente / Tomador', key: 'cliente', width: 40 },
+            { header: 'Qtd NFS-e', key: 'qtdNfse', width: 14, tipo: 'numero' },
+            { header: 'Total Previsto (R$)', key: 'previsto', width: 22, tipo: 'moeda' },
+            { header: 'Faturado NFS-e (R$)', key: 'faturado', width: 22, tipo: 'moeda' },
+            { header: 'Total Recebido (R$)', key: 'recebido', width: 22, tipo: 'moeda' },
+          ],
+          linhas,
+          totais: {
+            previsto: totalPrevisto,
+            faturado: totalFaturado,
+            recebido: totalRecebido,
+          },
+        })
+      } else if (subTipo === 'custo_projeto') {
+        const linhas = custoPorProjeto.map((cp) => ({
+          numero: cp.projetoNumero,
+          nome: cp.projetoNome,
+          cliente: cp.clienteNome,
+          receitas: cp.receitasRealizadas,
+          custos: cp.custosRealizados,
+          margem: cp.margemRealizada,
+          margemPerc: `${cp.margemPercentual}%`,
+        }))
+        const totalRec = custoPorProjeto.reduce((acc, c) => acc + c.receitasRealizadas, 0)
+        const totalCust = custoPorProjeto.reduce((acc, c) => acc + c.custosRealizados, 0)
+
+        await exportarTabelaParaXlsx({
+          nomeArquivo: `rentabilidade_projetos_aerocad_${periodoAno}`,
+          tituloRelatorio: `RENTABILIDADE E MARGEM POR PROJETO — ${periodoAno}`,
+          subtitulo: `Margem Geral: ${formatCurrency(totalRec - totalCust)}`,
+          usuarioNome: user?.name,
+          userRole: user?.role,
+          colunas: [
+            { header: 'Número', key: 'numero', width: 14 },
+            { header: 'Projeto', key: 'nome', width: 35 },
+            { header: 'Cliente', key: 'cliente', width: 30 },
+            { header: 'Receitas Recebidas (R$)', key: 'receitas', width: 22, tipo: 'moeda' },
+            { header: 'Custos Diretos (R$)', key: 'custos', width: 22, tipo: 'moeda' },
+            { header: 'Margem Líquida (R$)', key: 'margem', width: 22, tipo: 'moeda' },
+            { header: 'Margem %', key: 'margemPerc', width: 14 },
+          ],
+          linhas,
+          totais: {
+            receitas: totalRec,
+            custos: totalCust,
+            margem: totalRec - totalCust,
+          },
+        })
+      } else if (subTipo === 'aging') {
+        const linhas = [
+          {
+            faixa: 'A Vencer (Em dia)',
+            pagar: agingCalculado.pagar.em_dia,
+            receber: agingCalculado.receber.em_dia,
+          },
+          {
+            faixa: 'Vencidos de 1 a 30 dias',
+            pagar: agingCalculado.pagar.ate30,
+            receber: agingCalculado.receber.ate30,
+          },
+          {
+            faixa: 'Vencidos de 31 a 60 dias',
+            pagar: agingCalculado.pagar.de31a60,
+            receber: agingCalculado.receber.de31a60,
+          },
+          {
+            faixa: 'Vencidos de 61 a 90 dias',
+            pagar: agingCalculado.pagar.de61a90,
+            receber: agingCalculado.receber.de61a90,
+          },
+          {
+            faixa: 'Vencidos há mais de 90 dias',
+            pagar: agingCalculado.pagar.mais90,
+            receber: agingCalculado.receber.mais90,
+          },
+        ]
+        const totalPagar = Object.values(agingCalculado.pagar).reduce((a, b) => a + b, 0)
+        const totalReceber = Object.values(agingCalculado.receber).reduce((a, b) => a + b, 0)
+
+        await exportarTabelaParaXlsx({
+          nomeArquivo: `aging_titulos_aerocad_${periodoAno}`,
+          tituloRelatorio: `AGING DE TÍTULOS (FAIXAS DE VENCIMENTO) — ${periodoAno}`,
+          usuarioNome: user?.name,
+          userRole: user?.role,
+          colunas: [
+            { header: 'Faixa de Vencimento', key: 'faixa', width: 30 },
+            { header: 'Contas a Pagar (R$)', key: 'pagar', width: 22, tipo: 'moeda' },
+            { header: 'Contas a Receber (R$)', key: 'receber', width: 22, tipo: 'moeda' },
+          ],
+          linhas,
+          totais: {
+            pagar: totalPagar,
+            receber: totalReceber,
+          },
+        })
+      } else if (subTipo === 'impostos') {
+        const linhas = [
+          { tributo: 'ISS Retido', valor: impostosRetidosNfse.issTotal },
+          { tributo: 'INSS Retido', valor: impostosRetidosNfse.inssTotal },
+          { tributo: 'IRPJ Retido', valor: impostosRetidosNfse.irpjTotal },
+          { tributo: 'CSLL Retida', valor: impostosRetidosNfse.csllTotal },
+          { tributo: 'COFINS Retido', valor: impostosRetidosNfse.cofinsTotal },
+          { tributo: 'PIS Retido', valor: impostosRetidosNfse.pisTotal },
+        ]
+        await exportarTabelaParaXlsx({
+          nomeArquivo: `impostos_retidos_aerocad_${periodoAno}`,
+          tituloRelatorio: `IMPOSTOS RETIDOS NA FONTE (NFS-E) — ${periodoAno}`,
+          subtitulo: `${impostosRetidosNfse.notasComRetencao} notas fiscais com retenção`,
+          usuarioNome: user?.name,
+          userRole: user?.role,
+          colunas: [
+            { header: 'Tributo / Retenção', key: 'tributo', width: 30 },
+            { header: 'Total Retido (R$)', key: 'valor', width: 22, tipo: 'moeda' },
+          ],
+          linhas,
+          totais: {
+            valor: impostosRetidosNfse.totalRetencoes,
+          },
+        })
+      }
+      toast.success('Relatório exportado em formato XLSX com sucesso!')
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      toast.error('Erro ao exportar planilha Excel: ' + msg)
+    }
   }
 
   // Exportação CSV
@@ -489,7 +675,18 @@ export function RelatoriosFinanceirosTab({
           </Select>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExportarXlsx}
+            className="border-emerald-300 text-emerald-800 hover:bg-emerald-50 h-9 text-xs font-semibold"
+            title="Exportar planilha Excel formatada no padrão AEROCAD"
+          >
+            <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5 text-emerald-600" />
+            Exportar XLSX
+          </Button>
+
           <Button
             variant="outline"
             size="sm"
@@ -497,7 +694,7 @@ export function RelatoriosFinanceirosTab({
             className="border-neutral-300 text-neutral-700 h-9 text-xs"
           >
             <Download className="mr-1.5 h-3.5 w-3.5" />
-            Exportar CSV
+            CSV
           </Button>
 
           <Button
@@ -506,7 +703,7 @@ export function RelatoriosFinanceirosTab({
             className="bg-[#FF6A13] hover:bg-[#E85B06] text-white h-9 text-xs font-semibold"
           >
             <Printer className="mr-1.5 h-3.5 w-3.5" />
-            Imprimir / Salvar PDF (A4)
+            Exportar / Imprimir PDF (A4)
           </Button>
         </div>
       </div>
@@ -906,6 +1103,378 @@ export function RelatoriosFinanceirosTab({
           </div>
         </div>
       )}
+
+      {/* Modal A4 para Visualização Oficial e Impressão em PDF */}
+      <Dialog open={previewModalOpen} onOpenChange={setPreviewModalOpen}>
+        <DialogContent className="max-w-4xl max-h-[92vh] overflow-y-auto p-0">
+          <div className="sticky top-0 z-20 bg-neutral-900 text-white px-5 py-3 flex items-center justify-between shadow-md print:hidden">
+            <div>
+              <p className="text-[10px] uppercase font-bold text-[#FF6A13] tracking-widest">
+                PREVIEW A4 · TEMPLATE OFICIAL AEROCAD
+              </p>
+              <h3 className="text-sm font-bold text-white">
+                {subTipo === 'dre'
+                  ? 'Demonstrativo do Resultado do Exercício (DRE)'
+                  : subTipo === 'faturamento_cliente'
+                    ? 'Faturamento Consolidado por Cliente'
+                    : subTipo === 'custo_projeto'
+                      ? 'Rentabilidade e Margem por Projeto'
+                      : subTipo === 'aging'
+                        ? 'Aging de Títulos a Pagar e Receber'
+                        : 'Resumo Contábil de Impostos Retidos (NFS-e)'}
+              </h3>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleExportarXlsx}
+                className="bg-transparent border-white/20 text-white hover:bg-white/10 text-xs h-8"
+              >
+                <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5 text-emerald-400" />
+                Exportar XLSX
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => window.print()}
+                className="bg-[#FF6A13] hover:bg-[#E85B06] text-white font-bold text-xs h-8"
+              >
+                <Printer className="mr-1.5 h-3.5 w-3.5" />
+                Imprimir / Salvar PDF (A4)
+              </Button>
+            </div>
+          </div>
+
+          <div className="p-4 sm:p-6 bg-neutral-100 flex justify-center">
+            <div className="bg-white shadow-lg border border-neutral-300 w-full max-w-[210mm]">
+              {subTipo === 'dre' && (
+                <AerocadRelatorioA4
+                  titulo="DEMONSTRATIVO DE RESULTADO DO EXERCÍCIO (DRE)"
+                  subtitulo="Receitas Operacionais Auferidas vs. Custos e Despesas Operacionais Realizadas"
+                  referenciaPeriodo={`Exercício ${periodoAno}`}
+                  responsavelNome={user?.name || 'Controladoria AEROCAD'}
+                  resumoKpis={[
+                    {
+                      rotulo: 'Receita Bruta Realizada',
+                      valorFormatado: formatCurrency(dreCalculada.receitaBrutaRealizada),
+                      cor: 'verde',
+                    },
+                    {
+                      rotulo: 'Total de Despesas',
+                      valorFormatado: formatCurrency(dreCalculada.totalDespesasRealizada),
+                      cor: 'vermelho',
+                    },
+                    {
+                      rotulo: 'Resultado Líquido',
+                      valorFormatado: formatCurrency(dreCalculada.resultadoLiquidoRealizado),
+                      cor: dreCalculada.resultadoLiquidoRealizado >= 0 ? 'verde' : 'vermelho',
+                      destaque: true,
+                    },
+                  ]}
+                  secoes={[
+                    {
+                      titulo: 'Demonstração Analítica das Contas',
+                      tabela: {
+                        colunas: [
+                          { cabecalho: 'Rubrica Contábil', largura: '50%' },
+                          { cabecalho: 'Previsto (R$)', alinhamento: 'right', largura: '25%' },
+                          { cabecalho: 'Realizado (R$)', alinhamento: 'right', largura: '25%' },
+                        ],
+                        linhas: [
+                          [
+                            { conteudo: '(+) RECEITA OPERACIONAL BRUTA', destaque: true },
+                            {
+                              conteudo: formatCurrency(dreCalculada.receitaBrutaPrevista),
+                              alinhamento: 'right',
+                            },
+                            {
+                              conteudo: formatCurrency(dreCalculada.receitaBrutaRealizada),
+                              alinhamento: 'right',
+                              destaque: true,
+                            },
+                          ],
+                          ...Object.entries(dreCalculada.despesasPorCat).map(([k, v]) => [
+                            { conteudo: `(-) ${CATEGORIA_PAGAR_LABELS[k as any] || k}` },
+                            {
+                              conteudo: `- ${formatCurrency(v.prevista)}`,
+                              alinhamento: 'right' as const,
+                            },
+                            {
+                              conteudo: `- ${formatCurrency(v.realizada)}`,
+                              alinhamento: 'right' as const,
+                            },
+                          ]),
+                        ],
+                        linhaTotal: [
+                          { conteudo: '(=) RESULTADO LÍQUIDO DO EXERCÍCIO' },
+                          {
+                            conteudo: formatCurrency(dreCalculada.resultadoLiquidoPrevisto),
+                            alinhamento: 'right',
+                          },
+                          {
+                            conteudo: formatCurrency(dreCalculada.resultadoLiquidoRealizado),
+                            alinhamento: 'right',
+                          },
+                        ],
+                      },
+                    },
+                  ]}
+                  observacoesFinais="Relatório gerado eletronicamente pelo CRM AEROCAD com base nos títulos liquidados e parcelas contratuais faturadas."
+                />
+              )}
+
+              {subTipo === 'faturamento_cliente' && (
+                <AerocadRelatorioA4
+                  titulo="FATURAMENTO CONSOLIDADO POR CLIENTE"
+                  subtitulo="Quitações Contratuais e Emissão de NFS-e por Tomador"
+                  referenciaPeriodo={`Exercício ${periodoAno}`}
+                  responsavelNome={user?.name || 'Controladoria AEROCAD'}
+                  secoes={[
+                    {
+                      titulo: 'Relação de Clientes e Tomadores',
+                      tabela: {
+                        colunas: [
+                          { cabecalho: 'Cliente / Tomador', largura: '40%' },
+                          { cabecalho: 'NFS-e', alinhamento: 'center', largura: '15%' },
+                          { cabecalho: 'Faturado Notas', alinhamento: 'right', largura: '22%' },
+                          { cabecalho: 'Total Recebido', alinhamento: 'right', largura: '23%' },
+                        ],
+                        linhas: faturamentoPorCliente.map((fc) => [
+                          { conteudo: fc.clienteNome, destaque: true },
+                          { conteudo: `${fc.qtdNfse} nota(s)`, alinhamento: 'center' },
+                          { conteudo: formatCurrency(fc.totalFaturado), alinhamento: 'right' },
+                          {
+                            conteudo: formatCurrency(fc.totalPago),
+                            alinhamento: 'right',
+                            destaque: true,
+                          },
+                        ]),
+                        linhaTotal: [
+                          { conteudo: 'TOTAL CONSOLIDADO' },
+                          {
+                            conteudo: `${faturamentoPorCliente.reduce((a, b) => a + b.qtdNfse, 0)} notas`,
+                            alinhamento: 'center',
+                          },
+                          {
+                            conteudo: formatCurrency(
+                              faturamentoPorCliente.reduce((a, b) => a + b.totalFaturado, 0),
+                            ),
+                            alinhamento: 'right',
+                          },
+                          {
+                            conteudo: formatCurrency(
+                              faturamentoPorCliente.reduce((a, b) => a + b.totalPago, 0),
+                            ),
+                            alinhamento: 'right',
+                          },
+                        ],
+                      },
+                    },
+                  ]}
+                />
+              )}
+
+              {subTipo === 'custo_projeto' && (
+                <AerocadRelatorioA4
+                  titulo="RENTABILIDADE E MARGEM POR PROJETO"
+                  subtitulo="Receitas Auferidas vs. Custos Diretos Apontados"
+                  referenciaPeriodo={`Exercício ${periodoAno}`}
+                  responsavelNome={user?.name || 'Controladoria AEROCAD'}
+                  secoes={[
+                    {
+                      titulo: 'Projetos e Obras Aeronáuticas',
+                      tabela: {
+                        colunas: [
+                          { cabecalho: 'Projeto', largura: '35%' },
+                          { cabecalho: 'Receitas', alinhamento: 'right', largura: '20%' },
+                          { cabecalho: 'Custos Diretos', alinhamento: 'right', largura: '20%' },
+                          { cabecalho: 'Margem Líquida', alinhamento: 'right', largura: '15%' },
+                          { cabecalho: '%', alinhamento: 'center', largura: '10%' },
+                        ],
+                        linhas: custoPorProjeto.map((cp) => [
+                          { conteudo: `${cp.projetoNumero} - ${cp.projetoNome}`, destaque: true },
+                          { conteudo: formatCurrency(cp.receitasRealizadas), alinhamento: 'right' },
+                          {
+                            conteudo: `- ${formatCurrency(cp.custosRealizados)}`,
+                            alinhamento: 'right',
+                          },
+                          {
+                            conteudo: formatCurrency(cp.margemRealizada),
+                            alinhamento: 'right',
+                            destaque: true,
+                          },
+                          { conteudo: `${cp.margemPercentual}%`, alinhamento: 'center' },
+                        ]),
+                      },
+                    },
+                  ]}
+                />
+              )}
+
+              {subTipo === 'aging' && (
+                <AerocadRelatorioA4
+                  titulo="AGING DE TÍTULOS (FAIXAS DE VENCIMENTO)"
+                  subtitulo="Análise de Inadimplência e Prazos Médios de Contas a Pagar e Receber"
+                  referenciaPeriodo={`Posição em ${new Date().toLocaleDateString('pt-BR')}`}
+                  responsavelNome={user?.name || 'Controladoria AEROCAD'}
+                  secoes={[
+                    {
+                      titulo: 'Distribuição por Faixa de Vencimento',
+                      tabela: {
+                        colunas: [
+                          { cabecalho: 'Faixa Etária', largura: '40%' },
+                          { cabecalho: 'Contas a Pagar', alinhamento: 'right', largura: '30%' },
+                          { cabecalho: 'Contas a Receber', alinhamento: 'right', largura: '30%' },
+                        ],
+                        linhas: [
+                          [
+                            { conteudo: 'A Vencer (Em dia)', destaque: true },
+                            {
+                              conteudo: formatCurrency(agingCalculado.pagar.em_dia),
+                              alinhamento: 'right',
+                            },
+                            {
+                              conteudo: formatCurrency(agingCalculado.receber.em_dia),
+                              alinhamento: 'right',
+                            },
+                          ],
+                          [
+                            { conteudo: 'Vencidos de 1 a 30 dias' },
+                            {
+                              conteudo: formatCurrency(agingCalculado.pagar.ate30),
+                              alinhamento: 'right',
+                            },
+                            {
+                              conteudo: formatCurrency(agingCalculado.receber.ate30),
+                              alinhamento: 'right',
+                            },
+                          ],
+                          [
+                            { conteudo: 'Vencidos de 31 a 60 dias' },
+                            {
+                              conteudo: formatCurrency(agingCalculado.pagar.de31a60),
+                              alinhamento: 'right',
+                            },
+                            {
+                              conteudo: formatCurrency(agingCalculado.receber.de31a60),
+                              alinhamento: 'right',
+                            },
+                          ],
+                          [
+                            { conteudo: 'Vencidos de 61 a 90 dias' },
+                            {
+                              conteudo: formatCurrency(agingCalculado.pagar.de61a90),
+                              alinhamento: 'right',
+                            },
+                            {
+                              conteudo: formatCurrency(agingCalculado.receber.de61a90),
+                              alinhamento: 'right',
+                            },
+                          ],
+                          [
+                            { conteudo: 'Vencidos há mais de 90 dias', destaque: true },
+                            {
+                              conteudo: formatCurrency(agingCalculado.pagar.mais90),
+                              alinhamento: 'right',
+                            },
+                            {
+                              conteudo: formatCurrency(agingCalculado.receber.mais90),
+                              alinhamento: 'right',
+                            },
+                          ],
+                        ],
+                      },
+                    },
+                  ]}
+                />
+              )}
+
+              {subTipo === 'impostos' && (
+                <AerocadRelatorioA4
+                  titulo="RESUMO DE IMPOSTOS RETIDOS NA FONTE (NFS-E)"
+                  subtitulo={`Totalização de Retenções Fiscais Extraídas de ${impostosRetidosNfse.notasComRetencao} Notas Fiscais`}
+                  referenciaPeriodo={`Exercício ${periodoAno}`}
+                  responsavelNome={user?.name || 'Controladoria AEROCAD'}
+                  resumoKpis={[
+                    {
+                      rotulo: 'Total de Retenções na Fonte',
+                      valorFormatado: formatCurrency(impostosRetidosNfse.totalRetencoes),
+                      cor: 'laranja',
+                      destaque: true,
+                    },
+                  ]}
+                  secoes={[
+                    {
+                      titulo: 'Discriminação por Tributo',
+                      tabela: {
+                        colunas: [
+                          { cabecalho: 'Tributo Federal / Municipal', largura: '60%' },
+                          {
+                            cabecalho: 'Total Retido na Fonte (R$)',
+                            alinhamento: 'right',
+                            largura: '40%',
+                          },
+                        ],
+                        linhas: [
+                          [
+                            { conteudo: 'ISS Retido na Fonte (Municipal)' },
+                            {
+                              conteudo: formatCurrency(impostosRetidosNfse.issTotal),
+                              alinhamento: 'right',
+                            },
+                          ],
+                          [
+                            { conteudo: 'INSS Retido (Previdência)' },
+                            {
+                              conteudo: formatCurrency(impostosRetidosNfse.inssTotal),
+                              alinhamento: 'right',
+                            },
+                          ],
+                          [
+                            { conteudo: 'IRPJ Retido (Imposto de Renda)' },
+                            {
+                              conteudo: formatCurrency(impostosRetidosNfse.irpjTotal),
+                              alinhamento: 'right',
+                            },
+                          ],
+                          [
+                            { conteudo: 'CSLL Retida (Contribuição Social)' },
+                            {
+                              conteudo: formatCurrency(impostosRetidosNfse.csllTotal),
+                              alinhamento: 'right',
+                            },
+                          ],
+                          [
+                            { conteudo: 'COFINS Retido' },
+                            {
+                              conteudo: formatCurrency(impostosRetidosNfse.cofinsTotal),
+                              alinhamento: 'right',
+                            },
+                          ],
+                          [
+                            { conteudo: 'PIS Retido' },
+                            {
+                              conteudo: formatCurrency(impostosRetidosNfse.pisTotal),
+                              alinhamento: 'right',
+                            },
+                          ],
+                        ],
+                        linhaTotal: [
+                          { conteudo: 'TOTAL DE RETENÇÕES TRIBUTÁRIAS' },
+                          {
+                            conteudo: formatCurrency(impostosRetidosNfse.totalRetencoes),
+                            alinhamento: 'right',
+                          },
+                        ],
+                      },
+                    },
+                  ]}
+                />
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

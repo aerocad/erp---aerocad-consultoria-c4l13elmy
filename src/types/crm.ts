@@ -407,6 +407,126 @@ export type CategoriaContaReceber =
 
 export type StatusContaReceber = 'pendente' | 'recebido' | 'cancelado'
 
+export type CategoriaFornecedor =
+  | 'terceirizados'
+  | 'equipamentos'
+  | 'despesas_operacionais'
+  | 'folha'
+  | 'impostos'
+  | 'software_ti'
+  | 'juridico_contabil'
+  | 'outros'
+
+export interface FornecedorRecord extends RecordModel {
+  razao_social: string
+  nome_fantasia?: string
+  cnpj_cpf: string
+  categoria: CategoriaFornecedor
+  contato_nome?: string
+  email?: string
+  telefone?: string
+  chave_pix?: string
+  dados_bancarios?: string
+  endereco?: string
+  municipio_uf?: string
+  status: 'ativo' | 'inativo'
+  observacoes?: string
+  criado_por?: string
+  expand?: {
+    criado_por?: UserRecord
+  }
+}
+
+export type RegimeContratacao = 'pf_clt' | 'pf_autonomo' | 'pj'
+
+export interface ColaboradorRecord extends RecordModel {
+  nome_completo: string
+  cpf_cnpj: string
+  cargo: string
+  funcao: string
+  regime_contratacao: RegimeContratacao
+  empresa_pj?: string
+  fornecedor_vinculado?: string
+  usuario_sistema?: string
+  email?: string
+  telefone?: string
+  data_admissao: string
+  data_desligamento?: string
+  situacao: 'ativo' | 'inativo'
+  remuneracao_base?: number
+  chave_pix?: string
+  foto?: string
+  observacoes?: string
+  criado_por?: string
+  expand?: {
+    fornecedor_vinculado?: FornecedorRecord
+    usuario_sistema?: UserRecord
+    criado_por?: UserRecord
+  }
+}
+
+export interface BalanceteConsolidadoDados {
+  ano: number
+  mes: number
+  referencia: string
+  receitas: {
+    total: number
+    porCategoria: Record<string, number>
+    porCliente: Array<{ clienteNome: string; total: number; qtdLancamentos: number }>
+    itens: Array<{
+      id: string
+      data: string
+      descricao: string
+      clienteNome: string
+      projetoNumero?: string
+      valor: number
+      origem: 'parcela' | 'receita_avulsa'
+      nfNumero?: string
+    }>
+  }
+  despesas: {
+    total: number
+    porCategoria: Record<string, number>
+    porFornecedor: Array<{ fornecedorNome: string; total: number; qtdLancamentos: number }>
+    itens: Array<{
+      id: string
+      data: string
+      descricao: string
+      fornecedor: string
+      categoria: string
+      valor: number
+      numeroDocumento?: string
+    }>
+  }
+  acumuladoAno: {
+    receitasTotal: number
+    despesasTotal: number
+    saldoAcumulado: number
+    meses: Array<{ mes: number; nomeMes: string; receita: number; despesa: number; saldo: number }>
+  }
+}
+
+export interface BalanceteMensalRecord extends RecordModel {
+  referencia: string // YYYY-MM
+  ano: number
+  mes: number
+  titulo: string
+  receita_total: number
+  despesa_total: number
+  saldo_mes: number
+  saldo_acumulado_ano: number
+  total_receitas_ano: number
+  total_despesas_ano: number
+  dados_consolidados: BalanceteConsolidadoDados
+  responsavel_emissao?: string
+  data_emissao: string
+  criado_por?: string
+  observacoes?: string
+  expand?: {
+    criado_por?: UserRecord
+  }
+}
+
 export interface ContaReceberRecord extends RecordModel {
   descricao: string
   cliente_nome: string

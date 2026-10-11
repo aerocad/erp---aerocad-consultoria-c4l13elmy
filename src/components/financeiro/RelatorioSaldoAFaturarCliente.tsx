@@ -10,21 +10,28 @@ import {
   Download,
   ExternalLink,
   FileCheck2,
+  FileSpreadsheet,
   FileText,
   Filter,
   HelpCircle,
   Layers,
+  Printer,
   Search,
   TrendingDown,
   Wallet,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { toast } from 'sonner'
 
 import { CrmBadge } from '@/components/common/CrmBadge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useFinanceiroVisibilidade } from '@/contexts/FinanceiroVisibilidadeContext'
+import { useAuth } from '@/contexts/AuthContext'
 import { formatCurrency, formatDate } from '@/lib/format'
+import { exportarTabelaParaXlsx } from '@/services/aerocadXlsxExporter'
+import { AerocadRelatorioA4 } from '@/components/financeiro/AerocadRelatorioA4'
+import { Dialog, DialogContent } from '@/components/ui/dialog'
 import {
   calcularResumoFinanceiroTodosProjetos,
   getStatusFinanceiroBadgeConfig,
@@ -78,9 +85,11 @@ export function RelatorioSaldoAFaturarCliente({
   parcelas,
 }: SaldoAFaturarProps) {
   const { ocultarValores } = useFinanceiroVisibilidade()
+  const { user } = useAuth()
   const [searchTerm, setSearchTerm] = useState('')
   const [expandedClients, setExpandedClients] = useState<Record<string, boolean>>({})
   const [mostrarQuitados, setMostrarQuitados] = useState(false)
+  const [previewModalOpen, setPreviewModalOpen] = useState(false)
 
   // 1. Processar dados de saldo a faturar por cliente
   const { clientesComSaldo, clientesQuitados, resumoGlobal } = useMemo(() => {
@@ -317,20 +326,82 @@ export function RelatorioSaldoAFaturarCliente({
             </div>
           </div>
 
-          <div className="flex items-center gap-2 self-start sm:self-auto">
+          <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={async () => {
+                try {
+                  const linhas = clientesComSaldoFiltrados.map((c) => ({
+                    cliente: c.razaoSocial,
+                    cnpj: c.cnpjCpf || '',
+                    projetos: c.totalProjetos,
+                    contratado: c.totalContratado,
+                    faturado: c.totalFaturadoNfse,
+                    cobertura: `${c.percentualFaturado}%`,
+                    saldo: c.saldoAFaturar,
+                    recebido: c.totalRecebido,
+                  }))
+
+                  await exportarTabelaParaXlsx({
+                    nomeArquivo: 'saldo_a_faturar_por_cliente_aerocad',
+                    tituloRelatorio: 'SALDO A FATURAR POR CLIENTE — RELATÓRIO OFICIAL',
+                    subtitulo: `Saldo Global a Faturar: ${formatCurrency(resumoGlobal.saldoGlobalAFaturar)}`,
+                    usuarioNome: user?.name,
+                    userRole: user?.role,
+                    colunas: [
+                      { header: 'Cliente / Tomador', key: 'cliente', width: 36 },
+                      { header: 'CNPJ / CPF', key: 'cnpj', width: 20 },
+                      { header: 'Projetos', key: 'projetos', width: 12, tipo: 'numero' },
+                      { header: 'Contratado (R$)', key: 'contratado', width: 22, tipo: 'moeda' },
+                      { header: 'Faturado NFS-e (R$)', key: 'faturado', width: 22, tipo: 'moeda' },
+                      { header: '% Cobertura', key: 'cobertura', width: 14 },
+                      { header: 'Saldo a Faturar (R$)', key: 'saldo', width: 22, tipo: 'moeda' },
+                      { header: 'Total Recebido (R$)', key: 'recebido', width: 22, tipo: 'moeda' },
+                    ],
+                    linhas,
+                    totais: {
+                      contratado: resumoGlobal.totalCarteiraContratado,
+                      faturado: resumoGlobal.totalCarteiraFaturado,
+                      saldo: resumoGlobal.saldoGlobalAFaturar,
+                      recebido: resumoGlobal.totalCarteiraRecebido,
+                    },
+                  })
+                  toast.success('Planilha de Saldo a Faturar exportada com sucesso!')
+                } catch (err: unknown) {
+                  const msg = err instanceof Error ? err.message : String(err)
+                  toast.error('Erro ao exportar planilha: ' + msg)
+                }
+              }}
+              className="text-xs border-emerald-300 text-emerald-800 hover:bg-emerald-50 h-8 font-semibold"
+            >
+              <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5 text-emerald-600" />
+              Exportar XLSX
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPreviewModalOpen(true)}
+              className="text-xs bg-[#FF6A13] hover:bg-[#E85B06] text-white font-semibold border-none h-8"
+            >
+              <Printer className="mr-1.5 h-3.5 w-3.5" />
+              Exportar / Imprimir PDF
+            </Button>
+
             <Button
               variant="outline"
               size="sm"
               onClick={expandirTodos}
-              className="text-xs border-[#DEDEDE] text-[#555] hover:text-[#FF6A13] hover:border-[#FF6A13]"
+              className="text-xs border-[#DEDEDE] text-[#555] hover:text-[#FF6A13] hover:border-[#FF6A13] h-8"
             >
-              Expandir todos
+              Expandir
             </Button>
             <Button
               variant="outline"
               size="sm"
               onClick={recolherTodos}
-              className="text-xs border-[#DEDEDE] text-[#555] hover:text-[#FF6A13] hover:border-[#FF6A13]"
+              className="text-xs border-[#DEDEDE] text-[#555] hover:text-[#FF6A13] hover:border-[#FF6A13] h-8"
             >
               Recolher
             </Button>
@@ -801,6 +872,166 @@ export function RelatorioSaldoAFaturarCliente({
           </div>
         )}
       </div>
+
+      {/* Modal A4 para Visualização Oficial e Impressão do Saldo a Faturar */}
+      <Dialog open={previewModalOpen} onOpenChange={setPreviewModalOpen}>
+        <DialogContent className="max-w-4xl max-h-[92vh] overflow-y-auto p-0">
+          <div className="sticky top-0 z-20 bg-neutral-900 text-white px-5 py-3 flex items-center justify-between shadow-md print:hidden">
+            <div>
+              <p className="text-[10px] uppercase font-bold text-[#FF6A13] tracking-widest">
+                PREVIEW A4 · TEMPLATE OFICIAL AEROCAD
+              </p>
+              <h3 className="text-sm font-bold text-white">
+                Relatório de Saldo a Faturar por Cliente da Carteira
+              </h3>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={async () => {
+                  try {
+                    const linhas = clientesComSaldoFiltrados.map((c) => ({
+                      cliente: c.razaoSocial,
+                      cnpj: c.cnpjCpf || '',
+                      projetos: c.totalProjetos,
+                      contratado: c.totalContratado,
+                      faturado: c.totalFaturadoNfse,
+                      cobertura: `${c.percentualFaturado}%`,
+                      saldo: c.saldoAFaturar,
+                      recebido: c.totalRecebido,
+                    }))
+
+                    await exportarTabelaParaXlsx({
+                      nomeArquivo: 'saldo_a_faturar_por_cliente_aerocad',
+                      tituloRelatorio: 'SALDO A FATURAR POR CLIENTE — RELATÓRIO OFICIAL',
+                      subtitulo: `Saldo Global a Faturar: ${formatCurrency(resumoGlobal.saldoGlobalAFaturar)}`,
+                      usuarioNome: user?.name,
+                      userRole: user?.role,
+                      colunas: [
+                        { header: 'Cliente / Tomador', key: 'cliente', width: 36 },
+                        { header: 'CNPJ / CPF', key: 'cnpj', width: 20 },
+                        { header: 'Projetos', key: 'projetos', width: 12, tipo: 'numero' },
+                        { header: 'Contratado (R$)', key: 'contratado', width: 22, tipo: 'moeda' },
+                        {
+                          header: 'Faturado NFS-e (R$)',
+                          key: 'faturado',
+                          width: 22,
+                          tipo: 'moeda',
+                        },
+                        { header: '% Cobertura', key: 'cobertura', width: 14 },
+                        { header: 'Saldo a Faturar (R$)', key: 'saldo', width: 22, tipo: 'moeda' },
+                        {
+                          header: 'Total Recebido (R$)',
+                          key: 'recebido',
+                          width: 22,
+                          tipo: 'moeda',
+                        },
+                      ],
+                      linhas,
+                      totais: {
+                        contratado: resumoGlobal.totalCarteiraContratado,
+                        faturado: resumoGlobal.totalCarteiraFaturado,
+                        saldo: resumoGlobal.saldoGlobalAFaturar,
+                        recebido: resumoGlobal.totalCarteiraRecebido,
+                      },
+                    })
+                    toast.success('Planilha exportada com sucesso!')
+                  } catch (err: unknown) {
+                    const msg = err instanceof Error ? err.message : String(err)
+                    toast.error('Erro ao exportar planilha: ' + msg)
+                  }
+                }}
+                className="bg-transparent border-white/20 text-white hover:bg-white/10 text-xs h-8"
+              >
+                <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5 text-emerald-400" />
+                Exportar XLSX
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => window.print()}
+                className="bg-[#FF6A13] hover:bg-[#E85B06] text-white font-bold text-xs h-8"
+              >
+                <Printer className="mr-1.5 h-3.5 w-3.5" />
+                Imprimir / Salvar PDF (A4)
+              </Button>
+            </div>
+          </div>
+
+          <div className="p-4 sm:p-6 bg-neutral-100 flex justify-center">
+            <div className="bg-white shadow-lg border border-neutral-300 w-full max-w-[210mm]">
+              <AerocadRelatorioA4
+                titulo="RELATÓRIO DE SALDO A FATURAR POR CLIENTE"
+                subtitulo="Confronto Analítico entre Contratos Globais e NFS-e Emitidas (Prioridade de Emissão)"
+                referenciaPeriodo={`Posição em ${new Date().toLocaleDateString('pt-BR')}`}
+                responsavelNome={user?.name || 'Controladoria AEROCAD'}
+                resumoKpis={[
+                  {
+                    rotulo: 'Total Contratado da Carteira',
+                    valorFormatado: formatCurrency(resumoGlobal.totalCarteiraContratado),
+                  },
+                  {
+                    rotulo: 'Total Faturado em NFS-e',
+                    valorFormatado: formatCurrency(resumoGlobal.totalCarteiraFaturado),
+                    cor: 'verde',
+                  },
+                  {
+                    rotulo: 'Saldo a Faturar Pendente',
+                    valorFormatado: formatCurrency(resumoGlobal.saldoGlobalAFaturar),
+                    cor: 'laranja',
+                    destaque: true,
+                  },
+                  {
+                    rotulo: 'Total Recebido em Conta',
+                    valorFormatado: formatCurrency(resumoGlobal.totalCarteiraRecebido),
+                    cor: 'verde',
+                  },
+                ]}
+                secoes={[
+                  {
+                    titulo: 'Clientes com Saldo a Faturar Pendente',
+                    subtitulo: 'Ordenado pelo maior montante residual pendente de faturamento',
+                    tabela: {
+                      colunas: [
+                        { cabecalho: 'Cliente / Tomador', largura: '35%' },
+                        { cabecalho: 'Contratado (R$)', alinhamento: 'right', largura: '22%' },
+                        { cabecalho: 'Faturado NFS-e', alinhamento: 'right', largura: '21%' },
+                        { cabecalho: 'Saldo a Faturar', alinhamento: 'right', largura: '22%' },
+                      ],
+                      linhas: clientesComSaldoFiltrados.map((c) => [
+                        { conteudo: c.razaoSocial, destaque: true },
+                        { conteudo: formatCurrency(c.totalContratado), alinhamento: 'right' },
+                        { conteudo: formatCurrency(c.totalFaturadoNfse), alinhamento: 'right' },
+                        {
+                          conteudo: formatCurrency(c.saldoAFaturar),
+                          alinhamento: 'right',
+                          destaque: true,
+                        },
+                      ]),
+                      linhaTotal: [
+                        { conteudo: 'TOTAL CONSOLIDADO' },
+                        {
+                          conteudo: formatCurrency(resumoGlobal.totalCarteiraContratado),
+                          alinhamento: 'right',
+                        },
+                        {
+                          conteudo: formatCurrency(resumoGlobal.totalCarteiraFaturado),
+                          alinhamento: 'right',
+                        },
+                        {
+                          conteudo: formatCurrency(resumoGlobal.saldoGlobalAFaturar),
+                          alinhamento: 'right',
+                        },
+                      ],
+                    },
+                  },
+                ]}
+                observacoesFinais="Relatório gerencial de controle de emissão de notas fiscais de serviço. Documento emitido eletronicamente pelo CRM AEROCAD."
+              />
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
