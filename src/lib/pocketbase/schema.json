@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-11T12:45:49.630Z",
+  "generatedAt": "2026-10-11T12:55:07.116Z",
   "collections": [
     {
       "name": "users",
@@ -855,7 +855,7 @@
         "list": "@request.auth.id != '' && (@request.auth.role = 'admin' || @request.auth.role = 'comercial' || @request.auth.role = 'tecnico' || @request.auth.role = 'financeiro' || (@request.auth.role = 'terceiro' && @collection.ordens_servico.projeto.id ?= id && @collection.ordens_servico.prestador_usuario ?= @request.auth.id))",
         "view": "@request.auth.id != '' && (@request.auth.role = 'admin' || @request.auth.role = 'comercial' || @request.auth.role = 'tecnico' || @request.auth.role = 'financeiro' || (@request.auth.role = 'terceiro' && @collection.ordens_servico.projeto.id ?= id && @collection.ordens_servico.prestador_usuario ?= @request.auth.id))",
         "create": "@request.auth.role = 'admin' || @request.auth.role = 'tecnico' || @request.auth.role = 'comercial' || @request.auth.role = 'financeiro'",
-        "update": "(@request.auth.role = 'admin' || @request.auth.role = 'tecnico' || ((@request.auth.role = 'comercial' || @request.auth.role = 'financeiro') && @request.body.nome:changed = false)) && @request.body.numero:changed = false",
+        "update": "(@request.auth.role = 'admin' || @request.auth.role = 'tecnico' || ((@request.auth.role = 'comercial' || @request.auth.role = 'financeiro') && @request.body.nome:changed = false && @request.body.arquivado:changed = false && @request.body.data_arquivamento:changed = false)) && @request.body.numero:changed = false",
         "delete": "@request.auth.role = 'admin'"
       },
       "fields": [
@@ -1065,13 +1065,26 @@
           "type": "bool",
           "required": false,
           "system": false
+        },
+        {
+          "name": "arquivado",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "data_arquivamento",
+          "type": "date",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
         "CREATE UNIQUE INDEX idx_projetos_numero ON projetos (numero) WHERE numero != ''",
         "CREATE INDEX idx_projetos_trilha ON projetos (trilha)",
         "CREATE INDEX idx_projetos_status ON projetos (status)",
-        "CREATE INDEX idx_projetos_cliente ON projetos (cliente)"
+        "CREATE INDEX idx_projetos_cliente ON projetos (cliente)",
+        "CREATE INDEX `idx_projetos_arquivado` ON `projetos` (arquivado)"
       ]
     },
     {

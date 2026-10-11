@@ -56,6 +56,7 @@ export function AlertasProvider({ children }: { children: ReactNode }) {
     realtime: !isTerceiro,
   })
   const projetos = useCrmData<ProjetoRecord>('projetos', {
+    filter: 'arquivado != true',
     realtime: !isTerceiro,
   })
   const atividades = useCrmData<AtividadeRecord>('atividades', {

@@ -112,6 +112,7 @@ export default function ReportsPage() {
   // Carregamento de coleções com useCrmData
   const clientesData = useCrmData<ClienteRecord>('clientes', { sort: 'razao_social' })
   const projetosData = useCrmData<ProjetoRecord>('projetos', {
+    filter: 'arquivado != true',
     expand: 'cliente,oportunidade,contrato',
     sort: '-created',
   })

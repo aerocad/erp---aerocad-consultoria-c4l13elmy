@@ -60,7 +60,10 @@ export default function DashboardPage() {
     sort: 'vencimento',
     realtime: true,
   })
-  const projects = useCrmData<ProjetoRecord>('projetos', { sort: '-created' })
+  const projects = useCrmData<ProjetoRecord>('projetos', {
+    filter: 'arquivado != true',
+    sort: '-created',
+  })
   const proposals = useCrmData<PropostaRecord>('propostas', { sort: '-created' })
   const activities = useCrmData<AtividadeRecord>('atividades', {
     expand: 'usuario',

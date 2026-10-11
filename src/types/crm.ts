@@ -100,6 +100,8 @@ export interface ProjetoRecord extends RecordModel {
   pendente_orgao?: string
   status_planilha?: string
   origem_importacao?: boolean
+  arquivado?: boolean
+  data_arquivamento?: string
   expand?: {
     cliente?: ClienteRecord
     responsavel_tecnico?: UserRecord

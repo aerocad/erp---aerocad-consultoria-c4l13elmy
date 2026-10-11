@@ -84,7 +84,23 @@ onRecordAfterUpdateSuccess(
         const oldFase = record.original().getString('fase')
         const newFase = record.getString('fase')
 
-        if (newName && oldName && newName !== oldName) {
+        const oldArquivado = record.original().getBool('arquivado')
+        const newArquivado = record.getBool('arquivado')
+
+        let userName = ''
+        try {
+          if (e.auth && e.auth.id) {
+            userName = e.auth.getString('name') || e.auth.getString('email') || ''
+          }
+        } catch (_) {}
+
+        if (oldArquivado !== newArquivado) {
+          if (newArquivado) {
+            text = userName ? 'Projeto arquivado por ' + userName : 'Projeto arquivado'
+          } else {
+            text = userName ? 'Projeto desarquivado por ' + userName : 'Projeto desarquivado'
+          }
+        } else if (newName && oldName && newName !== oldName) {
           text = 'Nome do projeto alterado de "' + oldName + '" para "' + newName + '"'
         } else if (newFase && oldFase && newFase !== oldFase) {
           text = 'Projeto avançou para ' + newFase

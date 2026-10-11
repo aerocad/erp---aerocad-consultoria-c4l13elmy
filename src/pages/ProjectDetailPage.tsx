@@ -23,9 +23,11 @@ import { ErrorState, PageLoading } from '@/components/common/States'
 import { AnexoDialog } from '@/components/forms/AnexoDialog'
 import { OrdemServicoDialog } from '@/components/forms/OrdemServicoDialog'
 import { ProcessDialog } from '@/components/forms/ProcessDialog'
+import { ArquivarProjetoModal } from '@/components/projetos/ArquivarProjetoModal'
 import { EditarNomeProjetoModal } from '@/components/projetos/EditarNomeProjetoModal'
 import { ExcluirProjetoModal } from '@/components/projetos/ExcluirProjetoModal'
 import { Button } from '@/components/ui/button'
+import { Archive, ArchiveRestore } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Sparkles, Bot } from 'lucide-react'
 import { Input } from '@/components/ui/input'
@@ -76,10 +78,12 @@ export default function ProjectDetailPage() {
   const [note, setNote] = useState('')
   const [excluirModalOpen, setExcluirModalOpen] = useState(false)
   const [editNomeOpen, setEditNomeOpen] = useState(false)
+  const [arquivarModalOpen, setArquivarModalOpen] = useState(false)
   const canWrite = ['admin', 'comercial', 'tecnico'].includes(user?.role || '')
   const isAdmin = user?.role === 'admin'
   const canManageOS = ['admin', 'tecnico'].includes(user?.role || '')
   const canEditName = ['admin', 'tecnico'].includes(user?.role || '')
+  const canArchive = ['admin', 'tecnico'].includes(user?.role || '')
 
   const load = async () => {
     setLoading(true)
@@ -184,15 +188,78 @@ export default function ProjectDetailPage() {
     : null
   return (
     <div>
-      <Button variant="ghost" onClick={() => navigate('/projetos')} className="mb-4 -ml-3">
-        <ArrowLeft className="mr-2 h-4 w-4" />
-        Voltar aos projetos
-      </Button>
-      <header className="crm-card p-5 sm:p-6">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <Button variant="ghost" onClick={() => navigate('/projetos')} className="-ml-3">
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Voltar aos projetos
+        </Button>
+        {canArchive && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setArquivarModalOpen(true)}
+            className={
+              project.arquivado
+                ? 'border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 hover:text-emerald-900'
+                : 'border-neutral-300 text-neutral-700 hover:bg-neutral-100 hover:text-neutral-900'
+            }
+          >
+            {project.arquivado ? (
+              <>
+                <ArchiveRestore className="mr-1.5 h-4 w-4 text-emerald-600" />
+                Desarquivar projeto
+              </>
+            ) : (
+              <>
+                <Archive className="mr-1.5 h-4 w-4 text-neutral-500" />
+                Arquivar projeto
+              </>
+            )}
+          </Button>
+        )}
+      </div>
+
+      {project.arquivado && (
+        <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50/80 p-3.5 text-xs text-amber-900">
+          <div className="flex items-center gap-2">
+            <Archive className="h-4 w-4 text-amber-600 shrink-0" />
+            <div>
+              <strong className="font-semibold">Projeto arquivado:</strong> Oculto da listagem
+              padrão de projetos, relatórios e KPIs do painel. Dados financeiros e histórico
+              permanecem preservados.
+              {project.data_arquivamento && (
+                <span className="ml-1 text-amber-700">
+                  (Arquivado em {formatDate(project.data_arquivamento)})
+                </span>
+              )}
+            </div>
+          </div>
+          {canArchive && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setArquivarModalOpen(true)}
+              className="h-7 text-xs bg-white border-amber-300 hover:bg-amber-100 text-amber-900 shrink-0"
+            >
+              Desarquivar
+            </Button>
+          )}
+        </div>
+      )}
+
+      <header
+        className={`crm-card p-5 sm:p-6 ${project.arquivado ? 'bg-neutral-50/70 border-neutral-300' : ''}`}
+      >
         <div className="flex flex-col justify-between gap-5 lg:flex-row">
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <span className="mono-value text-xl font-black text-[#D65100]">{project.numero}</span>
+              {project.arquivado && (
+                <span className="inline-flex items-center gap-1 rounded-full border border-neutral-300 bg-neutral-100 px-2.5 py-0.5 text-xs font-semibold text-neutral-600">
+                  <Archive className="h-3 w-3" />
+                  Arquivado
+                </span>
+              )}
               <CrmBadge tone={project.trilha === 'registro' ? 'green' : 'orange'}>
                 {trailLabels[project.trilha]}
               </CrmBadge>
@@ -768,6 +835,17 @@ export default function ProjectDetailPage() {
         open={excluirModalOpen}
         onOpenChange={setExcluirModalOpen}
         projeto={project}
+      />
+
+      {/* Modal de Arquivar / Desarquivar Projeto */}
+      <ArquivarProjetoModal
+        open={arquivarModalOpen}
+        onOpenChange={setArquivarModalOpen}
+        projeto={project}
+        onSuccess={(atualizado) => {
+          setProject((prev) => (prev ? { ...prev, ...atualizado } : atualizado))
+          void load()
+        }}
       />
     </div>
   )

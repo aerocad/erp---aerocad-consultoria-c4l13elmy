@@ -1,10 +1,20 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowUpDown, CalendarDays, Edit3, MoreVertical, Plus, Search } from 'lucide-react'
+import {
+  Archive,
+  ArchiveRestore,
+  ArrowUpDown,
+  CalendarDays,
+  Edit3,
+  MoreVertical,
+  Plus,
+  Search,
+} from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 
 import { CrmBadge } from '@/components/common/CrmBadge'
 import { EmptyState, ErrorState, PageLoading } from '@/components/common/States'
 import { SectionHeader } from '@/components/common/SectionHeader'
+import { ArquivarProjetoModal } from '@/components/projetos/ArquivarProjetoModal'
 import { EditarNomeProjetoModal } from '@/components/projetos/EditarNomeProjetoModal'
 import { ProjetoDialog } from '@/components/forms/ProjetoDialog'
 import { Button } from '@/components/ui/button'
@@ -47,7 +57,9 @@ export default function ProjectsPage() {
   const [trail, setTrail] = useState('todos')
   const [status, setStatus] = useState('todos')
   const [financialFilter, setFinancialFilter] = useState('todos')
+  const [archiveFilter, setArchiveFilter] = useState<'ativos' | 'arquivados' | 'todos'>('ativos')
   const [editingProject, setEditingProject] = useState<ProjetoRecord | null>(null)
+  const [archivingProject, setArchivingProject] = useState<ProjetoRecord | null>(null)
   const [sortOrder, setSortOrder] = useState<
     'recentes' | 'cronologica' | 'numero_desc' | 'numero_asc'
   >(() => {
@@ -77,6 +89,7 @@ export default function ProjectsPage() {
   }, [params])
   const canWrite = ['admin', 'comercial', 'tecnico', 'financeiro'].includes(user?.role || '')
   const canEditName = ['admin', 'tecnico'].includes(user?.role || '')
+  const canArchive = ['admin', 'tecnico'].includes(user?.role || '')
 
   const resumosFinanceiros = useMemo(() => {
     return calcularResumoFinanceiroTodosProjetos(projects.data, installments.data)
@@ -103,6 +116,11 @@ export default function ProjectsPage() {
 
   const rows = useMemo(() => {
     const filtered = projects.data.filter((item) => {
+      // Filtro de arquivamento: padrão "ativos" (não arquivados)
+      const isArquivado = Boolean(item.arquivado)
+      if (archiveFilter === 'ativos' && isArquivado) return false
+      if (archiveFilter === 'arquivados' && !isArquivado) return false
+
       const matchTrail = trail === 'todos' || item.trilha === trail
       const matchStatus = status === 'todos' || item.status === status
       const resumo = resumosFinanceiros.get(item.id)
@@ -148,7 +166,16 @@ export default function ProjectsPage() {
       if (dateA !== dateB) return dateB - dateA
       return (b.numero || '').localeCompare(a.numero || '', undefined, { numeric: true })
     })
-  }, [projects.data, query, trail, status, financialFilter, sortOrder, resumosFinanceiros])
+  }, [
+    projects.data,
+    query,
+    trail,
+    status,
+    financialFilter,
+    archiveFilter,
+    sortOrder,
+    resumosFinanceiros,
+  ])
   if (projects.loading) return <PageLoading />
   if (projects.error) return <ErrorState onRetry={() => void projects.reload()} />
   return (
@@ -178,8 +205,21 @@ export default function ProjectsPage() {
             onChange={(e) => setQuery(e.target.value)}
           />
         </div>
+        <Select
+          value={archiveFilter}
+          onValueChange={(val) => setArchiveFilter(val as 'ativos' | 'arquivados' | 'todos')}
+        >
+          <SelectTrigger className="md:w-40 border-neutral-300">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ativos">Projetos Ativos</SelectItem>
+            <SelectItem value="arquivados">Arquivados</SelectItem>
+            <SelectItem value="todos">Todos (Ativos + Arq.)</SelectItem>
+          </SelectContent>
+        </Select>
         <Select value={trail} onValueChange={setTrail}>
-          <SelectTrigger className="md:w-44">
+          <SelectTrigger className="md:w-40">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -269,13 +309,25 @@ export default function ProjectsPage() {
               <div
                 key={item.id}
                 onClick={() => navigate(`/projetos/${item.id}`)}
-                className="crm-card p-5 text-left cursor-pointer transition-shadow hover:shadow-md flex flex-col justify-between relative group"
+                className={`crm-card p-5 text-left cursor-pointer transition-all hover:shadow-md flex flex-col justify-between relative group ${
+                  item.arquivado
+                    ? 'opacity-70 bg-neutral-50/90 border-dashed border-neutral-300 hover:opacity-100'
+                    : ''
+                }`}
               >
                 <div>
                   <div className="flex items-center justify-between">
-                    <span className="mono-value text-base font-black text-[#D65100]">
-                      {item.numero}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="mono-value text-base font-black text-[#D65100]">
+                        {item.numero}
+                      </span>
+                      {item.arquivado && (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-neutral-300 bg-neutral-200/80 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-neutral-600">
+                          <Archive className="h-2.5 w-2.5" />
+                          Arquivado
+                        </span>
+                      )}
+                    </div>
                     <div className="flex items-center gap-1.5">
                       <span
                         className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${badgeFinanceiro.badgeClass}`}
@@ -296,7 +348,7 @@ export default function ProjectsPage() {
                       </CrmBadge>
 
                       {/* Menu de ações por linha / card */}
-                      {canEditName && (
+                      {(canEditName || canArchive) && (
                         <DropdownMenu>
                           <DropdownMenuTrigger
                             asChild
@@ -314,16 +366,43 @@ export default function ProjectsPage() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                            <DropdownMenuItem
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                setEditingProject(item)
-                              }}
-                              className="text-xs flex items-center gap-2 cursor-pointer"
-                            >
-                              <Edit3 className="h-3.5 w-3.5 text-[#FF6A13]" />
-                              Editar nome do projeto
-                            </DropdownMenuItem>
+                            {canEditName && (
+                              <DropdownMenuItem
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setEditingProject(item)
+                                }}
+                                className="text-xs flex items-center gap-2 cursor-pointer"
+                              >
+                                <Edit3 className="h-3.5 w-3.5 text-[#FF6A13]" />
+                                Editar nome do projeto
+                              </DropdownMenuItem>
+                            )}
+                            {canArchive && (
+                              <DropdownMenuItem
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setArchivingProject(item)
+                                }}
+                                className={`text-xs flex items-center gap-2 cursor-pointer ${
+                                  item.arquivado
+                                    ? 'text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50'
+                                    : 'text-neutral-700 hover:text-neutral-900'
+                                }`}
+                              >
+                                {item.arquivado ? (
+                                  <>
+                                    <ArchiveRestore className="h-3.5 w-3.5 text-emerald-600" />
+                                    Desarquivar projeto
+                                  </>
+                                ) : (
+                                  <>
+                                    <Archive className="h-3.5 w-3.5 text-neutral-500" />
+                                    Arquivar projeto
+                                  </>
+                                )}
+                              </DropdownMenuItem>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       )}
@@ -391,6 +470,18 @@ export default function ProjectsPage() {
           if (!open) setEditingProject(null)
         }}
         projeto={editingProject}
+        onSuccess={() => {
+          void projects.reload()
+        }}
+      />
+
+      {/* Modal para arquivar/desarquivar projeto diretamente da listagem */}
+      <ArquivarProjetoModal
+        open={Boolean(archivingProject)}
+        onOpenChange={(open) => {
+          if (!open) setArchivingProject(null)
+        }}
+        projeto={archivingProject}
         onSuccess={() => {
           void projects.reload()
         }}

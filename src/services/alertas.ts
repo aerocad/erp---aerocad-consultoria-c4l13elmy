@@ -403,7 +403,7 @@ export function derivarAlertas(params: MotorAlertasParams): AlertaItem[] {
     })
 
     projetos.forEach((proj) => {
-      if (proj.status !== 'ativo') return
+      if (proj.status !== 'ativo' || proj.arquivado) return
       const link = `/projetos/${proj.id}`
       const numProj = proj.numero || proj.nome
 
