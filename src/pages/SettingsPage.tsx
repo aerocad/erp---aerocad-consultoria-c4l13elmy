@@ -1,19 +1,23 @@
 import { useState, type FormEvent } from 'react'
 import {
+  Eye,
   FileSpreadsheet,
   FileText,
+  Info,
   Pencil,
   Plus,
-  RotateCcw,
   Save,
   Shield,
+  UserCheck,
   UserRound,
+  XCircle,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { ImportacaoWizard } from '@/components/importacao/ImportacaoWizard'
 
 import { CrmBadge } from '@/components/common/CrmBadge'
 import { ErrorState, PageLoading } from '@/components/common/States'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { SectionHeader } from '@/components/common/SectionHeader'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
@@ -41,14 +45,23 @@ import { roleLabels } from '@/lib/crm'
 import { formatCurrency, initials } from '@/lib/format'
 import pb from '@/lib/pocketbase/client'
 import { createOne, updateOne } from '@/services/api'
-import type { ModeloRecord, SequenciaRecord, ServiceRecord, UserRecord } from '@/types/crm'
+import type { ModeloRecord, Role, SequenciaRecord, ServiceRecord, UserRecord } from '@/types/crm'
 
 export default function SettingsPage() {
-  const { user, refreshUser } = useAuth()
+  const {
+    user,
+    rawUser,
+    isSimulating,
+    simulatedRole,
+    startSimulation,
+    stopSimulation,
+    refreshUser,
+  } = useAuth()
   const users = useCrmData<UserRecord>('users', { sort: 'name' })
   const templates = useCrmData<ModeloRecord>('modelos_documentos', { sort: 'nome' })
   const services = useCrmData<ServiceRecord>('servicos_catalogo', { sort: 'codigo' })
   const sequences = useCrmData<SequenciaRecord>('sequencias', { sort: 'chave' })
+  const isRealAdmin = rawUser?.role === 'admin'
   const isAdmin = user?.role === 'admin'
   const [templateOpen, setTemplateOpen] = useState(false)
   const [editingTemplate, setEditingTemplate] = useState<ModeloRecord | null>(null)
@@ -105,12 +118,17 @@ export default function SettingsPage() {
     }
   }
   async function updateRole(record: UserRecord, role: string) {
+    if (rawUser?.id === record.id) {
+      toast.error('Você não pode alterar seu próprio perfil. Utilize a opção "Simular perfil".')
+      return
+    }
     try {
       await updateOne('users', record.id, { role })
-      toast.success('Perfil atualizado')
+      toast.success('Perfil atualizado com sucesso')
       void users.reload()
-    } catch {
-      toast.error('Não foi possível alterar o perfil')
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Não foi possível alterar o perfil'
+      toast.error(msg)
     }
   }
   async function saveAccount() {
@@ -174,42 +192,150 @@ export default function SettingsPage() {
         <TabsContent value="usuarios">
           <div className="crm-card overflow-hidden">
             <div className="border-b p-5">
-              <h2 className="font-bold">Usuários e perfis</h2>
-              <p className="text-sm text-[#737373]">
-                O perfil controla a navegação e as regras da API.
-              </p>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h2 className="font-bold">Usuários e perfis</h2>
+                  <p className="text-sm text-[#737373]">
+                    O perfil controla o acesso às áreas, visibilidade de menus e regras de segurança
+                    da API.
+                  </p>
+                </div>
+                {isSimulating && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={stopSimulation}
+                    className="border-amber-400 bg-amber-50 text-amber-900 hover:bg-amber-100"
+                  >
+                    <XCircle className="mr-1.5 h-4 w-4 text-amber-600" />
+                    Encerrar simulação de {roleLabels[simulatedRole!]}
+                  </Button>
+                )}
+              </div>
             </div>
             <div className="divide-y">
-              {users.data.map((item) => (
-                <div
-                  key={item.id}
-                  className="flex flex-col justify-between gap-3 p-4 sm:flex-row sm:items-center"
-                >
-                  <div className="flex items-center gap-3">
-                    <Avatar>
-                      <AvatarFallback className="bg-[#FFF0E5] text-[#D65100]">
-                        {initials(item.name)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <p className="font-semibold">{item.name}</p>
-                      <p className="text-xs text-[#737373]">{item.email}</p>
+              {users.data.map((item) => {
+                const isSelf = rawUser?.id === item.id
+
+                return (
+                  <div
+                    key={item.id}
+                    className="flex flex-col justify-between gap-4 p-4 sm:flex-row sm:items-center"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Avatar>
+                        <AvatarFallback className="bg-[#FFF0E5] text-[#D65100]">
+                          {initials(item.name)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <p className="font-semibold">{item.name}</p>
+                          {isSelf && (
+                            <CrmBadge tone="orange" className="text-[10px] py-0 px-1.5">
+                              Você
+                            </CrmBadge>
+                          )}
+                        </div>
+                        <p className="text-xs text-[#737373]">{item.email}</p>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                      {isSelf ? (
+                        <>
+                          <div className="flex items-center gap-2">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div className="flex items-center gap-1.5 rounded-md border border-[#E0E0E0] bg-zinc-50 px-3 py-1.5 text-xs text-zinc-600 cursor-not-allowed">
+                                  <UserCheck className="h-3.5 w-3.5 text-[#FF6A13]" />
+                                  <span className="font-medium">{roleLabels[item.role]}</span>
+                                  <Info className="h-3.5 w-3.5 text-zinc-400 ml-1" />
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="max-w-xs">
+                                <p className="font-medium text-xs">
+                                  Você não pode alterar seu próprio perfil para evitar perda de
+                                  acesso administrativo. Use a opção "Simular perfil" ao lado para
+                                  navegar com qualquer perfil.
+                                </p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </div>
+
+                          {isRealAdmin && (
+                            <div className="flex items-center gap-1.5">
+                              <Select
+                                value={isSimulating ? (simulatedRole ?? 'admin') : 'admin'}
+                                onValueChange={(val) => {
+                                  if (val === 'admin') {
+                                    stopSimulation()
+                                    toast.info(
+                                      'Simulação encerrada. Você voltou à visualização de Administrador.',
+                                    )
+                                  } else {
+                                    startSimulation(val as Role)
+                                    toast.success(
+                                      `Visualizando como ${roleLabels[val as Role]}. Navegue pelo CRM com segurança.`,
+                                    )
+                                  }
+                                }}
+                              >
+                                <SelectTrigger className="h-9 w-48 border-[#FF6A13]/40 bg-[#FFF9F5] text-xs font-semibold text-[#D65100] hover:border-[#FF6A13]">
+                                  <div className="flex items-center gap-1.5 truncate">
+                                    <Eye className="h-3.5 w-3.5 shrink-0 text-[#FF6A13]" />
+                                    <span>
+                                      {isSimulating
+                                        ? `Simulando: ${roleLabels[simulatedRole!]}`
+                                        : 'Simular perfil...'}
+                                    </span>
+                                  </div>
+                                </SelectTrigger>
+                                <SelectContent align="end">
+                                  <SelectItem value="admin">
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span>Administrador (Real)</span>
+                                    </div>
+                                  </SelectItem>
+                                  <SelectItem value="comercial">
+                                    Simular: Comercial (funil, propostas)
+                                  </SelectItem>
+                                  <SelectItem value="tecnico">
+                                    Simular: Técnico (projetos, processos)
+                                  </SelectItem>
+                                  <SelectItem value="financeiro">
+                                    Simular: Financeiro (contas, extratos)
+                                  </SelectItem>
+                                  <SelectItem value="terceiro">
+                                    Simular: Prestador Terceiro (portal OS)
+                                  </SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <Select
+                          value={item.role}
+                          onValueChange={(role) => updateRole(item, role)}
+                          disabled={!isRealAdmin}
+                        >
+                          <SelectTrigger className="h-9 w-44 text-xs font-medium">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent align="end">
+                            <SelectItem value="admin">Administrador</SelectItem>
+                            <SelectItem value="comercial">Comercial</SelectItem>
+                            <SelectItem value="tecnico">Técnico</SelectItem>
+                            <SelectItem value="financeiro">Financeiro</SelectItem>
+                            <SelectItem value="terceiro">Prestador Terceiro</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      )}
                     </div>
                   </div>
-                  <Select value={item.role} onValueChange={(role) => updateRole(item, role)}>
-                    <SelectTrigger className="w-44">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="admin">Administrador</SelectItem>
-                      <SelectItem value="comercial">Comercial</SelectItem>
-                      <SelectItem value="tecnico">Técnico</SelectItem>
-                      <SelectItem value="financeiro">Financeiro</SelectItem>
-                      <SelectItem value="terceiro">Prestador Terceiro</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
         </TabsContent>

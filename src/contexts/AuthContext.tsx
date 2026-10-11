@@ -13,8 +13,15 @@ import { setGlobalOcultarValores } from '@/lib/format'
 import pb from '@/lib/pocketbase/client'
 import type { UserRecord } from '@/types/crm'
 
+import type { Role } from '@/types/crm'
+
 type AuthContextValue = {
   user: UserRecord | null
+  rawUser: UserRecord | null
+  isSimulating: boolean
+  simulatedRole: Role | null
+  startSimulation: (role: Role) => void
+  stopSimulation: () => void
   ready: boolean
   login: (email: string, password: string) => Promise<UserRecord>
   logout: () => void
@@ -25,30 +32,70 @@ const AuthContext = createContext<AuthContextValue | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate()
-  const [user, setUser] = useState<UserRecord | null>(
+  const [rawUser, setRawUser] = useState<UserRecord | null>(
     () => (pb.authStore.record as UserRecord | null) ?? null,
   )
+  const [simulatedRole, setSimulatedRole] = useState<Role | null>(() => {
+    try {
+      const saved = sessionStorage.getItem('aerocad_simulated_role')
+      return (saved as Role) || null
+    } catch {
+      return null
+    }
+  })
   const [ready, setReady] = useState(false)
 
   const refreshUser = useCallback(async () => {
     if (!pb.authStore.isValid || !pb.authStore.record) {
-      setUser(null)
+      setRawUser(null)
+      setSimulatedRole(null)
+      try {
+        sessionStorage.removeItem('aerocad_simulated_role')
+      } catch {
+        /* intentionally ignored */
+      }
       setGlobalOcultarValores(true)
       return
     }
     try {
       const fresh = await pb.collection<UserRecord>('users').authRefresh({ requestKey: null })
-      setUser(fresh.record)
+      setRawUser(fresh.record)
+      // Se o usuário real não for admin, cancelar simulação se houver
+      if (fresh.record.role !== 'admin') {
+        setSimulatedRole(null)
+        try {
+          sessionStorage.removeItem('aerocad_simulated_role')
+        } catch {
+          /* intentionally ignored */
+        }
+      }
     } catch {
       pb.authStore.clear()
-      setUser(null)
+      setRawUser(null)
+      setSimulatedRole(null)
+      try {
+        sessionStorage.removeItem('aerocad_simulated_role')
+      } catch {
+        /* intentionally ignored */
+      }
       setGlobalOcultarValores(true)
     }
   }, [])
 
   useEffect(() => {
     void refreshUser().finally(() => setReady(true))
-    return pb.authStore.onChange((_, record) => setUser(record as UserRecord | null))
+    return pb.authStore.onChange((_, record) => {
+      const rec = record as UserRecord | null
+      setRawUser(rec)
+      if (!rec || rec.role !== 'admin') {
+        setSimulatedRole(null)
+        try {
+          sessionStorage.removeItem('aerocad_simulated_role')
+        } catch {
+          /* intentionally ignored */
+        }
+      }
+    })
   }, [refreshUser])
 
   const login = useCallback(async (email: string, password: string) => {
@@ -65,20 +112,84 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {
       setGlobalOcultarValores(true)
     }
-    setUser(result.record)
+    setRawUser(result.record)
     return result.record
+  }, [])
+
+  const startSimulation = useCallback(
+    (role: Role) => {
+      if (rawUser?.role !== 'admin') return
+      setSimulatedRole(role)
+      try {
+        sessionStorage.setItem('aerocad_simulated_role', role)
+      } catch {
+        /* intentionally ignored */
+      }
+    },
+    [rawUser],
+  )
+
+  const stopSimulation = useCallback(() => {
+    setSimulatedRole(null)
+    try {
+      sessionStorage.removeItem('aerocad_simulated_role')
+    } catch {
+      /* intentionally ignored */
+    }
   }, [])
 
   const logout = useCallback(() => {
     pb.authStore.clear()
-    setUser(null)
+    setRawUser(null)
+    setSimulatedRole(null)
+    try {
+      sessionStorage.removeItem('aerocad_simulated_role')
+    } catch {
+      /* intentionally ignored */
+    }
     setGlobalOcultarValores(true)
     navigate('/login', { replace: true })
   }, [navigate])
 
+  // O usuário efetivo para navegação e renderização
+  const user = useMemo(() => {
+    if (!rawUser) return null
+    if (rawUser.role === 'admin' && simulatedRole) {
+      return {
+        ...rawUser,
+        role: simulatedRole,
+      }
+    }
+    return rawUser
+  }, [rawUser, simulatedRole])
+
+  const isSimulating = Boolean(rawUser?.role === 'admin' && simulatedRole)
+
   const value = useMemo(
-    () => ({ user, ready, login, logout, refreshUser }),
-    [user, ready, login, logout, refreshUser],
+    () => ({
+      user,
+      rawUser,
+      isSimulating,
+      simulatedRole,
+      startSimulation,
+      stopSimulation,
+      ready,
+      login,
+      logout,
+      refreshUser,
+    }),
+    [
+      user,
+      rawUser,
+      isSimulating,
+      simulatedRole,
+      startSimulation,
+      stopSimulation,
+      ready,
+      login,
+      logout,
+      refreshUser,
+    ],
   )
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

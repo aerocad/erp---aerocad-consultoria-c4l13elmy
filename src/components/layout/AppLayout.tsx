@@ -79,7 +79,7 @@ const titleMap: Record<string, string> = {
 type SearchResult = { id: string; label: string; meta: string; path: string; type: string }
 
 export default function AppLayout() {
-  const { user, logout } = useAuth()
+  const { user, rawUser, isSimulating, simulatedRole, stopSimulation, logout } = useAuth()
   const { ocultarValores, toggleOcultarValores } = useFinanceiroVisibilidade()
   const {
     alertas,
@@ -327,6 +327,31 @@ export default function AppLayout() {
           collapsed ? 'lg:pl-[68px]' : 'lg:pl-[260px]',
         )}
       >
+        {/* Banner de Simulação Ativa de Perfil */}
+        {isSimulating && simulatedRole && (
+          <div className="sticky top-0 z-40 flex items-center justify-between border-b border-amber-300 bg-amber-500/15 px-4 py-2 text-xs backdrop-blur sm:px-6">
+            <div className="flex items-center gap-2 text-amber-950 font-medium">
+              <span className="flex h-2 w-2 rounded-full bg-amber-600 animate-pulse" />
+              <span>
+                Visualizando como:{' '}
+                <strong className="font-bold text-[#D65100]">{roleLabels[simulatedRole]}</strong>
+                <span className="hidden md:inline text-amber-800/80">
+                  {' '}
+                  — permissão real no banco: Administrador ({rawUser?.name})
+                </span>
+              </span>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={stopSimulation}
+              className="h-7 border-amber-400 bg-white text-xs font-semibold text-amber-950 hover:bg-amber-100 hover:text-black shadow-2xs"
+            >
+              Sair da simulação
+            </Button>
+          </div>
+        )}
+
         <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-[#DEDEDE] bg-white/95 px-4 backdrop-blur lg:px-6">
           <Button
             variant="ghost"
@@ -468,6 +493,9 @@ export default function AppLayout() {
         </main>
         <footer className="border-t border-[#DEDEDE] px-5 py-4 text-center text-xs text-[#8A8A8A]">
           CRM AEROCAD · v1 <span className="mx-2">•</span> Perfil: {roleLabels[role]}
+          {isSimulating && (
+            <span className="ml-1 text-amber-600 font-semibold">(Modo de Simulação Ativo)</span>
+          )}
         </footer>
       </div>
 

@@ -16,11 +16,19 @@ export function ProtectedRoute() {
 }
 
 export function AreaGuard({ area }: { area: string }) {
-  const { user } = useAuth()
+  const { user, isSimulating } = useAuth()
   const allowed = Boolean(user && canAccess(user.role, area))
   useEffect(() => {
-    if (!allowed) toast.error('Você não tem acesso a esta área')
-  }, [allowed])
+    if (!allowed) {
+      if (isSimulating) {
+        toast.error(
+          `Acesso restrito: o perfil simulado (${user?.role}) não possui permissão para acessar "${area}".`,
+        )
+      } else {
+        toast.error('Você não tem acesso a esta área')
+      }
+    }
+  }, [allowed, isSimulating, user?.role, area])
   if (!allowed) {
     const fallback = user?.role === 'terceiro' ? '/prestador' : '/painel'
     return <Navigate to={fallback} replace />
