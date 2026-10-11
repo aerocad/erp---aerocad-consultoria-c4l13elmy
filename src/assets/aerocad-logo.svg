@@ -1,9 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 5718 1158" role="img" aria-labelledby="title desc">
-  <title id="title">AEROCAD®</title>
-  <desc id="desc">Marca oficial AEROCAD com símbolo ® registrado sobrescrito alinhado ao topo à direita sem sobreposição com a letra D</desc>
+  <title id="title">AEROCAD</title>
+  <desc id="desc">Marca oficial AEROCAD</desc>
   <g fill="#FF6A13">
     <text x="130" y="930" font-family="'Arial Black', Arial, Helvetica, sans-serif" font-size="1080" font-weight="900" letter-spacing="-65">AEROCAD</text>
-    <circle cx="5550" cy="265" r="125" fill="none" stroke="#FF6A13" stroke-width="40"/>
-    <text x="5498" y="325" font-family="Arial, Helvetica, sans-serif" font-weight="bold" font-size="170">R</text>
   </g>
 </svg>
