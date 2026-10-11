@@ -53,7 +53,7 @@ import { RelatorioSaldoAFaturarCliente } from '@/components/financeiro/Relatorio
 import { useAuth } from '@/contexts/AuthContext'
 import { useFinanceiroVisibilidade } from '@/contexts/FinanceiroVisibilidadeContext'
 import { useCrmData } from '@/hooks/use-crm-data'
-import { stageColors, stageLabels, trailLabels, trailPhases } from '@/lib/crm'
+import { canViewFinancials, stageColors, stageLabels, trailLabels, trailPhases } from '@/lib/crm'
 import { formatCurrency, formatDate } from '@/lib/format'
 import { calcularResumoFinanceiroTodosProjetos } from '@/services/projetoFinanceiroInferidor'
 import type {
@@ -104,8 +104,10 @@ export default function ReportsPage() {
   const navigate = useNavigate()
   const currentYear = new Date().getFullYear().toString()
 
+  const canSeeFinance = canViewFinancials(user?.role)
   // Controle de permissão para visualização de valores internos de faturamento/cobrança
-  const canViewFinancialDetails = ['admin', 'financeiro'].includes(user?.role || '')
+  const canViewFinancialDetails =
+    canSeeFinance && ['admin', 'financeiro'].includes(user?.role || '')
 
   // Filtros principais
   const [selectedYear, setSelectedYear] = useState<string>(currentYear)
@@ -937,13 +939,15 @@ export default function ReportsPage() {
             <Workflow className="mr-2 h-4 w-4" />
             3. Operação Regulatória
           </TabsTrigger>
-          <TabsTrigger
-            value="financeiro"
-            className="data-[state=active]:bg-[#FF6A13] data-[state=active]:text-white font-semibold text-xs py-2.5 px-4"
-          >
-            <PieChartIcon className="mr-2 h-4 w-4" />
-            4. Financeiro & Concentração
-          </TabsTrigger>
+          {canSeeFinance && (
+            <TabsTrigger
+              value="financeiro"
+              className="data-[state=active]:bg-[#FF6A13] data-[state=active]:text-white font-semibold text-xs py-2.5 px-4"
+            >
+              <PieChartIcon className="mr-2 h-4 w-4" />
+              4. Financeiro & Concentração
+            </TabsTrigger>
+          )}
           <TabsTrigger
             value="posvenda"
             className="data-[state=active]:bg-[#FF6A13] data-[state=active]:text-white font-semibold text-xs py-2.5 px-4"

@@ -76,6 +76,8 @@ import {
   buildFichaNaoConformidadeHTML,
   buildRequerimentoAnacDeceaHTML,
 } from '@/lib/aerocadSupportDocumentBuilders'
+import { useAuth } from '@/contexts/AuthContext'
+import { canAccess, canViewFinancials } from '@/lib/crm'
 import { formatCurrencyRaw as formatCurrency, formatDate } from '@/lib/format'
 import { createOne, listAll, updateOne } from '@/services/api'
 import type {
@@ -91,8 +93,12 @@ import type {
 const placeholderRegex = /{{\s*([^}]+)\s*}}/g
 
 export default function DocumentGeneratorPage() {
-  const navigate = useNavigate()
+  const { user } = useAuth()
   const [searchParams] = useSearchParams()
+  const initialProjectId = searchParams.get('projeto') || ''
+
+  const canSeeClients = canAccess(user?.role, 'clientes')
+  const canSeeFinance = canViewFinancials(user?.role)
 
   const [templates, setTemplates] = useState<ModeloRecord[]>([])
   const [clients, setClients] = useState<ClienteRecord[]>([])
@@ -134,7 +140,9 @@ export default function DocumentGeneratorPage() {
   useEffect(() => {
     void Promise.all([
       listAll<ModeloRecord>('modelos_documentos', { sort: 'nome' }),
-      listAll<ClienteRecord>('clientes', { sort: 'razao_social' }),
+      canSeeClients
+        ? listAll<ClienteRecord>('clientes', { sort: 'razao_social' })
+        : Promise.resolve([] as ClienteRecord[]),
       listAll<ProjetoRecord>('projetos', {
         expand: 'cliente,oportunidade,responsavel_tecnico',
         sort: '-numero',
@@ -144,7 +152,11 @@ export default function DocumentGeneratorPage() {
         expand: 'cliente,tipo_servico',
         sort: '-created',
       }),
-      listAll<ParcelaRecord>('parcelas', { expand: 'projeto', sort: 'vencimento' }),
+      canSeeFinance
+        ? listAll<ParcelaRecord>('parcelas', { expand: 'projeto', sort: 'vencimento' }).catch(
+            () => [] as ParcelaRecord[],
+          )
+        : Promise.resolve([] as ParcelaRecord[]),
     ]).then(([t, c, p, pr, op, parc]) => {
       setTemplates(t)
       setClients(c)
@@ -1258,18 +1270,20 @@ ${emailObj.bodyText}
                   >
                     Regulatório
                   </Button>
-                  <Button
-                    type="button"
-                    variant={groupFilter === 'financeiro' ? 'default' : 'outline'}
-                    size="sm"
-                    className={`h-7 px-2 text-[10px] ${groupFilter === 'financeiro' ? 'bg-[#FF6A13] text-white' : ''}`}
-                    onClick={() => {
-                      setGroupFilter('financeiro')
-                      setFamilyFilter('todas')
-                    }}
-                  >
-                    Financeiro
-                  </Button>
+                  {canSeeFinance && (
+                    <Button
+                      type="button"
+                      variant={groupFilter === 'financeiro' ? 'default' : 'outline'}
+                      size="sm"
+                      className={`h-7 px-2 text-[10px] ${groupFilter === 'financeiro' ? 'bg-[#FF6A13] text-white' : ''}`}
+                      onClick={() => {
+                        setGroupFilter('financeiro')
+                        setFamilyFilter('todas')
+                      }}
+                    >
+                      Financeiro
+                    </Button>
+                  )}
                 </div>
               </div>
 
@@ -1294,8 +1308,12 @@ ${emailObj.bodyText}
                     <SelectItem value="fnc">FNC — Ficha Não Conformidade</SelectItem>
                     <SelectItem value="requerimento">RQ — Requerimentos</SelectItem>
                     <SelectItem value="procuracao">PR — Procurações</SelectItem>
-                    <SelectItem value="fatura">FT — Faturas</SelectItem>
-                    <SelectItem value="recibo">RB — Recibos</SelectItem>
+                    {canSeeFinance && (
+                      <>
+                        <SelectItem value="fatura">FT — Faturas</SelectItem>
+                        <SelectItem value="recibo">RB — Recibos</SelectItem>
+                      </>
+                    )}
                     <SelectItem value="estudo_viabilidade">EVA — Estudo de Viabilidade</SelectItem>
                     <SelectItem value="pedido_compras">PO — Pedido de Compras</SelectItem>
                     <SelectItem value="email_apresentacao">EML — E-mail de Apresentação</SelectItem>
@@ -1436,25 +1454,36 @@ ${emailObj.bodyText}
                 </Select>
               </div>
 
-              <div>
-                <Label className="text-xs text-[#666]">Cliente / Contratante</Label>
-                <Select
-                  value={clientId || undefined}
-                  onValueChange={(val) => setClientId(val === 'none' ? '' : val)}
-                >
-                  <SelectTrigger className="mt-1">
-                    <SelectValue placeholder="Selecione o cliente" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Nenhum cliente (usar dados de exemplo)</SelectItem>
-                    {clients.map((i) => (
-                      <SelectItem key={i.id} value={i.id}>
-                        {i.razao_social}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              {canSeeClients ? (
+                <div>
+                  <Label className="text-xs text-[#666]">Cliente / Contratante</Label>
+                  <Select
+                    value={clientId || undefined}
+                    onValueChange={(val) => setClientId(val === 'none' ? '' : val)}
+                  >
+                    <SelectTrigger className="mt-1">
+                      <SelectValue placeholder="Selecione o cliente" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Nenhum cliente (usar dados de exemplo)</SelectItem>
+                      {clients.map((i) => (
+                        <SelectItem key={i.id} value={i.id}>
+                          {i.razao_social}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : (
+                <div>
+                  <Label className="text-xs text-[#666]">Cliente / Contratante</Label>
+                  <Input
+                    value={project?.expand?.cliente?.razao_social || 'Definido pelo projeto'}
+                    disabled
+                    className="mt-1 bg-neutral-100 text-xs"
+                  />
+                </div>
+              )}
 
               <div>
                 <Label className="text-xs text-[#666]">Processo Regulatório (Opcional)</Label>

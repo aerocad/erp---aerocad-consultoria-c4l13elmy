@@ -123,11 +123,14 @@ export default function AppLayout() {
       setSearching(true)
       const q = escapeFilter(query.trim())
       try {
+        const canSearchClients = canAccess(role, 'clientes')
         const [clients, projects, processes] = await Promise.all([
-          pb.collection<ClienteRecord>('clientes').getList(1, 5, {
-            filter: `razao_social ~ '${q}' || cnpj_cpf ~ '${q}'`,
-            requestKey: null,
-          }),
+          canSearchClients
+            ? pb.collection<ClienteRecord>('clientes').getList(1, 5, {
+                filter: `razao_social ~ '${q}' || cnpj_cpf ~ '${q}'`,
+                requestKey: null,
+              })
+            : Promise.resolve({ items: [] as ClienteRecord[] }),
           pb
             .collection<ProjetoRecord>('projetos')
             .getList(1, 5, { filter: `nome ~ '${q}' || numero ~ '${q}'`, requestKey: null }),
@@ -135,14 +138,17 @@ export default function AppLayout() {
             .collection<ProcessoRecord>('processos')
             .getList(1, 5, { filter: `numero_protocolo ~ '${q}'`, requestKey: null }),
         ])
+        const clientResults = canSearchClients
+          ? clients.items.map((record) => ({
+              id: record.id,
+              label: record.razao_social,
+              meta: record.cnpj_cpf,
+              path: `/clientes/${record.id}`,
+              type: 'Cliente',
+            }))
+          : []
         setResults([
-          ...clients.items.map((record) => ({
-            id: record.id,
-            label: record.razao_social,
-            meta: record.cnpj_cpf,
-            path: `/clientes/${record.id}`,
-            type: 'Cliente',
-          })),
+          ...clientResults,
           ...projects.items.map((record) => ({
             id: record.id,
             label: record.nome,

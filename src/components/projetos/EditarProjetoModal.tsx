@@ -22,7 +22,7 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { useAuth } from '@/contexts/AuthContext'
-import { trailPhases } from '@/lib/crm'
+import { canAccess, canViewFinancials, trailPhases } from '@/lib/crm'
 import { formatCurrency, toInputDate } from '@/lib/format'
 import { createOne, listAll, updateOne } from '@/services/api'
 import type { ClienteRecord, ProjetoRecord, Trail, UserRecord } from '@/types/crm'
@@ -58,8 +58,10 @@ export function EditarProjetoModal({
   const isAdmin = user?.role === 'admin'
   const isTecnico = user?.role === 'tecnico'
   const isFinanceiro = user?.role === 'financeiro'
+  const canSeeClients = canAccess(user?.role, 'clientes')
+  const canSeeFinanceTab = canViewFinancials(user?.role)
   const canEditGeneral = isAdmin || isTecnico
-  const canEditValues = isAdmin || isFinanceiro
+  const canEditValues = (isAdmin || isFinanceiro) && canSeeFinanceTab
 
   // Formulário
   const [formData, setFormData] = useState({
@@ -92,9 +94,12 @@ export function EditarProjetoModal({
 
   useEffect(() => {
     if (open) {
-      setActiveTab(initialTab)
+      const initialAllowed = !canSeeFinanceTab && initialTab === 'financeiro' ? 'geral' : initialTab
+      setActiveTab(initialAllowed)
       void Promise.all([
-        listAll<ClienteRecord>('clientes', { sort: 'razao_social' }),
+        canSeeClients
+          ? listAll<ClienteRecord>('clientes', { sort: 'razao_social' })
+          : Promise.resolve([] as ClienteRecord[]),
         listAll<UserRecord>('users', {
           filter: "role = 'tecnico' || role = 'admin'",
           sort: 'name',
@@ -106,7 +111,7 @@ export function EditarProjetoModal({
         })
         .catch(() => {})
     }
-  }, [open, initialTab])
+  }, [open, initialTab, canSeeClients, canSeeFinanceTab])
 
   useEffect(() => {
     if (open && projeto) {
@@ -303,18 +308,20 @@ export function EditarProjetoModal({
           >
             Dados Principais & Prioridade
           </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('financeiro')}
-            className={`px-3 py-2 text-xs font-semibold border-b-2 -mb-px transition-colors flex items-center gap-1 ${
-              activeTab === 'financeiro'
-                ? 'border-[#FF6A13] text-[#FF6A13]'
-                : 'border-transparent text-neutral-600 hover:text-neutral-900'
-            }`}
-          >
-            <DollarSign className="h-3.5 w-3.5" />
-            Valores & Contrato
-          </button>
+          {canSeeFinanceTab && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('financeiro')}
+              className={`px-3 py-2 text-xs font-semibold border-b-2 -mb-px transition-colors flex items-center gap-1 ${
+                activeTab === 'financeiro'
+                  ? 'border-[#FF6A13] text-[#FF6A13]'
+                  : 'border-transparent text-neutral-600 hover:text-neutral-900'
+              }`}
+            >
+              <DollarSign className="h-3.5 w-3.5" />
+              Valores & Contrato
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setActiveTab('tecnico')}
@@ -369,22 +376,30 @@ export function EditarProjetoModal({
                   <Label htmlFor="edit-cliente" className="text-xs font-semibold text-[#424242]">
                     Cliente Contratante *
                   </Label>
-                  <Select
-                    value={formData.cliente}
-                    onValueChange={(cliente) => setFormData((prev) => ({ ...prev, cliente }))}
-                    disabled={salvando || !isAdmin}
-                  >
-                    <SelectTrigger id="edit-cliente" className="text-sm">
-                      <SelectValue placeholder="Selecione o cliente" />
-                    </SelectTrigger>
-                    <SelectContent className="max-h-60">
-                      {clients.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>
-                          {c.razao_social}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  {canSeeClients ? (
+                    <Select
+                      value={formData.cliente}
+                      onValueChange={(cliente) => setFormData((prev) => ({ ...prev, cliente }))}
+                      disabled={salvando || !isAdmin}
+                    >
+                      <SelectTrigger id="edit-cliente" className="text-sm">
+                        <SelectValue placeholder="Selecione o cliente" />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-60">
+                        {clients.map((c) => (
+                          <SelectItem key={c.id} value={c.id}>
+                            {c.razao_social}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input
+                      value={projeto?.expand?.cliente?.razao_social || 'Cliente vinculado'}
+                      disabled
+                      className="text-sm bg-neutral-100"
+                    />
+                  )}
                   {!isAdmin && (
                     <p className="text-[11px] text-neutral-500">
                       Alteração de cliente restrita a Administrador.

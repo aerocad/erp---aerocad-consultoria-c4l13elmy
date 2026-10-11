@@ -105,7 +105,7 @@ export const permissions: Record<Role, string[]> = {
     'configuracoes',
   ],
   comercial: ['painel', 'funil', 'clientes', 'projetos', 'processos', 'financeiro', 'documentos'],
-  tecnico: ['painel', 'clientes', 'projetos', 'processos', 'documentos'],
+  tecnico: ['painel', 'projetos', 'processos', 'documentos'],
   financeiro: [
     'painel',
     'clientes',
@@ -131,6 +131,31 @@ export function canAccess(role: Role, area: string) {
 export function canViewFinancials(role?: Role | string | null): boolean {
   if (!role) return false
   return role === 'admin' || role === 'comercial' || role === 'financeiro'
+}
+
+/**
+ * Define se o perfil tem permissão de visualizar e manipular Notas Fiscais de Serviços (NFS-e).
+ * Regra AEROCAD solicitada pelo administrador:
+ * - admin, comercial e financeiro: PODEM visualizar e gerenciar NFS-e (true).
+ * - tecnico e terceiro (prestador de serviço): NÃO têm acesso a NFS-e em nenhum lugar (false).
+ */
+export function canViewNfse(role?: Role | string | null): boolean {
+  if (!role) return false
+  return role === 'admin' || role === 'comercial' || role === 'financeiro'
+}
+
+/**
+ * Extensões de arquivo consideradas técnicas, permitidas para o perfil técnico (.docx, .pdf, .dwg, .dxf).
+ */
+export const EXTENSOES_DOCS_TECNICOS: readonly string[] = ['docx', 'pdf', 'dwg', 'dxf'] as const
+
+/**
+ * Valida se uma extensão é permitida para perfil técnico.
+ */
+export function isTecnicoAllowedExtension(ext?: string | null): boolean {
+  if (!ext) return false
+  const clean = ext.replace(/^\./, '').toLowerCase().trim()
+  return (EXTENSOES_DOCS_TECNICOS as readonly string[]).includes(clean)
 }
 
 export function firstName(name?: string) {

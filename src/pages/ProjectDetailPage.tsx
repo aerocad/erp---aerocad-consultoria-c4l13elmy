@@ -49,7 +49,15 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { useAuth } from '@/contexts/AuthContext'
 import { useFinanceiroVisibilidade } from '@/contexts/FinanceiroVisibilidadeContext'
-import { osStatusColors, osStatusLabels, trailLabels, trailPhases } from '@/lib/crm'
+import {
+  canAccess,
+  canViewFinancials,
+  canViewNfse,
+  osStatusColors,
+  osStatusLabels,
+  trailLabels,
+  trailPhases,
+} from '@/lib/crm'
 import { formatCurrency, formatDate } from '@/lib/format'
 import { createOne, getOne, listAll, updateOne } from '@/services/api'
 import {
@@ -105,9 +113,12 @@ export default function ProjectDetailPage() {
   const canEditProject = ['admin', 'tecnico', 'financeiro'].includes(user?.role || '')
   const canArchive = ['admin', 'tecnico'].includes(user?.role || '')
   const canManageFinanceiro = ['admin', 'financeiro'].includes(user?.role || '')
-  const canAnexarNfse = ['admin', 'financeiro', 'tecnico'].includes(user?.role || '')
-  const canExcluirNfse = ['admin', 'financeiro'].includes(user?.role || '')
-  const canEditVencimento = ['admin', 'financeiro', 'tecnico'].includes(user?.role || '')
+  const userCanViewFinancials = canViewFinancials(user?.role)
+  const userCanViewNfse = canViewNfse(user?.role)
+  const canAnexarNfse = userCanViewNfse && ['admin', 'financeiro'].includes(user?.role || '')
+  const canExcluirNfse = userCanViewNfse && ['admin', 'financeiro'].includes(user?.role || '')
+  const canEditVencimento = userCanViewNfse && ['admin', 'financeiro'].includes(user?.role || '')
+  const canAccessClients = canAccess(user?.role, 'clientes')
 
   const load = async () => {
     setLoading(true)
@@ -327,12 +338,18 @@ export default function ProjectDetailPage() {
                 </Button>
               )}
             </div>
-            <Link
-              to={`/clientes/${project.cliente}`}
-              className="mt-1 inline-block text-sm text-[#737373] hover:text-[#E85B06]"
-            >
-              {project.expand?.cliente?.razao_social}
-            </Link>
+            {canAccessClients ? (
+              <Link
+                to={`/clientes/${project.cliente}`}
+                className="mt-1 inline-block text-sm text-[#737373] hover:text-[#E85B06]"
+              >
+                {project.expand?.cliente?.razao_social}
+              </Link>
+            ) : (
+              <span className="mt-1 inline-block text-sm text-[#737373]">
+                {project.expand?.cliente?.razao_social}
+              </span>
+            )}
           </div>
           <div className="flex flex-wrap items-end gap-3">
             <div>
@@ -689,252 +706,256 @@ export default function ProjectDetailPage() {
           </section>
         </div>
         <aside className="space-y-5">
-          <section className="crm-card p-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="technical-label">FINANCEIRO & FATURAMENTO</p>
-                <h2 className="font-bold">Resumo do projeto</h2>
-              </div>
-              <div className="flex items-center gap-1.5">
-                {canEditProject && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setEditProjetoInitialTab('financeiro')
-                      setEditProjetoModalOpen(true)
-                    }}
-                    className="h-7 px-2 text-xs text-[#FF6A13] hover:bg-orange-50"
-                    title="Editar valor global e faturamento"
-                  >
-                    <Edit3 className="mr-1 h-3.5 w-3.5" />
-                    Editar valor
-                  </Button>
-                )}
-                <WalletCards className="h-5 w-5 text-[#FF6A13]" />
-              </div>
-            </div>
-
-            {/* Bloco de Confronto: Contratado × Faturado em Notas × Saldo */}
-            <div className="mt-4 rounded-xl border border-neutral-200 bg-[#FAFAFA] p-3.5 space-y-3">
+          {userCanViewFinancials && userCanViewNfse && (
+            <section className="crm-card p-5">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-[#666]">Status do faturamento</span>
-                <span
-                  className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-bold ${badgeFinanceiro.badgeClass}`}
-                >
-                  {badgeFinanceiro.label}
-                </span>
+                <div>
+                  <p className="technical-label">FINANCEIRO & FATURAMENTO</p>
+                  <h2 className="font-bold">Resumo do projeto</h2>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  {canEditProject && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setEditProjetoInitialTab('financeiro')
+                        setEditProjetoModalOpen(true)
+                      }}
+                      className="h-7 px-2 text-xs text-[#FF6A13] hover:bg-orange-50"
+                      title="Editar valor global e faturamento"
+                    >
+                      <Edit3 className="mr-1 h-3.5 w-3.5" />
+                      Editar valor
+                    </Button>
+                  )}
+                  <WalletCards className="h-5 w-5 text-[#FF6A13]" />
+                </div>
               </div>
 
-              {/* Barra de progresso de faturamento */}
-              <div>
-                <div className="flex justify-between text-xs text-[#737373] mb-1">
-                  <span>Progresso do faturamento</span>
-                  <span className="mono-value font-bold text-[#FF6A13]">
-                    {resumoFinanceiro.percentualFaturado}%
+              {/* Bloco de Confronto: Contratado × Faturado em Notas × Saldo */}
+              <div className="mt-4 rounded-xl border border-neutral-200 bg-[#FAFAFA] p-3.5 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-[#666]">Status do faturamento</span>
+                  <span
+                    className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-bold ${badgeFinanceiro.badgeClass}`}
+                  >
+                    {badgeFinanceiro.label}
                   </span>
                 </div>
-                <div className="h-2 overflow-hidden rounded bg-[#E5E5E5]">
-                  <div
-                    className={`h-full transition-all duration-300 ${
-                      resumoFinanceiro.statusFinanceiro === 'faturamento_integral'
-                        ? 'bg-emerald-600'
-                        : resumoFinanceiro.totalFaturadoNfse > 0
-                          ? 'bg-[#FF6A13]'
-                          : 'bg-neutral-300'
-                    }`}
-                    style={{ width: `${Math.min(100, resumoFinanceiro.percentualFaturado)}%` }}
-                  />
-                </div>
-              </div>
 
-              <div className="grid grid-cols-2 gap-2 pt-2 border-t text-xs">
+                {/* Barra de progresso de faturamento */}
                 <div>
-                  <p className="text-[10px] uppercase font-bold text-neutral-500">
-                    Valor Contratado
-                  </p>
-                  <p className="mono-value font-bold text-sm text-[#333]">
-                    {formatCurrency(resumoFinanceiro.valorGlobalContratado)}
-                  </p>
+                  <div className="flex justify-between text-xs text-[#737373] mb-1">
+                    <span>Progresso do faturamento</span>
+                    <span className="mono-value font-bold text-[#FF6A13]">
+                      {resumoFinanceiro.percentualFaturado}%
+                    </span>
+                  </div>
+                  <div className="h-2 overflow-hidden rounded bg-[#E5E5E5]">
+                    <div
+                      className={`h-full transition-all duration-300 ${
+                        resumoFinanceiro.statusFinanceiro === 'faturamento_integral'
+                          ? 'bg-emerald-600'
+                          : resumoFinanceiro.totalFaturadoNfse > 0
+                            ? 'bg-[#FF6A13]'
+                            : 'bg-neutral-300'
+                      }`}
+                      style={{ width: `${Math.min(100, resumoFinanceiro.percentualFaturado)}%` }}
+                    />
+                  </div>
                 </div>
-                <div>
-                  <p className="text-[10px] uppercase font-bold text-neutral-500">
-                    Faturado em NFS-e
-                  </p>
-                  <p className="mono-value font-bold text-sm text-[#FF6A13]">
-                    {formatCurrency(resumoFinanceiro.totalFaturadoNfse)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-[10px] uppercase font-bold text-neutral-500">
-                    Saldo a Faturar
-                  </p>
-                  <p
-                    className={`mono-value font-bold text-xs ${
-                      resumoFinanceiro.saldoAFaturar > 0 ? 'text-amber-700' : 'text-emerald-700'
-                    }`}
-                  >
-                    {formatCurrency(resumoFinanceiro.saldoAFaturar)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-[10px] uppercase font-bold text-neutral-500">Total Recebido</p>
-                  <p className="mono-value font-bold text-xs text-emerald-700">
-                    {formatCurrency(paid)}
-                  </p>
-                </div>
-              </div>
 
-              {resumoFinanceiro.numerosNotas.length > 0 && (
-                <div className="pt-2 border-t text-[11px] text-[#666]">
-                  <span className="font-medium">
-                    NFS-e emitidas ({resumoFinanceiro.numerosNotas.length}):
-                  </span>{' '}
-                  <span className="font-mono text-neutral-800">
-                    {resumoFinanceiro.numerosNotas.map((n) => `nº ${n}`).join(', ')}
-                  </span>
+                <div className="grid grid-cols-2 gap-2 pt-2 border-t text-xs">
+                  <div>
+                    <p className="text-[10px] uppercase font-bold text-neutral-500">
+                      Valor Contratado
+                    </p>
+                    <p className="mono-value font-bold text-sm text-[#333]">
+                      {formatCurrency(resumoFinanceiro.valorGlobalContratado)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase font-bold text-neutral-500">
+                      Faturado em NFS-e
+                    </p>
+                    <p className="mono-value font-bold text-sm text-[#FF6A13]">
+                      {formatCurrency(resumoFinanceiro.totalFaturadoNfse)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase font-bold text-neutral-500">
+                      Saldo a Faturar
+                    </p>
+                    <p
+                      className={`mono-value font-bold text-xs ${
+                        resumoFinanceiro.saldoAFaturar > 0 ? 'text-amber-700' : 'text-emerald-700'
+                      }`}
+                    >
+                      {formatCurrency(resumoFinanceiro.saldoAFaturar)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase font-bold text-neutral-500">
+                      Total Recebido
+                    </p>
+                    <p className="mono-value font-bold text-xs text-emerald-700">
+                      {formatCurrency(paid)}
+                    </p>
+                  </div>
                 </div>
-              )}
-            </div>
 
-            {/* Lista de Faturamentos / NFS-e vinculadas com Descrição */}
-            <div className="mt-4 pt-3 border-t text-xs">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-[11px] font-bold uppercase tracking-wider text-neutral-500">
-                  Notas NFS-e & Parcelas ({installments.length})
-                </p>
-                {canAnexarNfse && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setVincularNfseOpen(true)}
-                    className="h-6 text-[11px] border-orange-300 text-[#D65100] hover:bg-orange-50 px-2 font-medium"
-                    title="Anexar XML de NFS-e ou vincular nota existente"
-                  >
-                    <Plus className="mr-1 h-3 w-3 text-[#FF6A13]" />
-                    Anexar NFS-e
-                  </Button>
+                {resumoFinanceiro.numerosNotas.length > 0 && (
+                  <div className="pt-2 border-t text-[11px] text-[#666]">
+                    <span className="font-medium">
+                      NFS-e emitidas ({resumoFinanceiro.numerosNotas.length}):
+                    </span>{' '}
+                    <span className="font-mono text-neutral-800">
+                      {resumoFinanceiro.numerosNotas.map((n) => `nº ${n}`).join(', ')}
+                    </span>
+                  </div>
                 )}
               </div>
 
-              {installments.length > 0 ? (
-                <div className="divide-y max-h-64 overflow-y-auto">
-                  {installments.map((inst) => (
-                    <div
-                      key={inst.id}
-                      className="py-2 flex items-center justify-between group hover:bg-neutral-50/70 px-1 rounded transition"
+              {/* Lista de Faturamentos / NFS-e vinculadas com Descrição */}
+              <div className="mt-4 pt-3 border-t text-xs">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-neutral-500">
+                    Notas NFS-e & Parcelas ({installments.length})
+                  </p>
+                  {canAnexarNfse && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setVincularNfseOpen(true)}
+                      className="h-6 text-[11px] border-orange-300 text-[#D65100] hover:bg-orange-50 px-2 font-medium"
+                      title="Anexar XML de NFS-e ou vincular nota existente"
                     >
-                      <div className="min-w-0 pr-2 space-y-0.5">
-                        <p className="font-semibold text-[#333] truncate">{inst.descricao}</p>
-                        <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
-                          {inst.nf_numero ? (
-                            <span className="font-mono text-[10px] text-[#FF6A13] font-bold bg-orange-50 px-1.5 py-0.2 rounded border border-orange-200">
-                              NFS-e nº {inst.nf_numero}
-                            </span>
-                          ) : (
-                            <span className="text-[#8A8A8A]">Sem NFS-e vinculada</span>
-                          )}
-                          <span className="text-neutral-500">· {inst.status}</span>
-                          {inst.data_faturamento && (
-                            <span className="text-neutral-400">
-                              · Fat: {formatDate(inst.data_faturamento)}
-                            </span>
-                          )}
-                          <span className="text-neutral-400">
-                            · Venc: {formatDate(inst.vencimento)}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <div className="text-right">
-                          <span className="mono-value font-bold text-[11px] text-[#1F1F1F]">
-                            {formatCurrency(inst.valor)}
-                          </span>
-                          <div className="flex items-center justify-end gap-1">
-                            {canEditVencimento ? (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setParcelaParaEditarVencimento(inst)
-                                  setEditarVencimentoOpen(true)
-                                }}
-                                className="inline-flex items-center gap-1 font-mono text-[10px] text-neutral-600 hover:text-[#D65100] hover:underline transition"
-                                title="Editar data de vencimento da parcela"
-                              >
-                                <Calendar className="h-2.5 w-2.5 text-neutral-400 group-hover:text-[#FF6A13]" />
-                                <span>{formatDate(inst.vencimento)}</span>
-                                <Edit3 className="h-2.5 w-2.5 text-neutral-400 opacity-60 group-hover:opacity-100" />
-                              </button>
+                      <Plus className="mr-1 h-3 w-3 text-[#FF6A13]" />
+                      Anexar NFS-e
+                    </Button>
+                  )}
+                </div>
+
+                {installments.length > 0 ? (
+                  <div className="divide-y max-h-64 overflow-y-auto">
+                    {installments.map((inst) => (
+                      <div
+                        key={inst.id}
+                        className="py-2 flex items-center justify-between group hover:bg-neutral-50/70 px-1 rounded transition"
+                      >
+                        <div className="min-w-0 pr-2 space-y-0.5">
+                          <p className="font-semibold text-[#333] truncate">{inst.descricao}</p>
+                          <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
+                            {inst.nf_numero ? (
+                              <span className="font-mono text-[10px] text-[#FF6A13] font-bold bg-orange-50 px-1.5 py-0.2 rounded border border-orange-200">
+                                NFS-e nº {inst.nf_numero}
+                              </span>
                             ) : (
-                              <span className="font-mono text-[10px] text-neutral-500">
-                                Venc: {formatDate(inst.vencimento)}
+                              <span className="text-[#8A8A8A]">Sem NFS-e vinculada</span>
+                            )}
+                            <span className="text-neutral-500">· {inst.status}</span>
+                            {inst.data_faturamento && (
+                              <span className="text-neutral-400">
+                                · Fat: {formatDate(inst.data_faturamento)}
                               </span>
                             )}
+                            <span className="text-neutral-400">
+                              · Venc: {formatDate(inst.vencimento)}
+                            </span>
                           </div>
-                          {inst.status === 'paga' && (
-                            <p className="text-[10px] text-emerald-600 font-semibold">Quitada</p>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <div className="text-right">
+                            <span className="mono-value font-bold text-[11px] text-[#1F1F1F]">
+                              {formatCurrency(inst.valor)}
+                            </span>
+                            <div className="flex items-center justify-end gap-1">
+                              {canEditVencimento ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setParcelaParaEditarVencimento(inst)
+                                    setEditarVencimentoOpen(true)
+                                  }}
+                                  className="inline-flex items-center gap-1 font-mono text-[10px] text-neutral-600 hover:text-[#D65100] hover:underline transition"
+                                  title="Editar data de vencimento da parcela"
+                                >
+                                  <Calendar className="h-2.5 w-2.5 text-neutral-400 group-hover:text-[#FF6A13]" />
+                                  <span>{formatDate(inst.vencimento)}</span>
+                                  <Edit3 className="h-2.5 w-2.5 text-neutral-400 opacity-60 group-hover:opacity-100" />
+                                </button>
+                              ) : (
+                                <span className="font-mono text-[10px] text-neutral-500">
+                                  Venc: {formatDate(inst.vencimento)}
+                                </span>
+                              )}
+                            </div>
+                            {inst.status === 'paga' && (
+                              <p className="text-[10px] text-emerald-600 font-semibold">Quitada</p>
+                            )}
+                          </div>
+                          {canEditVencimento && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setParcelaParaEditarVencimento(inst)
+                                setEditarVencimentoOpen(true)
+                              }}
+                              className="h-7 w-7 p-0 text-neutral-400 hover:text-[#D65100] hover:bg-orange-50 opacity-80 group-hover:opacity-100 transition"
+                              title="Editar data de vencimento da fatura/parcela"
+                              aria-label={`Editar vencimento da parcela ${inst.descricao}`}
+                            >
+                              <Calendar className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                          {canExcluirNfse && inst.nf_numero && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setNotasParaExcluir([
+                                  {
+                                    tipo: 'parcela',
+                                    id: inst.id,
+                                    numero: inst.nf_numero || '',
+                                    valor: inst.valor_recebido || inst.valor,
+                                    dataEmissao: inst.data_faturamento || inst.vencimento,
+                                    descricao: inst.descricao,
+                                    projetoId: project.id,
+                                    projetoNumero: project.numero,
+                                    clienteId: project.cliente,
+                                    clienteNome: project.expand?.cliente?.razao_social,
+                                    statusParcela: inst.status,
+                                    isGatilho: inst.origem === 'gatilho',
+                                  },
+                                ])
+                                setExcluirNotaOpen(true)
+                              }}
+                              className="h-7 w-7 p-0 text-neutral-400 hover:text-rose-600 hover:bg-rose-50 opacity-70 group-hover:opacity-100 transition"
+                              title={`Excluir NFS-e nº ${inst.nf_numero}`}
+                              aria-label={`Excluir NFS-e nº ${inst.nf_numero}`}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
                           )}
                         </div>
-                        {canEditVencimento && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              setParcelaParaEditarVencimento(inst)
-                              setEditarVencimentoOpen(true)
-                            }}
-                            className="h-7 w-7 p-0 text-neutral-400 hover:text-[#D65100] hover:bg-orange-50 opacity-80 group-hover:opacity-100 transition"
-                            title="Editar data de vencimento da fatura/parcela"
-                            aria-label={`Editar vencimento da parcela ${inst.descricao}`}
-                          >
-                            <Calendar className="h-3.5 w-3.5" />
-                          </Button>
-                        )}
-                        {canExcluirNfse && inst.nf_numero && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              setNotasParaExcluir([
-                                {
-                                  tipo: 'parcela',
-                                  id: inst.id,
-                                  numero: inst.nf_numero || '',
-                                  valor: inst.valor_recebido || inst.valor,
-                                  dataEmissao: inst.data_faturamento || inst.vencimento,
-                                  descricao: inst.descricao,
-                                  projetoId: project.id,
-                                  projetoNumero: project.numero,
-                                  clienteId: project.cliente,
-                                  clienteNome: project.expand?.cliente?.razao_social,
-                                  statusParcela: inst.status,
-                                  isGatilho: inst.origem === 'gatilho',
-                                },
-                              ])
-                              setExcluirNotaOpen(true)
-                            }}
-                            className="h-7 w-7 p-0 text-neutral-400 hover:text-rose-600 hover:bg-rose-50 opacity-70 group-hover:opacity-100 transition"
-                            title={`Excluir NFS-e nº ${inst.nf_numero}`}
-                            aria-label={`Excluir NFS-e nº ${inst.nf_numero}`}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        )}
                       </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="py-3 text-center text-[11px] text-[#8A8A8A]">
-                  Nenhum faturamento ou parcela vinculada ao projeto.
-                </p>
-              )}
-            </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="py-3 text-center text-[11px] text-[#8A8A8A]">
+                    Nenhum faturamento ou parcela vinculada ao projeto.
+                  </p>
+                )}
+              </div>
 
-            <Button asChild variant="outline" className="mt-4 w-full">
-              <Link to={`/financeiro?projeto=${project.id}`}>Ver parcelas no Financeiro</Link>
-            </Button>
-          </section>
+              <Button asChild variant="outline" className="mt-4 w-full">
+                <Link to={`/financeiro?projeto=${project.id}`}>Ver parcelas no Financeiro</Link>
+              </Button>
+            </section>
+          )}
           <section className="crm-card p-5">
             <p className="technical-label">ATIVIDADES</p>
             <h2 className="font-bold">Timeline</h2>

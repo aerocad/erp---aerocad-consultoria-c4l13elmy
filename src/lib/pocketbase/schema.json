@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-11T21:06:21.323Z",
+  "generatedAt": "2026-10-11T21:48:52.533Z",
   "collections": [
     {
       "name": "users",
@@ -56,8 +56,8 @@
       "name": "clientes",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != '' && (@request.auth.role = 'admin' || @request.auth.role = 'comercial' || @request.auth.role = 'tecnico' || @request.auth.role = 'financeiro')",
-        "view": "@request.auth.id != '' && (@request.auth.role = 'admin' || @request.auth.role = 'comercial' || @request.auth.role = 'tecnico' || @request.auth.role = 'financeiro')",
+        "list": "@request.auth.id != '' && (@request.auth.role = 'admin' || @request.auth.role = 'comercial' || @request.auth.role = 'financeiro')",
+        "view": "@request.auth.id != '' && (@request.auth.role = 'admin' || @request.auth.role = 'comercial' || @request.auth.role = 'financeiro')",
         "create": "@request.auth.role = 'admin' || @request.auth.role = 'comercial' || @request.auth.role = 'financeiro'",
         "update": "@request.auth.role = 'admin' || @request.auth.role = 'comercial' || @request.auth.role = 'financeiro'",
         "delete": "@request.auth.role = 'admin'"
@@ -1389,8 +1389,8 @@
       "apiRules": {
         "list": "@request.auth.role = 'admin' || @request.auth.role = 'financeiro' || @request.auth.role = 'comercial'",
         "view": "@request.auth.role = 'admin' || @request.auth.role = 'financeiro' || @request.auth.role = 'comercial'",
-        "create": "@request.auth.role = 'admin' || @request.auth.role = 'financeiro' || @request.auth.role = 'tecnico'",
-        "update": "@request.auth.role = 'admin' || @request.auth.role = 'financeiro' || @request.auth.role = 'tecnico'",
+        "create": "@request.auth.role = 'admin' || @request.auth.role = 'financeiro'",
+        "update": "@request.auth.role = 'admin' || @request.auth.role = 'financeiro'",
         "delete": "@request.auth.role = 'admin' || @request.auth.role = 'financeiro'"
       },
       "fields": [
