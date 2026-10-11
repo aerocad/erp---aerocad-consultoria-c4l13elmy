@@ -98,8 +98,8 @@ export default function ProjectsPage() {
   const canEditName = ['admin', 'tecnico'].includes(user?.role || '')
   const canArchive = ['admin', 'tecnico'].includes(user?.role || '')
 
-  // Limpa seleção que não exista mais nos projetos
-  const handleToggleSelect = (id: string, e?: React.MouseEvent) => {
+  // Alterna seleção individual de projeto de forma confiável
+  const handleToggleSelect = (id: string, e?: React.SyntheticEvent) => {
     e?.stopPropagation()
     setSelectedIds((prev) => {
       const next = new Set(prev)
@@ -483,15 +483,30 @@ export default function ProjectsPage() {
                     <div className="flex items-center gap-2.5">
                       {/* Checkbox para seleção individual do card */}
                       <div
-                        onClick={(e) => handleToggleSelect(item.id, e)}
-                        className="flex items-center justify-center p-0.5 -ml-1 rounded cursor-pointer hover:bg-neutral-100/80 transition-colors"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleToggleSelect(item.id, e)
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === ' ' || e.key === 'Enter') {
+                            e.stopPropagation()
+                            e.preventDefault()
+                            handleToggleSelect(item.id, e)
+                          }
+                        }}
+                        className="flex items-center justify-center p-1 -ml-1 rounded cursor-pointer hover:bg-neutral-100/90 transition-colors"
                         title={
                           selectedIds.has(item.id) ? 'Desmarcar projeto' : 'Selecionar projeto'
                         }
                       >
                         <Checkbox
                           checked={selectedIds.has(item.id)}
-                          onCheckedChange={() => handleToggleSelect(item.id)}
+                          onCheckedChange={() => {
+                            handleToggleSelect(item.id)
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                          }}
                           aria-label={`Selecionar projeto ${item.numero}`}
                           className="data-[state=checked]:bg-[#FF6A13] data-[state=checked]:border-[#FF6A13]"
                         />
