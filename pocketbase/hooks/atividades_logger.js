@@ -15,7 +15,17 @@ onRecordAfterCreateSuccess(
       if (name === 'parcelas') text = 'Parcela criada: ' + record.getString('descricao')
       if (!text) return
 
-      let user = record.getString('responsavel') || record.getString('responsavel_tecnico')
+      let user = ''
+      try {
+        if (e.auth && e.auth.id) {
+          user = e.auth.id
+        }
+      } catch (_) {}
+
+      if (!user) {
+        user = record.getString('responsavel') || record.getString('responsavel_tecnico')
+      }
+
       if (!user) {
         try {
           user = $app.findFirstRecordByData('users', 'role', 'admin').id
@@ -68,8 +78,18 @@ onRecordAfterUpdateSuccess(
         record.getString('etapa') !== record.original().getString('etapa')
       )
         text = 'Oportunidade movida para ' + record.getString('etapa')
-      if (name === 'projetos' && record.getString('fase') !== record.original().getString('fase'))
-        text = 'Projeto avançou para ' + record.getString('fase')
+      if (name === 'projetos') {
+        const oldName = record.original().getString('nome')
+        const newName = record.getString('nome')
+        const oldFase = record.original().getString('fase')
+        const newFase = record.getString('fase')
+
+        if (newName && oldName && newName !== oldName) {
+          text = 'Nome do projeto alterado de "' + oldName + '" para "' + newName + '"'
+        } else if (newFase && oldFase && newFase !== oldFase) {
+          text = 'Projeto avançou para ' + newFase
+        }
+      }
       if (
         name === 'processos' &&
         record.getString('status') !== record.original().getString('status')

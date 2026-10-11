@@ -3,6 +3,7 @@ import {
   ArrowLeft,
   CalendarDays,
   Copy,
+  Edit3,
   ExternalLink,
   FileText,
   FileUp,
@@ -22,6 +23,7 @@ import { ErrorState, PageLoading } from '@/components/common/States'
 import { AnexoDialog } from '@/components/forms/AnexoDialog'
 import { OrdemServicoDialog } from '@/components/forms/OrdemServicoDialog'
 import { ProcessDialog } from '@/components/forms/ProcessDialog'
+import { EditarNomeProjetoModal } from '@/components/projetos/EditarNomeProjetoModal'
 import { ExcluirProjetoModal } from '@/components/projetos/ExcluirProjetoModal'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -73,9 +75,11 @@ export default function ProjectDetailPage() {
   const [editingOs, setEditingOs] = useState<OrdemServicoRecord | null>(null)
   const [note, setNote] = useState('')
   const [excluirModalOpen, setExcluirModalOpen] = useState(false)
+  const [editNomeOpen, setEditNomeOpen] = useState(false)
   const canWrite = ['admin', 'comercial', 'tecnico'].includes(user?.role || '')
   const isAdmin = user?.role === 'admin'
   const canManageOS = ['admin', 'tecnico'].includes(user?.role || '')
+  const canEditName = ['admin', 'tecnico'].includes(user?.role || '')
 
   const load = async () => {
     setLoading(true)
@@ -199,7 +203,22 @@ export default function ProjectDetailPage() {
                 {badgeFinanceiro.label}
               </span>
             </div>
-            <h1 className="mt-2 text-2xl font-bold text-[#424242]">{project.nome}</h1>
+            <div className="mt-2 flex items-center gap-2 group">
+              <h1 className="text-2xl font-bold text-[#424242]">{project.nome}</h1>
+              {canEditName && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setEditNomeOpen(true)}
+                  className="h-8 px-2 text-[#737373] hover:text-[#D65100] hover:bg-orange-50 shrink-0"
+                  title="Editar nome do projeto"
+                  aria-label="Editar nome do projeto"
+                >
+                  <Edit3 className="h-4 w-4 mr-1 text-[#FF6A13]" />
+                  <span className="text-xs font-semibold">Editar nome</span>
+                </Button>
+              )}
+            </div>
             <Link
               to={`/clientes/${project.cliente}`}
               className="mt-1 inline-block text-sm text-[#737373] hover:text-[#E85B06]"
@@ -731,6 +750,18 @@ export default function ProjectDetailPage() {
           </Button>
         </div>
       )}
+
+      {/* Modal de Edição de Nome do Projeto */}
+      <EditarNomeProjetoModal
+        open={editNomeOpen}
+        onOpenChange={setEditNomeOpen}
+        projeto={project}
+        onSuccess={(atualizado) => {
+          setProject((prev) => (prev ? { ...prev, nome: atualizado.nome } : atualizado))
+          // Recarregar lista de atividades / timeline para refletir a nova atividade gerada pelo hook
+          void load()
+        }}
+      />
 
       {/* Modal de Exclusão do Projeto */}
       <ExcluirProjetoModal

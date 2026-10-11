@@ -1,12 +1,19 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowUpDown, CalendarDays, Plus, Search } from 'lucide-react'
+import { ArrowUpDown, CalendarDays, Edit3, MoreVertical, Plus, Search } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 
 import { CrmBadge } from '@/components/common/CrmBadge'
 import { EmptyState, ErrorState, PageLoading } from '@/components/common/States'
 import { SectionHeader } from '@/components/common/SectionHeader'
+import { EditarNomeProjetoModal } from '@/components/projetos/EditarNomeProjetoModal'
 import { ProjetoDialog } from '@/components/forms/ProjetoDialog'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -40,6 +47,7 @@ export default function ProjectsPage() {
   const [trail, setTrail] = useState('todos')
   const [status, setStatus] = useState('todos')
   const [financialFilter, setFinancialFilter] = useState('todos')
+  const [editingProject, setEditingProject] = useState<ProjetoRecord | null>(null)
   const [sortOrder, setSortOrder] = useState<
     'recentes' | 'cronologica' | 'numero_desc' | 'numero_asc'
   >(() => {
@@ -68,6 +76,7 @@ export default function ProjectsPage() {
     if (params.get('novo') === '1') setDialog(true)
   }, [params])
   const canWrite = ['admin', 'comercial', 'tecnico', 'financeiro'].includes(user?.role || '')
+  const canEditName = ['admin', 'tecnico'].includes(user?.role || '')
 
   const resumosFinanceiros = useMemo(() => {
     return calcularResumoFinanceiroTodosProjetos(projects.data, installments.data)
@@ -252,81 +261,115 @@ export default function ProjectsPage() {
         />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {rows.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => navigate(`/projetos/${item.id}`)}
-              className="crm-card p-5 text-left"
-            >
-              {(() => {
-                const resumo = resumosFinanceiros.get(item.id)
-                const badgeFinanceiro = getStatusFinanceiroBadgeConfig(resumo)
-                return (
-                  <>
-                    <div className="flex items-center justify-between">
-                      <span className="mono-value text-base font-black text-[#D65100]">
-                        {item.numero}
+          {rows.map((item) => {
+            const resumo = resumosFinanceiros.get(item.id)
+            const badgeFinanceiro = getStatusFinanceiroBadgeConfig(resumo)
+
+            return (
+              <div
+                key={item.id}
+                onClick={() => navigate(`/projetos/${item.id}`)}
+                className="crm-card p-5 text-left cursor-pointer transition-shadow hover:shadow-md flex flex-col justify-between relative group"
+              >
+                <div>
+                  <div className="flex items-center justify-between">
+                    <span className="mono-value text-base font-black text-[#D65100]">
+                      {item.numero}
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${badgeFinanceiro.badgeClass}`}
+                        title={badgeFinanceiro.descricao}
+                      >
+                        {badgeFinanceiro.label}
                       </span>
-                      <div className="flex items-center gap-1.5">
-                        <span
-                          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${badgeFinanceiro.badgeClass}`}
-                          title={badgeFinanceiro.descricao}
-                        >
-                          {badgeFinanceiro.label}
-                        </span>
-                        <CrmBadge
-                          tone={
-                            item.trilha === 'registro'
-                              ? 'green'
-                              : item.trilha === 'opea'
-                                ? 'orange'
-                                : 'gray'
-                          }
-                        >
-                          {item.trilha.toUpperCase()}
-                        </CrmBadge>
-                      </div>
+                      <CrmBadge
+                        tone={
+                          item.trilha === 'registro'
+                            ? 'green'
+                            : item.trilha === 'opea'
+                              ? 'orange'
+                              : 'gray'
+                        }
+                      >
+                        {item.trilha.toUpperCase()}
+                      </CrmBadge>
+
+                      {/* Menu de ações por linha / card */}
+                      {canEditName && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger
+                            asChild
+                            onClick={(e) => {
+                              e.stopPropagation()
+                            }}
+                          >
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0 -mr-1.5 text-neutral-400 hover:text-neutral-800 hover:bg-neutral-100"
+                              aria-label="Opções do projeto"
+                            >
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                            <DropdownMenuItem
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setEditingProject(item)
+                              }}
+                              className="text-xs flex items-center gap-2 cursor-pointer"
+                            >
+                              <Edit3 className="h-3.5 w-3.5 text-[#FF6A13]" />
+                              Editar nome do projeto
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
                     </div>
-                  </>
-                )
-              })()}
-              <h2 className="mt-3 font-bold text-[#4B4B4B]">{item.nome}</h2>
-              <p className="mt-1 text-sm text-[#737373]">{item.expand?.cliente?.razao_social}</p>
-              <div className="mt-4 h-1.5 overflow-hidden rounded bg-[#F2F2F2]">
-                <div
-                  className="h-full bg-[#FF6A13]"
-                  style={{ width: `${item.percentual_concluido}%` }}
-                />
-              </div>
-              <div className="mt-2 flex justify-between text-[11px] text-[#8A8A8A]">
-                <span>{item.fase}</span>
-                <span className="mono-value">{item.percentual_concluido}%</span>
-              </div>
-              <div className="mt-4 flex items-center justify-between border-t pt-3">
-                <CrmBadge tone={item.status === 'ativo' ? 'green' : 'gray'}>{item.status}</CrmBadge>
-                <div className="flex items-center gap-3">
-                  {(() => {
-                    const resumo = resumosFinanceiros.get(item.id)
-                    if (resumo && resumo.valorGlobalContratado > 0) {
-                      return (
+                  </div>
+
+                  <h2 className="mt-3 font-bold text-[#4B4B4B] line-clamp-2">{item.nome}</h2>
+                  <p className="mt-1 text-sm text-[#737373] truncate">
+                    {item.expand?.cliente?.razao_social}
+                  </p>
+                </div>
+
+                <div className="mt-4">
+                  <div className="h-1.5 overflow-hidden rounded bg-[#F2F2F2]">
+                    <div
+                      className="h-full bg-[#FF6A13]"
+                      style={{ width: `${item.percentual_concluido}%` }}
+                    />
+                  </div>
+                  <div className="mt-2 flex justify-between text-[11px] text-[#8A8A8A]">
+                    <span>{item.fase}</span>
+                    <span className="mono-value">{item.percentual_concluido}%</span>
+                  </div>
+                  <div className="mt-4 flex items-center justify-between border-t pt-3">
+                    <CrmBadge tone={item.status === 'ativo' ? 'green' : 'gray'}>
+                      {item.status}
+                    </CrmBadge>
+                    <div className="flex items-center gap-3">
+                      {resumo && resumo.valorGlobalContratado > 0 && (
                         <span
                           className="mono-value text-xs font-semibold text-[#4B4B4B]"
                           title={`Valor contratado: ${formatCurrency(resumo.valorGlobalContratado)} | Faturado: ${formatCurrency(resumo.totalFaturadoNfse)}`}
                         >
                           {formatCurrency(resumo.valorGlobalContratado)}
                         </span>
-                      )
-                    }
-                    return null
-                  })()}
-                  <span className="flex items-center gap-1 text-xs text-[#737373]">
-                    <CalendarDays className="h-3.5 w-3.5" />
-                    {formatDate(item.prazo)}
-                  </span>
+                      )}
+                      <span className="flex items-center gap-1 text-xs text-[#737373]">
+                        <CalendarDays className="h-3.5 w-3.5" />
+                        {formatDate(item.prazo)}
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </button>
-          ))}
+            )
+          })}
         </div>
       )}
       <ProjetoDialog
@@ -339,6 +382,18 @@ export default function ProjectsPage() {
           }
         }}
         onSaved={(record) => navigate(`/projetos/${record.id}`)}
+      />
+
+      {/* Modal para editar nome do projeto diretamente da listagem */}
+      <EditarNomeProjetoModal
+        open={Boolean(editingProject)}
+        onOpenChange={(open) => {
+          if (!open) setEditingProject(null)
+        }}
+        projeto={editingProject}
+        onSuccess={() => {
+          void projects.reload()
+        }}
       />
     </div>
   )
