@@ -27,6 +27,7 @@ import { ArquivarProjetoModal } from '@/components/projetos/ArquivarProjetoModal
 import { EditarNomeProjetoModal } from '@/components/projetos/EditarNomeProjetoModal'
 import { EditarProjetoModal } from '@/components/projetos/EditarProjetoModal'
 import { ExcluirProjetoModal } from '@/components/projetos/ExcluirProjetoModal'
+import { VincularNfseProjetoModal } from '@/components/financeiro/VincularNfseProjetoModal'
 import { Button } from '@/components/ui/button'
 import { Archive, ArchiveRestore } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -78,6 +79,7 @@ export default function ProjectDetailPage() {
   const [anexoOpen, setAnexoOpen] = useState(false)
   const [osOpen, setOsOpen] = useState(false)
   const [editingOs, setEditingOs] = useState<OrdemServicoRecord | null>(null)
+  const [vincularNfseOpen, setVincularNfseOpen] = useState(false)
   const [note, setNote] = useState('')
   const [excluirModalOpen, setExcluirModalOpen] = useState(false)
   const [editNomeOpen, setEditNomeOpen] = useState(false)
@@ -92,6 +94,7 @@ export default function ProjectDetailPage() {
   const canEditName = ['admin', 'tecnico'].includes(user?.role || '')
   const canEditProject = ['admin', 'tecnico', 'financeiro'].includes(user?.role || '')
   const canArchive = ['admin', 'tecnico'].includes(user?.role || '')
+  const canManageFinanceiro = ['admin', 'financeiro'].includes(user?.role || '')
 
   const load = async () => {
     setLoading(true)
@@ -781,36 +784,67 @@ export default function ProjectDetailPage() {
               )}
             </div>
 
-            {installments.length > 0 && (
-              <div className="mt-4 pt-3 border-t divide-y text-xs">
-                <p className="text-[11px] font-bold uppercase tracking-wider text-neutral-500 mb-2">
-                  Parcelas ({installments.length})
+            {/* Lista de Faturamentos / NFS-e vinculadas com Descrição */}
+            <div className="mt-4 pt-3 border-t text-xs">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-neutral-500">
+                  Notas NFS-e & Parcelas ({installments.length})
                 </p>
-                {installments.slice(0, 4).map((inst) => (
-                  <div key={inst.id} className="py-2 flex items-center justify-between">
-                    <div className="min-w-0 pr-2">
-                      <p className="font-semibold text-[#333] truncate">{inst.descricao}</p>
-                      <div className="flex items-center gap-1.5 mt-0.5">
-                        {inst.nf_numero ? (
-                          <span className="font-mono text-[10px] text-[#FF6A13] font-bold bg-orange-50 px-1.5 py-0.2 rounded border border-orange-200">
-                            NFS-e nº {inst.nf_numero}
-                          </span>
-                        ) : (
-                          <span className="text-[10px] text-[#8A8A8A]">Sem NFS-e</span>
+                {canManageFinanceiro && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setVincularNfseOpen(true)}
+                    className="h-6 text-[11px] border-orange-300 text-[#D65100] hover:bg-orange-50 px-2"
+                  >
+                    <Plus className="mr-1 h-3 w-3 text-[#FF6A13]" />
+                    Anexar NFS-e
+                  </Button>
+                )}
+              </div>
+
+              {installments.length > 0 ? (
+                <div className="divide-y max-h-64 overflow-y-auto">
+                  {installments.map((inst) => (
+                    <div key={inst.id} className="py-2 flex items-center justify-between">
+                      <div className="min-w-0 pr-2 space-y-0.5">
+                        <p className="font-semibold text-[#333] truncate">{inst.descricao}</p>
+                        <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
+                          {inst.nf_numero ? (
+                            <span className="font-mono text-[10px] text-[#FF6A13] font-bold bg-orange-50 px-1.5 py-0.2 rounded border border-orange-200">
+                              NFS-e nº {inst.nf_numero}
+                            </span>
+                          ) : (
+                            <span className="text-[#8A8A8A]">Sem NFS-e vinculada</span>
+                          )}
+                          <span className="text-neutral-500">· {inst.status}</span>
+                          {inst.data_faturamento && (
+                            <span className="text-neutral-400">
+                              · Fat: {formatDate(inst.data_faturamento)}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <span className="mono-value font-bold text-[11px] text-[#1F1F1F]">
+                          {formatCurrency(inst.valor)}
+                        </span>
+                        {inst.status === 'paga' && (
+                          <p className="text-[10px] text-emerald-600 font-semibold">Quitada</p>
                         )}
-                        <span className="text-[10px] text-neutral-500">· {inst.status}</span>
                       </div>
                     </div>
-                    <span className="mono-value font-bold text-right text-[11px] shrink-0">
-                      {formatCurrency(inst.valor)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
+                  ))}
+                </div>
+              ) : (
+                <p className="py-3 text-center text-[11px] text-[#8A8A8A]">
+                  Nenhum faturamento ou parcela vinculada ao projeto.
+                </p>
+              )}
+            </div>
 
             <Button asChild variant="outline" className="mt-4 w-full">
-              <Link to={`/financeiro?projeto=${project.id}`}>Ver parcelas</Link>
+              <Link to={`/financeiro?projeto=${project.id}`}>Ver parcelas no Financeiro</Link>
             </Button>
           </section>
           <section className="crm-card p-5">
@@ -918,6 +952,15 @@ export default function ProjectDetailPage() {
           setProject((prev) => (prev ? { ...prev, ...atualizado } : atualizado))
           void load()
         }}
+      />
+
+      {/* Modal de Anexar / Vincular Notas NFS-e com Descrição */}
+      <VincularNfseProjetoModal
+        open={vincularNfseOpen}
+        onOpenChange={setVincularNfseOpen}
+        projeto={project}
+        parcelasExistentes={installments}
+        onSuccess={() => void load()}
       />
     </div>
   )

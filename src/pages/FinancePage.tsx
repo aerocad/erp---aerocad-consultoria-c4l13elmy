@@ -113,6 +113,7 @@ export function FinancePage() {
   const [novoClienteOrfaEndereco, setNovoClienteOrfaEndereco] = useState('')
   const [novoClienteOrfaMunicipio, setNovoClienteOrfaMunicipio] = useState('')
   const [novoClienteOrfaUf, setNovoClienteOrfaUf] = useState('')
+  const [descricaoVinculoOrfa, setDescricaoVinculoOrfa] = useState('')
 
   const [form, setForm] = useState({
     projeto: '',
@@ -386,7 +387,12 @@ export function FinancePage() {
                 modo: 'manter_atual' as const,
               }
 
-      await vincularNotaOrfaAParcela(vinculandoNota, parcelaDestinoId, clienteOpcao)
+      await vincularNotaOrfaAParcela(
+        vinculandoNota,
+        parcelaDestinoId,
+        clienteOpcao,
+        descricaoVinculoOrfa,
+      )
       toast.success(`NFS-e nº ${vinculandoNota.numero} vinculada com sucesso!`)
 
       // Remove da lista de órfãs
@@ -400,6 +406,7 @@ export function FinancePage() {
         return atualizadas
       })
       setVinculandoNota(null)
+      setDescricaoVinculoOrfa('')
       setParcelaDestinoId('')
       setModoClienteOrfa('manter_atual')
       setClienteSelecionadoOrfaId('')
@@ -625,6 +632,7 @@ export function FinancePage() {
                       size="sm"
                       onClick={() => {
                         setVinculandoNota(nota)
+                        setDescricaoVinculoOrfa('')
                         setParcelaDestinoId('')
                         // Verifica se o tomador já existe na base de clientes
                         const limpo = nota.tomadorCnpjCpf
@@ -1317,7 +1325,16 @@ export function FinancePage() {
               {/* Seção da Parcela */}
               <div className="space-y-1.5">
                 <Label className="text-xs font-bold">1. Selecione a parcela de destino *</Label>
-                <Select value={parcelaDestinoId} onValueChange={setParcelaDestinoId}>
+                <Select
+                  value={parcelaDestinoId}
+                  onValueChange={(val) => {
+                    setParcelaDestinoId(val)
+                    if (!descricaoVinculoOrfa) {
+                      const p = installments.data.find((i) => i.id === val)
+                      if (p?.descricao) setDescricaoVinculoOrfa(p.descricao)
+                    }
+                  }}
+                >
                   <SelectTrigger className="h-9 text-xs">
                     <SelectValue placeholder="Selecione a parcela..." />
                   </SelectTrigger>
@@ -1330,6 +1347,17 @@ export function FinancePage() {
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+
+              {/* Descrição personalizada da medição / vínculo */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold">Descrição da medição / nota (opcional)</Label>
+                <Input
+                  placeholder="Ex: 1ª medição, Medição final, Entrada 50%"
+                  value={descricaoVinculoOrfa}
+                  onChange={(e) => setDescricaoVinculoOrfa(e.target.value)}
+                  className="h-8 text-xs"
+                />
               </div>
 
               {/* Seção de Cliente: Manter atual, Vincular existente ou Criar a partir da nota */}

@@ -386,6 +386,7 @@ export async function vincularNotaOrfaAParcela(
       telefone?: string
     }
   },
+  descricaoPersonalizada?: string,
 ): Promise<void> {
   const currentUserId = pb.authStore.record?.id || ''
   const parcelaDb = await pb.collection('parcelas').getOne(parcelaId)
@@ -437,7 +438,10 @@ export async function vincularNotaOrfaAParcela(
 
   const chaveUnica = `${nota.numero}_${nota.prestadorCnpjCpf || 'aerocad'}`
 
+  const descFinal = descricaoPersonalizada?.trim() || parcelaDb.descricao
+
   const payload: Record<string, unknown> = {
+    descricao: descFinal,
     nf_numero: nota.numero,
     nfse_chave: chaveUnica,
     data_faturamento: nota.dataEmissao || parcelaDb.data_faturamento,
@@ -445,6 +449,7 @@ export async function vincularNotaOrfaAParcela(
     cliente: clienteFinalId || parcelaDb.cliente,
     nfse_dados: {
       ...nota,
+      descricaoVinculo: descricaoPersonalizada?.trim() || undefined,
       clienteVinculadoId: clienteFinalId,
       vinculadoManualmenteEm: new Date().toISOString(),
       vinculadoPor: currentUserId,

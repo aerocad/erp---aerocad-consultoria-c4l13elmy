@@ -8,6 +8,7 @@ import type {
   AlertaItem,
   AtividadeRecord,
   ExigenciaRecord,
+  OportunidadeRecord,
   OrdemServicoRecord,
   ParcelaRecord,
   ProcessoRecord,
@@ -57,6 +58,9 @@ export function AlertasProvider({ children }: { children: ReactNode }) {
   })
   const projetos = useCrmData<ProjetoRecord>('projetos', {
     filter: 'arquivado != true',
+    realtime: !isTerceiro,
+  })
+  const oportunidades = useCrmData<OportunidadeRecord>('oportunidades', {
     realtime: !isTerceiro,
   })
   const atividades = useCrmData<AtividadeRecord>('atividades', {
@@ -112,6 +116,7 @@ export function AlertasProvider({ children }: { children: ReactNode }) {
     void ordensServico.reload()
     void processos.reload()
     void projetos.reload()
+    void oportunidades.reload()
     void atividades.reload()
     void dispensados.reload()
   }

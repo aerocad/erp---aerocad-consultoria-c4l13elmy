@@ -39,6 +39,7 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { useAuth } from '@/contexts/AuthContext'
+import { useFinanceiroVisibilidade } from '@/contexts/FinanceiroVisibilidadeContext'
 import { processStatusLabels } from '@/lib/crm'
 import { formatDate, toInputDate } from '@/lib/format'
 import { createOne, getOne, listAll, updateOne } from '@/services/api'

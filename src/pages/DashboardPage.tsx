@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import {
   AlertTriangle,
   ArrowRight,
@@ -65,11 +65,16 @@ export default function DashboardPage() {
   const projects = useCrmData<ProjetoRecord>('projetos', {
     filter: 'arquivado != true',
     sort: '-created',
+    realtime: true,
   })
-  const proposals = useCrmData<PropostaRecord>('propostas', { sort: '-created' })
+  const proposals = useCrmData<PropostaRecord>('propostas', {
+    sort: '-created',
+    realtime: true,
+  })
   const activities = useCrmData<AtividadeRecord>('atividades', {
     expand: 'usuario',
     sort: '-created',
+    realtime: true,
   })
   const ordensServico = useCrmData<OrdemServicoRecord>('ordens_servico', {
     expand: 'projeto,prestador_usuario',
@@ -85,6 +90,48 @@ export default function DashboardPage() {
     ordensServico.loading ||
     activities.loading
   const error = opportunities.error || requirements.error || projects.error
+
+  // Revalidação por foco de janela, visibilidade e intervalo de segurança (30s)
+  useEffect(() => {
+    const revalidarTudo = () => {
+      void opportunities.reload()
+      void requirements.reload()
+      void installments.reload()
+      void projects.reload()
+      void proposals.reload()
+      void ordensServico.reload()
+      void activities.reload()
+      reloadAlertas()
+    }
+
+    const handleFocus = () => revalidarTudo()
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        revalidarTudo()
+      }
+    }
+
+    window.addEventListener('focus', handleFocus)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    // Intervalo de segurança suave a cada 30 segundos
+    const timer = setInterval(revalidarTudo, 30000)
+
+    return () => {
+      window.removeEventListener('focus', handleFocus)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      clearInterval(timer)
+    }
+  }, [
+    opportunities,
+    requirements,
+    installments,
+    projects,
+    proposals,
+    ordensServico,
+    activities,
+    reloadAlertas,
+  ])
 
   const today = new Date()
   today.setHours(0, 0, 0, 0)
@@ -167,9 +214,6 @@ export default function DashboardPage() {
     [requirements.data, installments.data, in30],
   )
 
-  if (loading) return <PageLoading />
-  if (error) return <ErrorState onRetry={() => void opportunities.reload()} />
-
   const kpis = useMemo(
     () => [
       {
@@ -211,6 +255,9 @@ export default function DashboardPage() {
       ocultarValores,
     ],
   )
+
+  if (loading) return <PageLoading />
+  if (error) return <ErrorState onRetry={() => void opportunities.reload()} />
 
   return (
     <div className="space-y-6">

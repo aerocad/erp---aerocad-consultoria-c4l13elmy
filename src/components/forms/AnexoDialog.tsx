@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
-import { AlertCircle, FileUp, Loader2, UploadCloud, X } from 'lucide-react'
+import { AlertCircle, CheckCircle2, FileUp, Loader2, UploadCloud, X } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
@@ -63,7 +63,14 @@ export function AnexoDialog({
   const { user } = useAuth()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const [file, setFile] = useState<File | null>(null)
+  const [files, setFiles] = useState<File[]>([])
+  const [uploadStatus, setUploadStatus] = useState<
+    Array<{
+      nome: string
+      status: 'pending' | 'uploading' | 'success' | 'error'
+      errorMsg?: string
+    }>
+  >([])
   const [nome, setNome] = useState('')
   const [descricao, setDescricao] = useState('')
   const [categoria, setCategoria] = useState<AnexoCategoria>('outro')
@@ -86,7 +93,8 @@ export function AnexoDialog({
       setProjetoId(presetProjeto || '')
       setProcessoId(presetProcesso || '')
       setOportunidadeId(presetOportunidade || '')
-      setFile(null)
+      setFiles([])
+      setUploadStatus([])
       setNome('')
       setDescricao('')
       setValidationError(null)
@@ -124,72 +132,82 @@ export function AnexoDialog({
     }
   }, [processoId, projetoId, processos])
 
-  function handleFileSelect(e: ChangeEvent<HTMLInputElement>) {
+  function processSelectedFiles(fileList: FileList | File[]) {
     setValidationError(null)
-    const selected = e.target.files?.[0]
-    if (!selected) return
+    const arr = Array.from(fileList)
+    if (!arr.length) return
 
-    if (selected.size > MAX_FILE_SIZE_BYTES) {
-      setValidationError(
-        `O arquivo excede o limite máximo permitido de ${formatBytes(MAX_FILE_SIZE_BYTES)} (o arquivo tem ${formatBytes(selected.size)}).`,
-      )
-      e.target.value = ''
-      return
+    const validFiles: File[] = []
+    const rejectedErrors: string[] = []
+
+    for (const f of arr) {
+      if (f.size > MAX_FILE_SIZE_BYTES) {
+        rejectedErrors.push(
+          `"${f.name}" excede o limite de ${formatBytes(MAX_FILE_SIZE_BYTES)} (${formatBytes(f.size)}).`,
+        )
+      } else {
+        validFiles.push(f)
+      }
     }
 
-    const ext = getFileExtension(selected.name)
-    if (!ALLOWED_EXTENSIONS.includes(ext)) {
-      setValidationError(
-        `Extensão .${ext || 'desconhecida'} não recomendada. Formatos suportados: PDF, TXT, DOCX, XLSX, DWG, DXF, KML, KMZ, imagens e ZIP.`,
-      )
-      // Permite ainda assim caso queira forçar, mas avisa
+    if (rejectedErrors.length > 0) {
+      setValidationError(rejectedErrors.join(' | '))
     }
 
-    setFile(selected)
-    if (!nome) {
-      // Remover a extensão do nome inicial
-      const cleanName = selected.name.replace(/\.[^/.]+$/, '')
-      setNome(cleanName)
+    if (!validFiles.length) return
+
+    // Se houver apenas 1 arquivo adicionado e ainda sem nome, preencher nome
+    if (validFiles.length === 1 && (!nome || files.length === 0)) {
+      setNome(validFiles[0].name.replace(/\.[^/.]+$/, ''))
+      const ext = getFileExtension(validFiles[0].name)
+      if (ext === 'dwg' || ext === 'dxf') {
+        setCategoria('projeto_tecnico')
+      } else if (ext === 'xlsx' || ext === 'xls' || ext === 'csv') {
+        setCategoria('planilha')
+      }
     }
 
-    // Auto-detectar categoria provável pela extensão
-    if (ext === 'dwg' || ext === 'dxf') {
-      setCategoria('projeto_tecnico')
-    } else if (ext === 'xlsx' || ext === 'xls' || ext === 'csv') {
-      setCategoria('planilha')
+    // Mesclar com os já selecionados sem duplicatas por nome/tamanho
+    setFiles((prev) => {
+      const existingKeys = new Set(prev.map((f) => `${f.name}-${f.size}`))
+      const novos = validFiles.filter((f) => !existingKeys.has(`${f.name}-${f.size}`))
+      return [...prev, ...novos]
+    })
+  }
+
+  function handleFileSelect(e: ChangeEvent<HTMLInputElement>) {
+    if (e.target.files) {
+      processSelectedFiles(e.target.files)
     }
   }
 
   function handleDrop(e: React.DragEvent<HTMLDivElement>) {
     e.preventDefault()
-    setValidationError(null)
-    const dropped = e.dataTransfer.files?.[0]
-    if (!dropped) return
+    if (e.dataTransfer.files) {
+      processSelectedFiles(e.dataTransfer.files)
+    }
+  }
 
-    if (dropped.size > MAX_FILE_SIZE_BYTES) {
-      setValidationError(`O arquivo excede o limite máximo de ${formatBytes(MAX_FILE_SIZE_BYTES)}.`)
-      return
-    }
-
-    setFile(dropped)
-    if (!nome) {
-      setNome(dropped.name.replace(/\.[^/.]+$/, ''))
-    }
-    const ext = getFileExtension(dropped.name)
-    if (ext === 'dwg' || ext === 'dxf') {
-      setCategoria('projeto_tecnico')
-    } else if (ext === 'xlsx' || ext === 'xls' || ext === 'csv') {
-      setCategoria('planilha')
-    }
+  function removeFile(index: number) {
+    setFiles((prev) => {
+      const updated = prev.filter((_, i) => i !== index)
+      if (updated.length === 1 && !nome) {
+        setNome(updated[0].name.replace(/\.[^/.]+$/, ''))
+      } else if (updated.length === 0) {
+        setNome('')
+      }
+      return updated
+    })
+    if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
-    if (!file) {
-      setValidationError('Selecione um arquivo para envio.')
+    if (!files.length) {
+      setValidationError('Selecione pelo menos um arquivo para envio.')
       return
     }
-    if (!nome.trim()) {
+    if (files.length === 1 && !nome.trim()) {
       setValidationError('Informe uma identificação/nome para o anexo.')
       return
     }
@@ -201,32 +219,84 @@ export function AnexoDialog({
     setSubmitting(true)
     setValidationError(null)
 
-    try {
-      const anexo = await uploadAnexo(file, {
-        nome: nome.trim(),
-        descricao: descricao.trim(),
-        categoria,
-        usuarioId: user.id,
-        clienteId: clienteId || undefined,
-        projetoId: projetoId || undefined,
-        processoId: processoId || undefined,
-        oportunidadeId: oportunidadeId || undefined,
-      })
+    // Inicializa status por arquivo
+    const statusTracker = files.map((f) => ({
+      nome: f.name,
+      status: 'pending' as const,
+    }))
+    setUploadStatus(statusTracker)
 
-      toast.success('Arquivo anexado com sucesso!')
+    let totalSucesso = 0
+    let ultimoAnexoCriado: AnexoRecord | null = null
+    const errosOcorridos: string[] = []
+
+    for (let i = 0; i < files.length; i++) {
+      const currentFile = files[i]
+
+      // Atualiza status para uploading
+      setUploadStatus((prev) =>
+        prev.map((item, idx) => (idx === i ? { ...item, status: 'uploading' } : item)),
+      )
+
+      try {
+        const nomeFinal =
+          files.length === 1 && nome.trim()
+            ? nome.trim()
+            : currentFile.name.replace(/\.[^/.]+$/, '')
+
+        const ext = getFileExtension(currentFile.name)
+        let catFinal = categoria
+        if (files.length > 1) {
+          if (ext === 'dwg' || ext === 'dxf') catFinal = 'projeto_tecnico'
+          else if (ext === 'xlsx' || ext === 'xls' || ext === 'csv') catFinal = 'planilha'
+        }
+
+        const anexo = await uploadAnexo(currentFile, {
+          nome: nomeFinal,
+          descricao: descricao.trim(),
+          categoria: catFinal,
+          usuarioId: user.id,
+          clienteId: clienteId || undefined,
+          projetoId: projetoId || undefined,
+          processoId: processoId || undefined,
+          oportunidadeId: oportunidadeId || undefined,
+        })
+
+        ultimoAnexoCriado = anexo
+        totalSucesso++
+
+        setUploadStatus((prev) =>
+          prev.map((item, idx) => (idx === i ? { ...item, status: 'success' } : item)),
+        )
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'Falha no upload'
+        errosOcorridos.push(`"${currentFile.name}": ${msg}`)
+        setUploadStatus((prev) =>
+          prev.map((item, idx) => (idx === i ? { ...item, status: 'error', errorMsg: msg } : item)),
+        )
+      }
+    }
+
+    setSubmitting(false)
+
+    if (totalSucesso > 0) {
+      toast.success(
+        totalSucesso === 1
+          ? 'Arquivo anexado com sucesso!'
+          : `${totalSucesso} arquivos anexados com sucesso!`,
+      )
+      if (ultimoAnexoCriado) onSuccess?.(ultimoAnexoCriado)
+    }
+
+    if (errosOcorridos.length > 0) {
+      toast.error(
+        `${errosOcorridos.length} arquivo(s) falharam: ${errosOcorridos.slice(0, 2).join(', ')}`,
+      )
+      setValidationError(`Erros no upload:\n${errosOcorridos.join('\n')}`)
+    } else {
       onOpenChange(false)
-      onSuccess?.(anexo)
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Falha ao salvar anexo.'
-      toast.error(`Erro no upload: ${msg}`)
-      setValidationError(`Não foi possível enviar o arquivo: ${msg}`)
-    } finally {
-      setSubmitting(false)
     }
   }
-
-  const fileExt = file ? getFileExtension(file.name) : ''
-  const fileMeta = getFileTypeMeta(fileExt)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -243,63 +313,136 @@ export function AnexoDialog({
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4 pt-1">
-          {/* Dropzone de upload */}
+          {/* Dropzone de upload de arquivos (suporte a múltiplos arquivos) */}
           <div>
-            <Label className="text-xs font-semibold text-[#555]">
-              Arquivo * <span className="font-normal text-muted-foreground">(limite de 25 MB)</span>
-            </Label>
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-semibold text-[#555]">
+                Arquivos *{' '}
+                <span className="font-normal text-muted-foreground">
+                  (selecione vários ou arraste em lote, até 25 MB cada)
+                </span>
+              </Label>
+              {files.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="text-[11px] font-semibold text-[#FF6A13] hover:underline"
+                >
+                  + Adicionar mais arquivos
+                </button>
+              )}
+            </div>
+
             <input
               ref={fileInputRef}
               type="file"
+              multiple
               className="hidden"
               onChange={handleFileSelect}
               accept=".pdf,.txt,.docx,.doc,.xlsx,.xls,.csv,.dwg,.dxf,.kml,.kmz,.png,.jpg,.jpeg,.webp,.zip"
             />
 
-            {!file ? (
-              <div
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={handleDrop}
-                onClick={() => fileInputRef.current?.click()}
-                className="mt-1.5 flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-[#DEDEDE] bg-[#FAFAFA] p-6 text-center transition hover:border-[#FF6A13] hover:bg-[#FFF8F3] cursor-pointer"
-              >
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-orange-50 text-[#FF6A13]">
-                  <UploadCloud className="h-6 w-6" />
-                </div>
-                <p className="mt-3 text-sm font-semibold text-[#333]">
-                  Clique para selecionar ou arraste o arquivo aqui
-                </p>
-                <p className="mt-1 text-xs text-[#888]">
-                  Formatos aceitos: PDF, TXT, DOCX, XLSX, DWG, DXF, KML, KMZ, Imagens, ZIP
-                </p>
+            <div
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={handleDrop}
+              onClick={() => fileInputRef.current?.click()}
+              className="mt-1.5 flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-[#DEDEDE] bg-[#FAFAFA] p-5 text-center transition hover:border-[#FF6A13] hover:bg-[#FFF8F3] cursor-pointer"
+            >
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-orange-50 text-[#FF6A13]">
+                <UploadCloud className="h-5 w-5" />
               </div>
-            ) : (
-              <div className="mt-1.5 flex items-center justify-between rounded-xl border border-[#E5E5E5] bg-white p-3 shadow-sm">
-                <div className="flex items-center gap-3 min-w-0">
-                  <span
-                    className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border font-mono text-xs font-bold ${fileMeta.bg} ${fileMeta.color} ${fileMeta.border}`}
+              <p className="mt-2 text-sm font-semibold text-[#333]">
+                Clique para selecionar ou arraste arquivos aqui (seleção múltipla permitida)
+              </p>
+              <p className="mt-1 text-xs text-[#888]">
+                Formatos aceitos: PDF, TXT, DOCX, XLSX, DWG, DXF, KML, KMZ, Imagens, ZIP
+              </p>
+            </div>
+
+            {/* Lista de arquivos selecionados */}
+            {files.length > 0 && (
+              <div className="mt-3 space-y-2">
+                <div className="flex items-center justify-between text-xs font-semibold text-[#444]">
+                  <span>Arquivos selecionados ({files.length}):</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFiles([])
+                      setNome('')
+                    }}
+                    className="text-[11px] text-neutral-500 hover:text-neutral-700"
                   >
-                    {fileMeta.label}
-                  </span>
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-[#333] truncate">{file.name}</p>
-                    <p className="text-xs text-[#888]">
-                      {formatBytes(file.size)} · Tipo {fileMeta.label}
-                    </p>
-                  </div>
+                    Limpar todos
+                  </button>
                 </div>
-                <Button
-                  type="button"
-                  size="icon"
-                  variant="ghost"
-                  onClick={() => {
-                    setFile(null)
-                    if (fileInputRef.current) fileInputRef.current.value = ''
-                  }}
-                  className="text-neutral-500 hover:text-red-600"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
+
+                <div className="max-h-48 overflow-y-auto divide-y rounded-xl border border-[#E5E5E5] bg-white">
+                  {files.map((f, idx) => {
+                    const fExt = getFileExtension(f.name)
+                    const fMeta = getFileTypeMeta(fExt)
+                    const statusItem = uploadStatus[idx]
+
+                    return (
+                      <div
+                        key={`${f.name}-${idx}`}
+                        className="flex items-center justify-between p-2.5 text-xs"
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                          <span
+                            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded border font-mono text-[10px] font-bold ${fMeta.bg} ${fMeta.color} ${fMeta.border}`}
+                          >
+                            {fMeta.label}
+                          </span>
+                          <div className="min-w-0">
+                            <p className="font-semibold text-[#333] truncate">{f.name}</p>
+                            <p className="text-[11px] text-[#888]">
+                              {formatBytes(f.size)} · {fMeta.label}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          {statusItem?.status === 'uploading' && (
+                            <span className="flex items-center gap-1 text-[11px] text-[#FF6A13]">
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                              Enviando...
+                            </span>
+                          )}
+                          {statusItem?.status === 'success' && (
+                            <span className="flex items-center gap-1 text-[11px] text-emerald-600 font-semibold">
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                              Salvo
+                            </span>
+                          )}
+                          {statusItem?.status === 'error' && (
+                            <span
+                              className="flex items-center gap-1 text-[11px] text-red-600 font-semibold"
+                              title={statusItem.errorMsg}
+                            >
+                              <AlertCircle className="h-3.5 w-3.5" />
+                              Erro
+                            </span>
+                          )}
+
+                          {!submitting && (
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              onClick={(ev) => {
+                                ev.stopPropagation()
+                                removeFile(idx)
+                              }}
+                              className="h-7 w-7 text-neutral-400 hover:text-red-600"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
             )}
           </div>
@@ -311,15 +454,23 @@ export function AnexoDialog({
             </div>
           )}
 
-          {/* Nome e Categoria */}
+          {/* Nome e Categoria (quando múltiplos arquivos, o nome original de cada um é preservado por padrão) */}
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="sm:col-span-2 space-y-1.5">
-              <Label className="text-xs font-semibold text-[#555]">Nome / Identificação *</Label>
+              <Label className="text-xs font-semibold text-[#555]">
+                {files.length > 1
+                  ? 'Prefixo / Identificação geral (opcional)'
+                  : 'Nome / Identificação *'}
+              </Label>
               <Input
                 value={nome}
                 onChange={(e) => setNome(e.target.value)}
-                placeholder="Ex: Orçamento Inicial - Zurich Airport"
-                required
+                placeholder={
+                  files.length > 1
+                    ? 'Deixe vazio para manter os nomes originais dos arquivos'
+                    : 'Ex: Planta Baixa Cabeceira 32'
+                }
+                required={files.length === 1}
               />
             </div>
 
@@ -464,18 +615,18 @@ export function AnexoDialog({
             </Button>
             <Button
               type="submit"
-              disabled={!file || !nome.trim() || submitting}
+              disabled={!files.length || (files.length === 1 && !nome.trim()) || submitting}
               className="bg-[#FF6A13] hover:bg-[#E85B06] text-white"
             >
               {submitting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Enviando...
+                  Enviando {files.length} arquivo(s)...
                 </>
               ) : (
                 <>
                   <FileUp className="mr-2 h-4 w-4" />
-                  Salvar Anexo
+                  {files.length > 1 ? `Salvar ${files.length} Anexos` : 'Salvar Anexo'}
                 </>
               )}
             </Button>
