@@ -39,7 +39,7 @@ function readStoredPreference(userId?: string | null): boolean {
   } catch {
     // Caso localStorage esteja bloqueado/indisponível
   }
-  return false // Default: valores visíveis
+  return true // Padrão: valores ocultos
 }
 
 function persistPreference(userId: string | null | undefined, ocultar: boolean) {
@@ -61,11 +61,11 @@ export function FinanceiroVisibilidadeProvider({ children }: { children: ReactNo
     return initial
   })
 
-  // Sincroniza quando o usuário logado muda
+  // Sincroniza imediatamente quando o usuário logado muda ou a sessão é carregada
   useEffect(() => {
     const pref = readStoredPreference(userId)
-    setOcultarValoresState(pref)
     setGlobalOcultarValores(pref)
+    setOcultarValoresState(pref)
   }, [userId])
 
   // Escuta mudanças externas (ex: evento global ou outra aba)

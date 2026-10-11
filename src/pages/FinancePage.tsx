@@ -45,6 +45,7 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { useAuth } from '@/contexts/AuthContext'
+import { useFinanceiroVisibilidade } from '@/contexts/FinanceiroVisibilidadeContext'
 import { useCrmData } from '@/hooks/use-crm-data'
 import { formatCurrency, formatDate } from '@/lib/format'
 import { createOne, updateOne } from '@/services/api'
@@ -55,6 +56,7 @@ import type { ClienteRecord, ParcelaRecord, ProjetoRecord } from '@/types/crm'
 export default FinancePage
 
 export function FinancePage() {
+  const { ocultarValores } = useFinanceiroVisibilidade()
   const { user } = useAuth()
   const [params] = useSearchParams()
   const installments = useCrmData<ParcelaRecord>('parcelas', {
@@ -200,7 +202,7 @@ export function FinancePage() {
       },
       { total: 0, paid: 0, open: 0, overdue: 0 },
     )
-  }, [installments.data])
+  }, [installments.data, ocultarValores])
 
   async function registerPayment() {
     if (!payment) return

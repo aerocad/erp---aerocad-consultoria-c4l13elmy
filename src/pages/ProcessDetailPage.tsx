@@ -51,6 +51,7 @@ import type {
 } from '@/types/crm'
 
 export default function ProcessDetailPage() {
+  useFinanceiroVisibilidade()
   const { id = '' } = useParams()
   const navigate = useNavigate()
   const { user } = useAuth()

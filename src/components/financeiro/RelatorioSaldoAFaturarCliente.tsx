@@ -23,6 +23,7 @@ import { Link } from 'react-router-dom'
 import { CrmBadge } from '@/components/common/CrmBadge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { useFinanceiroVisibilidade } from '@/contexts/FinanceiroVisibilidadeContext'
 import { formatCurrency, formatDate } from '@/lib/format'
 import {
   calcularResumoFinanceiroTodosProjetos,
@@ -76,6 +77,7 @@ export function RelatorioSaldoAFaturarCliente({
   projetos,
   parcelas,
 }: SaldoAFaturarProps) {
+  const { ocultarValores } = useFinanceiroVisibilidade()
   const [searchTerm, setSearchTerm] = useState('')
   const [expandedClients, setExpandedClients] = useState<Record<string, boolean>>({})
   const [mostrarQuitados, setMostrarQuitados] = useState(false)
@@ -233,7 +235,7 @@ export function RelatorioSaldoAFaturarCliente({
       clientesQuitados: quitados,
       resumoGlobal,
     }
-  }, [clientes, projetos, parcelas])
+  }, [clientes, projetos, parcelas, ocultarValores])
 
   // Filtragem por busca
   const termLower = searchTerm.trim().toLowerCase()

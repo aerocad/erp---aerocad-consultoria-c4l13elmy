@@ -9,6 +9,7 @@ import {
 } from 'react'
 import { useNavigate } from 'react-router-dom'
 
+import { setGlobalOcultarValores } from '@/lib/format'
 import pb from '@/lib/pocketbase/client'
 import type { UserRecord } from '@/types/crm'
 
@@ -32,6 +33,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refreshUser = useCallback(async () => {
     if (!pb.authStore.isValid || !pb.authStore.record) {
       setUser(null)
+      setGlobalOcultarValores(true)
       return
     }
     try {
@@ -40,6 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {
       pb.authStore.clear()
       setUser(null)
+      setGlobalOcultarValores(true)
     }
   }, [])
 
@@ -52,6 +55,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const result = await pb
       .collection<UserRecord>('users')
       .authWithPassword(email, password, { requestKey: null })
+    try {
+      const saved = localStorage.getItem(`aerocad_ocultar_valores_${result.record.id}`)
+      if (saved !== null) {
+        setGlobalOcultarValores(saved === 'true')
+      } else {
+        setGlobalOcultarValores(true)
+      }
+    } catch {
+      setGlobalOcultarValores(true)
+    }
     setUser(result.record)
     return result.record
   }, [])
@@ -59,6 +72,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(() => {
     pb.authStore.clear()
     setUser(null)
+    setGlobalOcultarValores(true)
     navigate('/login', { replace: true })
   }, [navigate])
 

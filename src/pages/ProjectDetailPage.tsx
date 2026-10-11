@@ -42,6 +42,7 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { useAuth } from '@/contexts/AuthContext'
+import { useFinanceiroVisibilidade } from '@/contexts/FinanceiroVisibilidadeContext'
 import { osStatusColors, osStatusLabels, trailLabels, trailPhases } from '@/lib/crm'
 import { formatCurrency, formatDate } from '@/lib/format'
 import { createOne, getOne, listAll, updateOne } from '@/services/api'
@@ -60,6 +61,7 @@ import type {
 } from '@/types/crm'
 
 export default function ProjectDetailPage() {
+  const { ocultarValores } = useFinanceiroVisibilidade()
   const { id = '' } = useParams()
   const navigate = useNavigate()
   const { user } = useAuth()

@@ -51,6 +51,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { RelatorioSaldoAFaturarCliente } from '@/components/financeiro/RelatorioSaldoAFaturarCliente'
 import { useAuth } from '@/contexts/AuthContext'
+import { useFinanceiroVisibilidade } from '@/contexts/FinanceiroVisibilidadeContext'
 import { useCrmData } from '@/hooks/use-crm-data'
 import { stageColors, stageLabels, trailLabels, trailPhases } from '@/lib/crm'
 import { formatCurrency, formatDate } from '@/lib/format'
@@ -98,6 +99,7 @@ const ORGAO_LABELS: Record<string, string> = {
 }
 
 export default function ReportsPage() {
+  const { ocultarValores } = useFinanceiroVisibilidade()
   const { user } = useAuth()
   const navigate = useNavigate()
   const currentYear = new Date().getFullYear().toString()
@@ -374,6 +376,7 @@ export default function ReportsPage() {
     parcelasData.data,
     selectedYear,
     selectedPeriod,
+    ocultarValores,
   ])
 
   // ==========================================
@@ -752,7 +755,7 @@ export default function ReportsPage() {
       totalFaturadoNfseProjetos,
       totalSaldoAFaturarProjetos,
     }
-  }, [parcelasData.data, projetosData.data, selectedYear, selectedPeriod])
+  }, [parcelasData.data, projetosData.data, selectedYear, selectedPeriod, ocultarValores])
 
   // ==========================================
   // 5. PÓS-VENDA & GESTÃO CONTÍNUA

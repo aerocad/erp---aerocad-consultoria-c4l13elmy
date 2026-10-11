@@ -5,8 +5,8 @@ export const currency = new Intl.NumberFormat('pt-BR', {
 
 export const VALOR_MASCARADO = 'R$ •••••'
 
-// Estado global de ocultação de valores financeiros
-let _globalOcultarValores = false
+// Estado global de ocultação de valores financeiros (inicia true por padrão no app)
+let _globalOcultarValores = true
 const _listeners = new Set<(ocultar: boolean) => void>()
 
 export function isValoresOcultos(): boolean {

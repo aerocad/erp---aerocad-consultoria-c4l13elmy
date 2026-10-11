@@ -35,6 +35,7 @@ import {
 } from '@/components/ui/sheet'
 import { Textarea } from '@/components/ui/textarea'
 import { useAuth } from '@/contexts/AuthContext'
+import { useFinanceiroVisibilidade } from '@/contexts/FinanceiroVisibilidadeContext'
 import { useCrmData } from '@/hooks/use-crm-data'
 import { stageColors, stageLabels, trailLabels } from '@/lib/crm'
 import { formatCurrency, formatDate, initials } from '@/lib/format'
@@ -44,6 +45,7 @@ import type { OportunidadeRecord, ProjetoRecord } from '@/types/crm'
 const stages = Object.keys(stageLabels) as Array<keyof typeof stageLabels>
 
 export default function FunnelPage() {
+  const { ocultarValores } = useFinanceiroVisibilidade()
   const { user } = useAuth()
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
@@ -78,7 +80,7 @@ export default function FunnelPage() {
               .includes(query.toLowerCase())) &&
           (trail === 'todos' || item.trilha_prevista === trail),
       ),
-    [data, query, trail],
+    [data, query, trail, ocultarValores],
   )
 
   async function move(record: OportunidadeRecord, stage: keyof typeof stageLabels) {

@@ -20,6 +20,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Progress } from '@/components/ui/progress'
 import { useAlertas } from '@/contexts/AlertasContext'
 import { useAuth } from '@/contexts/AuthContext'
+import { useFinanceiroVisibilidade } from '@/contexts/FinanceiroVisibilidadeContext'
 import { useCrmData } from '@/hooks/use-crm-data'
 import {
   firstName,
@@ -42,6 +43,7 @@ import type {
 } from '@/types/crm'
 
 export default function DashboardPage() {
+  const { ocultarValores } = useFinanceiroVisibilidade()
   const { user } = useAuth()
   const { alertas, dispensados, reload: reloadAlertas, loading: loadingAlertas } = useAlertas()
   const navigate = useNavigate()
@@ -168,36 +170,47 @@ export default function DashboardPage() {
   if (loading) return <PageLoading />
   if (error) return <ErrorState onRetry={() => void opportunities.reload()} />
 
-  const kpis = [
-    {
-      label: 'Oportunidades abertas',
-      value: String(openOpps.length),
-      sub: formatCurrency(openValue),
-      icon: FolderKanban,
-      tone: 'orange',
-    },
-    {
-      label: 'Propostas enviadas',
-      value: String(sentProposals),
-      sub: 'aguardando retorno',
-      icon: FileCheck2,
-      tone: 'gray',
-    },
-    {
-      label: 'Exigências em 7 dias',
-      value: String(dueRequirements),
-      sub: dueRequirements ? 'requerem atenção' : 'sem urgências',
-      icon: AlertTriangle,
-      tone: dueRequirements ? 'red' : 'green',
-    },
-    {
-      label: 'Receber no mês',
-      value: formatCurrency(monthReceivable),
-      sub: `${thisMonth.length} parcela(s)`,
-      icon: Banknote,
-      tone: 'green',
-    },
-  ]
+  const kpis = useMemo(
+    () => [
+      {
+        label: 'Oportunidades abertas',
+        value: String(openOpps.length),
+        sub: formatCurrency(openValue),
+        icon: FolderKanban,
+        tone: 'orange',
+      },
+      {
+        label: 'Propostas enviadas',
+        value: String(sentProposals),
+        sub: 'aguardando retorno',
+        icon: FileCheck2,
+        tone: 'gray',
+      },
+      {
+        label: 'Exigências em 7 dias',
+        value: String(dueRequirements),
+        sub: dueRequirements ? 'requerem atenção' : 'sem urgências',
+        icon: AlertTriangle,
+        tone: dueRequirements ? 'red' : 'green',
+      },
+      {
+        label: 'Receber no mês',
+        value: formatCurrency(monthReceivable),
+        sub: `${thisMonth.length} parcela(s)`,
+        icon: Banknote,
+        tone: 'green',
+      },
+    ],
+    [
+      openOpps.length,
+      openValue,
+      sentProposals,
+      dueRequirements,
+      monthReceivable,
+      thisMonth.length,
+      ocultarValores,
+    ],
+  )
 
   return (
     <div className="space-y-6">

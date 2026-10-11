@@ -138,7 +138,7 @@ export default function ProjectsPage() {
 
   const resumosFinanceiros = useMemo(() => {
     return calcularResumoFinanceiroTodosProjetos(projects.data, installments.data)
-  }, [projects.data, installments.data])
+  }, [projects.data, installments.data, ocultarValores])
 
   // Decomposição segura da numeração AAAA-NNN para ordenação cronológica precisa
   const parseProjectOrder = (proj: ProjetoRecord) => {

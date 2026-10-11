@@ -33,6 +33,7 @@ import { Progress } from '@/components/ui/progress'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Sparkles } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
+import { useFinanceiroVisibilidade } from '@/contexts/FinanceiroVisibilidadeContext'
 import { formatCurrency, formatDate, initials, relativeTime } from '@/lib/format'
 import { getOne, listAll } from '@/services/api'
 import type {
@@ -49,6 +50,7 @@ import type {
 } from '@/types/crm'
 
 export default function ClientDetailPage() {
+  const { ocultarValores } = useFinanceiroVisibilidade()
   const { id = '' } = useParams()
   const navigate = useNavigate()
   const { user } = useAuth()
@@ -139,7 +141,7 @@ export default function ClientDetailPage() {
         .filter((i) => i.status === 'paga')
         .reduce((s, i) => s + (i.valor_recebido || i.valor), 0),
     }),
-    [installments],
+    [installments, ocultarValores],
   )
   if (loading) return <PageLoading />
   if (failed || !client) return <ErrorState onRetry={() => void load()} />
