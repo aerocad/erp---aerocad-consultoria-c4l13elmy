@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-11T21:48:52.533Z",
+  "generatedAt": "2026-10-11T21:58:18.337Z",
   "collections": [
     {
       "name": "users",
@@ -1666,8 +1666,8 @@
       "name": "documentos",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != '' && (@request.auth.role = 'admin' || @request.auth.role = 'comercial' || @request.auth.role = 'tecnico' || @request.auth.role = 'financeiro')",
-        "view": "@request.auth.id != '' && (@request.auth.role = 'admin' || @request.auth.role = 'comercial' || @request.auth.role = 'tecnico' || @request.auth.role = 'financeiro')",
+        "list": "@request.auth.id != '' && (@request.auth.role = 'admin' || @request.auth.role = 'comercial' || @request.auth.role = 'financeiro' || (@request.auth.role = 'tecnico' && (projeto.responsavel_tecnico = @request.auth.id || processo.projeto.responsavel_tecnico = @request.auth.id)))",
+        "view": "@request.auth.id != '' && (@request.auth.role = 'admin' || @request.auth.role = 'comercial' || @request.auth.role = 'financeiro' || (@request.auth.role = 'tecnico' && (projeto.responsavel_tecnico = @request.auth.id || processo.projeto.responsavel_tecnico = @request.auth.id)))",
         "create": "@request.auth.id != ''",
         "update": "@request.auth.id != ''",
         "delete": "@request.auth.role = 'admin'"
@@ -1967,9 +1967,9 @@
       "name": "anexos",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != '' && (@request.auth.role = 'admin' || @request.auth.role = 'comercial' || @request.auth.role = 'tecnico' || @request.auth.role = 'financeiro')",
-        "view": "@request.auth.id != '' && (@request.auth.role = 'admin' || @request.auth.role = 'comercial' || @request.auth.role = 'tecnico' || @request.auth.role = 'financeiro')",
-        "create": "@request.auth.role = 'admin' || @request.auth.role = 'comercial' || @request.auth.role = 'tecnico' || @request.auth.role = 'financeiro'",
+        "list": "@request.auth.id != '' && (@request.auth.role = 'admin' || @request.auth.role = 'comercial' || @request.auth.role = 'financeiro' || (@request.auth.role = 'tecnico' && (extensao = 'docx' || extensao = 'pdf' || extensao = 'dwg' || extensao = 'dxf') && (projeto.responsavel_tecnico = @request.auth.id || processo.projeto.responsavel_tecnico = @request.auth.id || usuario = @request.auth.id)) || (@request.auth.role = 'terceiro' && (extensao = 'docx' || extensao = 'pdf' || extensao = 'dwg' || extensao = 'dxf') && (@collection.ordens_servico.projeto ?= projeto && @collection.ordens_servico.prestador_usuario ?= @request.auth.id)))",
+        "view": "@request.auth.id != '' && (@request.auth.role = 'admin' || @request.auth.role = 'comercial' || @request.auth.role = 'financeiro' || (@request.auth.role = 'tecnico' && (extensao = 'docx' || extensao = 'pdf' || extensao = 'dwg' || extensao = 'dxf') && (projeto.responsavel_tecnico = @request.auth.id || processo.projeto.responsavel_tecnico = @request.auth.id || usuario = @request.auth.id)) || (@request.auth.role = 'terceiro' && (extensao = 'docx' || extensao = 'pdf' || extensao = 'dwg' || extensao = 'dxf') && (@collection.ordens_servico.projeto ?= projeto && @collection.ordens_servico.prestador_usuario ?= @request.auth.id)))",
+        "create": "@request.auth.id != '' && (@request.auth.role = 'admin' || @request.auth.role = 'comercial' || @request.auth.role = 'financeiro' || ((@request.auth.role = 'tecnico' || @request.auth.role = 'terceiro') && (@request.body.extensao = 'docx' || @request.body.extensao = 'pdf' || @request.body.extensao = 'dwg' || @request.body.extensao = 'dxf')))",
         "update": "@request.auth.role = 'admin' || usuario = @request.auth.id",
         "delete": "@request.auth.role = 'admin' || usuario = @request.auth.id"
       },

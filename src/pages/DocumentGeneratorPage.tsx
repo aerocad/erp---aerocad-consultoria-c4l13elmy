@@ -146,8 +146,17 @@ export default function DocumentGeneratorPage() {
       listAll<ProjetoRecord>('projetos', {
         expand: 'cliente,oportunidade,responsavel_tecnico',
         sort: '-numero',
+        filter:
+          user?.role === 'tecnico' && user?.id ? `responsavel_tecnico = '${user.id}'` : undefined,
       }),
-      listAll<ProcessoRecord>('processos', { expand: 'projeto', sort: '-created' }),
+      listAll<ProcessoRecord>('processos', {
+        expand: 'projeto',
+        sort: '-created',
+        filter:
+          user?.role === 'tecnico' && user?.id
+            ? `projeto.responsavel_tecnico = '${user.id}'`
+            : undefined,
+      }),
       listAll<OportunidadeRecord>('oportunidades', {
         expand: 'cliente,tipo_servico',
         sort: '-created',

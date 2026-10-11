@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import {
   BookOpen,
   Bot,
@@ -40,6 +40,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { useAuth } from '@/contexts/AuthContext'
 import { useCrmData } from '@/hooks/use-crm-data'
 import { formatDate } from '@/lib/format'
 import {
@@ -56,14 +57,30 @@ import {
   REGRAS_PDIR_AEROCAD,
   TEXTO_APRESENTACAO_AEROCAD,
 } from '@/lib/aerocadKnowledge'
+import { isTecnicoAllowedExtension } from '@/lib/crm'
 import { ANEXO_CATEGORIAS } from '@/services/anexos'
-import type { AnexoRecord, DocumentoRecord } from '@/types/crm'
+import type { AnexoRecord, DocumentoRecord, OrdemServicoRecord, ProjetoRecord } from '@/types/crm'
 
 export default function DocumentsPage() {
+  const { user } = useAuth()
   const [activeTab, setActiveTab] = useState<'gerados' | 'assistente' | 'anexos' | 'catalogo'>(
     'gerados',
   )
   const [anexoDialogOpen, setAnexoDialogOpen] = useState(false)
+
+  const isTecnicoProfile = user?.role === 'tecnico'
+  const isTerceiroProfile = user?.role === 'terceiro'
+  const isRestrictedRole = isTecnicoProfile || isTerceiroProfile
+
+  // Carrega projetos para mapear competência técnica caso o usuário seja técnico
+  const projetosData = useCrmData<ProjetoRecord>('projetos', {
+    sort: '-numero',
+  })
+
+  // Carrega ordens de serviço caso o usuário seja terceiro
+  const ordensData = useCrmData<OrdemServicoRecord>('ordens_servico', {
+    sort: '-created',
+  })
 
   const records = useCrmData<DocumentoRecord>('documentos', {
     expand: 'projeto,processo,cliente,modelo',
@@ -85,7 +102,35 @@ export default function DocumentsPage() {
   const [anexoCatFilter, setAnexoCatFilter] = useState('todas')
   const [anexoVinculoFilter, setAnexoVinculoFilter] = useState('todos')
 
+  // Determinar projetos de competência do usuário:
+  // - Para técnico: projetos onde responsavel_tecnico === user.id
+  // - Para terceiro: projetos que possuem OS com prestador_usuario === user.id
+  const competentProjectIds = useMemo(() => {
+    if (!user?.id) return new Set<string>()
+    if (isTecnicoProfile) {
+      return new Set(
+        projetosData.data.filter((p) => p.responsavel_tecnico === user.id).map((p) => p.id),
+      )
+    }
+    if (isTerceiroProfile) {
+      return new Set(
+        ordensData.data
+          .filter((os) => os.prestador_usuario === user.id && os.projeto)
+          .map((os) => os.projeto),
+      )
+    }
+    return new Set<string>()
+  }, [user?.id, isTecnicoProfile, isTerceiroProfile, projetosData.data, ordensData.data])
+
   const rows = records.data.filter((item) => {
+    // 1. Filtro de competência para técnico / terceiro nos documentos gerados
+    if (isRestrictedRole) {
+      const projId = item.projeto || item.expand?.processo?.projeto
+      if (!projId || !competentProjectIds.has(projId)) {
+        return false
+      }
+    }
+
     const matchesQuery =
       !query ||
       `${item.nome} ${item.tipo} ${item.expand?.projeto?.numero || ''} ${item.expand?.cliente?.razao_social || ''}`
@@ -99,6 +144,25 @@ export default function DocumentsPage() {
   })
 
   const filteredAnexos = anexosData.data.filter((item) => {
+    // 1. Filtro de extensão para perfil técnico / terceiro: apenas .docx, .pdf, .dwg, .dxf
+    if (isRestrictedRole) {
+      const ext = item.extensao || (item.arquivo ? item.arquivo.split('.').pop() : '')
+      if (!isTecnicoAllowedExtension(ext)) {
+        return false
+      }
+    }
+
+    // 2. Filtro de competência para técnico / terceiro nos anexos:
+    // Deve estar vinculado a projeto/processo de sua competência (ou ser o criador/upload)
+    if (isRestrictedRole) {
+      const projId = item.projeto || item.expand?.processo?.projeto
+      const isOwner = item.usuario === user?.id
+      const hasCompetence = projId ? competentProjectIds.has(projId) : false
+      if (!hasCompetence && !isOwner) {
+        return false
+      }
+    }
+
     const q = anexoQuery.toLowerCase()
     const matchesQuery =
       !q ||
@@ -157,7 +221,7 @@ export default function DocumentsPage() {
         <TabsList className="bg-white border p-1 rounded-xl mb-6">
           <TabsTrigger value="gerados" className="flex items-center gap-2">
             <FileText className="h-4 w-4" />
-            Documentos Gerados ({records.data.length})
+            Documentos Gerados ({rows.length})
           </TabsTrigger>
           <TabsTrigger value="assistente" className="flex items-center gap-2 text-[#D65100]">
             <Sparkles className="h-4 w-4 text-[#FF6A13]" />
@@ -165,7 +229,7 @@ export default function DocumentsPage() {
           </TabsTrigger>
           <TabsTrigger value="anexos" className="flex items-center gap-2">
             <Paperclip className="h-4 w-4 text-[#FF6A13]" />
-            Anexos e Arquivos ({anexosData.data.length})
+            Anexos e Arquivos ({filteredAnexos.length})
           </TabsTrigger>
           <TabsTrigger value="catalogo" className="flex items-center gap-2 text-[#FF6A13]">
             <BookOpen className="h-4 w-4" />
@@ -217,43 +281,53 @@ export default function DocumentsPage() {
 
         {/* ABA 1: DOCUMENTOS GERADOS */}
         <TabsContent value="gerados">
+          {/* Aviso informativo de perfil técnico restrito */}
+          {isRestrictedRole && (
+            <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50/70 p-3.5 text-xs text-amber-900 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="h-4 w-4 text-amber-600 shrink-0" />
+                <span>
+                  Visualização restrita ao perfil técnico: exibindo apenas documentos gerados nos
+                  processos e projetos sob sua competência técnica.
+                </span>
+              </div>
+            </div>
+          )}
+
           {/* Barra de estatísticas */}
           <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
             <div className="crm-card p-3 text-center">
               <p className="text-[10px] font-bold text-[#888]">TOTAL GERADOS</p>
-              <p className="text-xl font-bold text-[#333]">{records.data.length}</p>
+              <p className="text-xl font-bold text-[#333]">{rows.length}</p>
             </div>
             <div className="crm-card p-3 text-center border-l-4 border-l-[#FF6A13]">
               <p className="text-[10px] font-bold text-[#888]">PROPOSTAS (PC/PT)</p>
               <p className="text-xl font-bold text-[#FF6A13]">
-                {
-                  records.data.filter((d) => d.tipo === 'proposta' || d.tipo === 'proposta_tecnica')
-                    .length
-                }
+                {rows.filter((d) => d.tipo === 'proposta' || d.tipo === 'proposta_tecnica').length}
               </p>
             </div>
             <div className="crm-card p-3 text-center">
               <p className="text-[10px] font-bold text-[#888]">CONTRATOS</p>
               <p className="text-xl font-bold text-[#333]">
-                {records.data.filter((d) => d.tipo === 'contrato').length}
+                {rows.filter((d) => d.tipo === 'contrato').length}
               </p>
             </div>
             <div className="crm-card p-3 text-center">
               <p className="text-[10px] font-bold text-[#888]">ORDENS DE SERVIÇO</p>
               <p className="text-xl font-bold text-[#333]">
-                {records.data.filter((d) => d.tipo === 'ordem_servico').length}
+                {rows.filter((d) => d.tipo === 'ordem_servico').length}
               </p>
             </div>
             <div className="crm-card p-3 text-center">
               <p className="text-[10px] font-bold text-[#888]">EM ASSINATURA</p>
               <p className="text-xl font-bold text-amber-600">
-                {records.data.filter((d) => d.status === 'enviado_assinatura').length}
+                {rows.filter((d) => d.status === 'enviado_assinatura').length}
               </p>
             </div>
             <div className="crm-card p-3 text-center">
               <p className="text-[10px] font-bold text-[#888]">ASSINADOS</p>
               <p className="text-xl font-bold text-emerald-600">
-                {records.data.filter((d) => d.status === 'assinado').length}
+                {rows.filter((d) => d.status === 'assinado').length}
               </p>
             </div>
           </div>
@@ -400,17 +474,30 @@ export default function DocumentsPage() {
 
         {/* ABA 2: ANEXOS E ARQUIVOS (PDF, DWG, DXF, XLSX, DOCX) */}
         <TabsContent value="anexos">
+          {/* Aviso informativo de perfil técnico restrito */}
+          {isRestrictedRole && (
+            <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50/70 p-3.5 text-xs text-amber-900 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="h-4 w-4 text-amber-600 shrink-0" />
+                <span>
+                  Visualização restrita ao perfil técnico: exibindo apenas arquivos técnicos (.DOCX,
+                  .PDF, .DWG, .DXF) dos processos e projetos de sua competência.
+                </span>
+              </div>
+            </div>
+          )}
+
           {/* Estatísticas de anexos */}
           <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
             <div className="crm-card p-3 text-center">
               <p className="text-[10px] font-bold text-[#888]">TOTAL ANEXOS</p>
-              <p className="text-xl font-bold text-[#333]">{anexosData.data.length}</p>
+              <p className="text-xl font-bold text-[#333]">{filteredAnexos.length}</p>
             </div>
             <div className="crm-card p-3 text-center border-l-4 border-l-amber-500">
               <p className="text-[10px] font-bold text-[#888]">PROJETOS DWG/DXF</p>
               <p className="text-xl font-bold text-amber-700">
                 {
-                  anexosData.data.filter(
+                  filteredAnexos.filter(
                     (d) =>
                       d.categoria === 'projeto_tecnico' ||
                       ['dwg', 'dxf'].includes((d.extensao || '').toLowerCase()),
@@ -422,7 +509,7 @@ export default function DocumentsPage() {
               <p className="text-[10px] font-bold text-[#888]">PLANILHAS / XLSX</p>
               <p className="text-xl font-bold text-emerald-700">
                 {
-                  anexosData.data.filter(
+                  filteredAnexos.filter(
                     (d) =>
                       d.categoria === 'planilha' ||
                       ['xlsx', 'xls', 'csv'].includes((d.extensao || '').toLowerCase()),
@@ -434,7 +521,7 @@ export default function DocumentsPage() {
               <p className="text-[10px] font-bold text-[#888]">ORÇAMENTOS / EDITAIS</p>
               <p className="text-xl font-bold text-rose-700">
                 {
-                  anexosData.data.filter(
+                  filteredAnexos.filter(
                     (d) => d.categoria === 'orcamento' || d.categoria === 'edital',
                   ).length
                 }
@@ -443,13 +530,13 @@ export default function DocumentsPage() {
             <div className="crm-card p-3 text-center">
               <p className="text-[10px] font-bold text-[#888]">VINCULADOS A PROJETOS</p>
               <p className="text-xl font-bold text-[#333]">
-                {anexosData.data.filter((d) => !!d.projeto).length}
+                {filteredAnexos.filter((d) => !!d.projeto).length}
               </p>
             </div>
             <div className="crm-card p-3 text-center">
               <p className="text-[10px] font-bold text-[#888]">VINCULADOS A PROCESSOS</p>
               <p className="text-xl font-bold text-[#333]">
-                {anexosData.data.filter((d) => !!d.processo).length}
+                {filteredAnexos.filter((d) => !!d.processo).length}
               </p>
             </div>
           </div>

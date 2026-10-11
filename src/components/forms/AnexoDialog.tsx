@@ -23,6 +23,7 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { useAuth } from '@/contexts/AuthContext'
 import { getFileTypeMeta } from '@/lib/fileIcons'
+import { isTecnicoAllowedExtension } from '@/lib/crm'
 import {
   ALLOWED_EXTENSIONS,
   ANEXO_CATEGORIAS,
@@ -80,6 +81,11 @@ export function AnexoDialog({
   const [oportunidadeId, setOportunidadeId] = useState(presetOportunidade || '')
   const [submitting, setSubmitting] = useState(false)
   const [validationError, setValidationError] = useState<string | null>(null)
+
+  const isRestrictedTecnico = user?.role === 'tecnico' || user?.role === 'terceiro'
+  const acceptedFileExtensions = isRestrictedTecnico
+    ? '.docx,.pdf,.dwg,.dxf'
+    : '.pdf,.txt,.docx,.doc,.xlsx,.xls,.csv,.dwg,.dxf,.kml,.kmz,.png,.jpg,.jpeg,.webp,.zip'
 
   // Opções para vincular
   const [clientes, setClientes] = useState<ClienteRecord[]>([])
@@ -141,7 +147,12 @@ export function AnexoDialog({
     const rejectedErrors: string[] = []
 
     for (const f of arr) {
-      if (f.size > MAX_FILE_SIZE_BYTES) {
+      const ext = getFileExtension(f.name)
+      if (isRestrictedTecnico && !isTecnicoAllowedExtension(ext)) {
+        rejectedErrors.push(
+          `"${f.name}": Seu perfil só pode anexar documentos técnicos: DOCX, PDF, DWG, DXF.`,
+        )
+      } else if (f.size > MAX_FILE_SIZE_BYTES) {
         rejectedErrors.push(
           `"${f.name}" excede o limite de ${formatBytes(MAX_FILE_SIZE_BYTES)} (${formatBytes(f.size)}).`,
         )
@@ -339,7 +350,7 @@ export function AnexoDialog({
               multiple
               className="hidden"
               onChange={handleFileSelect}
-              accept=".pdf,.txt,.docx,.doc,.xlsx,.xls,.csv,.dwg,.dxf,.kml,.kmz,.png,.jpg,.jpeg,.webp,.zip"
+              accept={acceptedFileExtensions}
             />
 
             <div
@@ -355,7 +366,9 @@ export function AnexoDialog({
                 Clique para selecionar ou arraste arquivos aqui (seleção múltipla permitida)
               </p>
               <p className="mt-1 text-xs text-[#888]">
-                Formatos aceitos: PDF, TXT, DOCX, XLSX, DWG, DXF, KML, KMZ, Imagens, ZIP
+                {isRestrictedTecnico
+                  ? 'Formatos permitidos para o perfil técnico: DOCX, PDF, DWG, DXF'
+                  : 'Formatos aceitos: PDF, TXT, DOCX, XLSX, DWG, DXF, KML, KMZ, Imagens, ZIP'}
               </p>
             </div>
 
