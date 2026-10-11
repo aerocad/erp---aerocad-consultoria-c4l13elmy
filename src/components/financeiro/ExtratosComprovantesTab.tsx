@@ -3,6 +3,7 @@ import {
   AlertCircle,
   ArrowDownLeft,
   ArrowUpRight,
+  Camera,
   Check,
   CheckCircle2,
   Clock,
@@ -19,6 +20,8 @@ import {
   Trash2,
   Upload,
 } from 'lucide-react'
+import { CapturaComprovanteModal } from './CapturaComprovanteModal'
+import { useIsMobile } from '@/hooks/use-mobile'
 import { toast } from 'sonner'
 
 import { CrmBadge } from '@/components/common/CrmBadge'
@@ -64,6 +67,7 @@ interface ExtratosComprovantesTabProps {
   parcelas: ParcelaRecord[]
   contasPagar: ContaPagarRecord[]
   contasReceber: ContaReceberRecord[]
+  projetos?: import('@/types/crm').ProjetoRecord[]
   canWrite: boolean
   onReloadExtratos: () => Promise<void> | void
   onReloadTransacoes: () => Promise<void> | void
@@ -78,6 +82,7 @@ export function ExtratosComprovantesTab({
   parcelas,
   contasPagar,
   contasReceber,
+  projetos = [],
   canWrite,
   onReloadExtratos,
   onReloadTransacoes,
@@ -86,6 +91,10 @@ export function ExtratosComprovantesTab({
   onReloadContasReceber,
 }: ExtratosComprovantesTabProps) {
   const { user } = useAuth()
+  const isMobile = useIsMobile()
+
+  // Modal de Captura Fotográfica & Visão IA
+  const [modalCapturaIaAberto, setModalCapturaIaAberto] = useState(false)
 
   // Estados de navegação
   const [extratoSelecionadoId, setExtratoSelecionadoId] = useState<string>('todos')
@@ -375,22 +384,44 @@ export function ExtratosComprovantesTab({
         <div className="flex flex-wrap items-center gap-2">
           {canWrite && (
             <>
+              {/* Botão de Fotografia Mobile-first com Visão IA */}
+              <Button
+                size="sm"
+                onClick={() => setModalCapturaIaAberto(true)}
+                className="bg-[#FF6A13] hover:bg-[#E85B06] text-white h-8 text-xs font-semibold shadow-sm"
+              >
+                {isMobile ? (
+                  <>
+                    <Camera className="mr-1.5 h-3.5 w-3.5" />
+                    Fotografar Comprovante
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+                    Analisar Comprovante com IA
+                  </>
+                )}
+              </Button>
+
+              {/* Upload de Comprovante Avulso existente mantido */}
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => setModalComprovanteAvulso(true)}
                 className="border-neutral-300 text-neutral-700 h-8 text-xs"
               >
-                <Paperclip className="mr-1.5 h-3.5 w-3.5 text-[#FF6A13]" />
-                Subir Comprovante
+                <Paperclip className="mr-1.5 h-3.5 w-3.5 text-neutral-600" />
+                Vincular Comprovante Manual
               </Button>
+
               <Button
+                variant="outline"
                 size="sm"
                 onClick={() => setModalUploadAberto(true)}
-                className="bg-[#FF6A13] hover:bg-[#E85B06] text-white h-8 text-xs font-semibold"
+                className="border-neutral-300 text-neutral-700 h-8 text-xs hover:border-[#FF6A13]"
               >
-                <FileUp className="mr-1.5 h-3.5 w-3.5" />
-                Subir Extrato Bancário (OFX / CSV / XLSX)
+                <FileUp className="mr-1.5 h-3.5 w-3.5 text-[#FF6A13]" />
+                Subir Extrato (OFX / CSV / XLSX)
               </Button>
             </>
           )}
@@ -907,6 +938,17 @@ export function ExtratosComprovantesTab({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Modal de Captura Mobile / Extração IA de Comprovantes */}
+      <CapturaComprovanteModal
+        open={modalCapturaIaAberto}
+        onOpenChange={setModalCapturaIaAberto}
+        projetos={projetos}
+        isMobile={isMobile}
+        onSuccess={async () => {
+          await onReloadContasPagar()
+        }}
+      />
     </div>
   )
 }

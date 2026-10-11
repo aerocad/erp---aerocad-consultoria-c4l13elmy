@@ -873,6 +873,7 @@ export function FinancePage() {
             parcelas={installments.data}
             contasPagar={contasPagar.data}
             contasReceber={contasReceber.data}
+            projetos={projects.data}
             canWrite={canWrite}
             onReloadExtratos={async () => {
               void extratos.reload()
