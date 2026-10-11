@@ -122,6 +122,17 @@ export function canAccess(role: Role, area: string) {
   return permissions[role]?.includes(area) ?? false
 }
 
+/**
+ * Define se o perfil tem permissão de visualizar valores financeiros em R$.
+ * Regra AEROCAD:
+ * - admin, comercial e financeiro: PODEM exibir valores em R$ (true).
+ * - tecnico e terceiro (prestador): valores SEMPRE mascarados como "R$ •••••" (false).
+ */
+export function canViewFinancials(role?: Role | string | null): boolean {
+  if (!role) return false
+  return role === 'admin' || role === 'comercial' || role === 'financeiro'
+}
+
 export function firstName(name?: string) {
   return (name || '').trim().split(' ')[0] || 'equipe'
 }

@@ -7,18 +7,46 @@ export const VALOR_MASCARADO = 'R$ •••••'
 
 // Estado global de ocultação de valores financeiros (inicia true por padrão no app)
 let _globalOcultarValores = true
+// Controle de permissão de visualização de valores financeiros (admin/comercial/financeiro = true)
+let _globalPodeVerValores = true
 const _listeners = new Set<(ocultar: boolean) => void>()
 
+/**
+ * Retorna se os valores devem ser mascarados.
+ * Mascaramento efetivo = falta de permissão OU toggle oculto.
+ */
 export function isValoresOcultos(): boolean {
+  if (!_globalPodeVerValores) {
+    return true
+  }
   return _globalOcultarValores
+}
+
+export function setGlobalPodeVerValores(podeVer: boolean): void {
+  if (_globalPodeVerValores !== podeVer) {
+    _globalPodeVerValores = podeVer
+    const efetivo = !_globalPodeVerValores || _globalOcultarValores
+    _listeners.forEach((listener) => {
+      try {
+        listener(efetivo)
+      } catch {
+        // Ignora erros de listeners
+      }
+    })
+  }
+}
+
+export function isPodeVerValores(): boolean {
+  return _globalPodeVerValores
 }
 
 export function setGlobalOcultarValores(ocultar: boolean): void {
   if (_globalOcultarValores !== ocultar) {
     _globalOcultarValores = ocultar
+    const efetivo = !_globalPodeVerValores || _globalOcultarValores
     _listeners.forEach((listener) => {
       try {
-        listener(ocultar)
+        listener(efetivo)
       } catch {
         // Ignora erros de listeners
       }
@@ -38,7 +66,9 @@ export function subscribeFinanceiroVisibilidade(listener: (ocultar: boolean) => 
  * Se ocultarValores estiver ativo e options.forceShow não for true, retorna 'R$ •••••'.
  */
 export function formatCurrency(value?: number | null, options?: { forceShow?: boolean }) {
-  if (_globalOcultarValores && !options?.forceShow) {
+  // Se o usuário não pode ver valores, forceShow é ignorado a menos que seja explicitamente liberado
+  const ocultar = !_globalPodeVerValores || (_globalOcultarValores && !options?.forceShow)
+  if (ocultar) {
     return VALOR_MASCARADO
   }
   return currency.format(Number(value || 0))

@@ -80,7 +80,8 @@ type SearchResult = { id: string; label: string; meta: string; path: string; typ
 
 export default function AppLayout() {
   const { user, rawUser, isSimulating, simulatedRole, stopSimulation, logout } = useAuth()
-  const { ocultarValores, toggleOcultarValores } = useFinanceiroVisibilidade()
+  const { ocultarValores, toggleOcultarValores, podeVerValores, tooltipBloqueado } =
+    useFinanceiroVisibilidade()
   const {
     alertas,
     dispensados,
@@ -395,27 +396,51 @@ export default function AppLayout() {
             {/* Toggle de Privacidade / Ocultar Valores Financeiros */}
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={toggleOcultarValores}
-                  className={cn(
-                    'relative border-[#DEDEDE] transition-colors',
-                    ocultarValores
-                      ? 'bg-amber-50/80 text-amber-700 border-amber-300 hover:bg-amber-100 hover:text-amber-800'
-                      : 'text-[#555] hover:border-[#FF6A13] hover:text-[#FF6A13]',
-                  )}
-                  aria-label={ocultarValores ? 'Exibir valores' : 'Ocultar valores'}
-                >
-                  {ocultarValores ? (
-                    <EyeOff className="h-4 w-4 text-amber-700" />
-                  ) : (
-                    <Eye className="h-4 w-4" />
-                  )}
-                </Button>
+                <span>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    disabled={!podeVerValores}
+                    onClick={toggleOcultarValores}
+                    className={cn(
+                      'relative border-[#DEDEDE] transition-colors',
+                      !podeVerValores &&
+                        'cursor-not-allowed opacity-60 bg-neutral-100 border-neutral-300',
+                      podeVerValores && ocultarValores
+                        ? 'bg-amber-50/80 text-amber-700 border-amber-300 hover:bg-amber-100 hover:text-amber-800'
+                        : podeVerValores
+                          ? 'text-[#555] hover:border-[#FF6A13] hover:text-[#FF6A13]'
+                          : 'text-neutral-400',
+                    )}
+                    aria-label={
+                      !podeVerValores
+                        ? 'Seu perfil não tem acesso aos valores financeiros'
+                        : ocultarValores
+                          ? 'Exibir valores'
+                          : 'Ocultar valores'
+                    }
+                  >
+                    {ocultarValores ? (
+                      <EyeOff
+                        className={cn(
+                          'h-4 w-4',
+                          podeVerValores ? 'text-amber-700' : 'text-neutral-400',
+                        )}
+                      />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </Button>
+                </span>
               </TooltipTrigger>
               <TooltipContent side="bottom">
-                <p>{ocultarValores ? 'Exibir valores' : 'Ocultar valores'}</p>
+                <p>
+                  {tooltipBloqueado
+                    ? tooltipBloqueado
+                    : ocultarValores
+                      ? 'Exibir valores'
+                      : 'Ocultar valores'}
+                </p>
               </TooltipContent>
             </Tooltip>
 

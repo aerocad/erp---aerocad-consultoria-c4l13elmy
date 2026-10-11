@@ -8,17 +8,24 @@ import {
   type ReactNode,
 } from 'react'
 import { useAuth } from './AuthContext'
+import { canViewFinancials } from '@/lib/crm'
 import {
   setGlobalOcultarValores,
+  setGlobalPodeVerValores,
   subscribeFinanceiroVisibilidade,
   VALOR_MASCARADO,
 } from '@/lib/format'
 
+export const TOOLTIP_SEM_PERMISSAO = 'Seu perfil não tem acesso aos valores financeiros'
+
 interface FinanceiroVisibilidadeContextValue {
   ocultarValores: boolean
+  podeVerValores: boolean
+  canViewFinancials: boolean
   toggleOcultarValores: () => void
   setOcultarValores: (ocultar: boolean) => void
   mascara: string
+  tooltipBloqueado?: string
 }
 
 const FinanceiroVisibilidadeContext = createContext<FinanceiroVisibilidadeContextValue | null>(null)
@@ -54,53 +61,75 @@ function persistPreference(userId: string | null | undefined, ocultar: boolean) 
 export function FinanceiroVisibilidadeProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth()
   const userId = user?.id
+  const effectiveRole = user?.role
 
-  const [ocultarValores, setOcultarValoresState] = useState<boolean>(() => {
-    const initial = readStoredPreference(userId)
-    setGlobalOcultarValores(initial)
-    return initial
+  // Verifica permissão do perfil efetivo (respeita simulação de perfil)
+  const podeVerValores = canViewFinancials(effectiveRole)
+
+  // Preferência do toggle do usuário (se tem permissão)
+  const [togglePreference, setTogglePreference] = useState<boolean>(() => {
+    return readStoredPreference(userId)
   })
 
-  // Sincroniza imediatamente quando o usuário logado muda ou a sessão é carregada
+  // Sincroniza a permissão e o mascaramento global quando o usuário ou sua role mudam
   useEffect(() => {
+    const perm = canViewFinancials(effectiveRole)
+    setGlobalPodeVerValores(perm)
+
     const pref = readStoredPreference(userId)
+    setTogglePreference(pref)
     setGlobalOcultarValores(pref)
-    setOcultarValoresState(pref)
+  }, [userId, effectiveRole])
+
+  // Escuta mudanças externas
+  useEffect(() => {
+    return subscribeFinanceiroVisibilidade(() => {
+      // Re-sincroniza a preferência lida do storage se necessário
+      const pref = readStoredPreference(userId)
+      setTogglePreference(pref)
+    })
   }, [userId])
 
-  // Escuta mudanças externas (ex: evento global ou outra aba)
-  useEffect(() => {
-    return subscribeFinanceiroVisibilidade((novo) => {
-      setOcultarValoresState(novo)
-    })
-  }, [])
+  // O mascaramento efetivo = falta de permissão OU toggle oculto (preferência do usuário)
+  const ocultarValoresEfetivo = !podeVerValores || togglePreference
 
   const setOcultarValores = useCallback(
     (ocultar: boolean) => {
-      setOcultarValoresState(ocultar)
+      if (!podeVerValores) {
+        // Perfis sem permissão não alteram o estado nem persistência
+        return
+      }
+      setTogglePreference(ocultar)
       setGlobalOcultarValores(ocultar)
       persistPreference(userId, ocultar)
     },
-    [userId],
+    [podeVerValores, userId],
   )
 
   const toggleOcultarValores = useCallback(() => {
-    setOcultarValoresState((prev) => {
+    if (!podeVerValores) {
+      // Perfis sem permissão têm o toggle inoperante
+      return
+    }
+    setTogglePreference((prev) => {
       const next = !prev
       setGlobalOcultarValores(next)
       persistPreference(userId, next)
       return next
     })
-  }, [userId])
+  }, [podeVerValores, userId])
 
   const value = useMemo(
     () => ({
-      ocultarValores,
+      ocultarValores: ocultarValoresEfetivo,
+      podeVerValores,
+      canViewFinancials: podeVerValores,
       toggleOcultarValores,
       setOcultarValores,
       mascara: VALOR_MASCARADO,
+      tooltipBloqueado: podeVerValores ? undefined : TOOLTIP_SEM_PERMISSAO,
     }),
-    [ocultarValores, toggleOcultarValores, setOcultarValores],
+    [ocultarValoresEfetivo, podeVerValores, toggleOcultarValores, setOcultarValores],
   )
 
   return (
