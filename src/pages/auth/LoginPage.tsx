@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { Eye, EyeOff, LockKeyhole, Mail } from 'lucide-react'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 
-import logo from '@/assets/aerocad-logo.svg'
+import { AerocadLogo } from '@/components/common/AerocadLogo'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -49,7 +49,9 @@ export default function LoginPage() {
       <div className="pointer-events-none absolute -right-24 -top-28 h-80 w-80 rounded-full border-[48px] border-[#FF6A13]/10" />
       <div className="relative mx-auto flex min-h-[calc(100vh-5rem)] max-w-md items-center">
         <div className="w-full rounded-2xl border border-white/80 bg-white/95 p-7 shadow-[0_22px_70px_rgba(89,89,89,0.15)] sm:p-9">
-          <img src={logo} alt="AEROCAD" className="mx-auto h-auto w-56" />
+          <div className="flex justify-center">
+            <AerocadLogo className="h-12 w-auto max-w-[280px] object-contain" />
+          </div>
           <div className="mt-7 border-l-2 border-[#FF6A13] pl-4">
             <p className="technical-label">CRM · CONSULTORIA & AEROPORTOS</p>
             <h1 className="mt-1 text-2xl font-bold text-[#4B4B4B]">Acesse sua prancheta</h1>

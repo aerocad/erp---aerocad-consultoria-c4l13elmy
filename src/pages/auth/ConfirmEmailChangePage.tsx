@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 
-import logo from '@/assets/aerocad-logo.svg'
+import { AerocadLogo } from '@/components/common/AerocadLogo'
 import { Button } from '@/components/ui/button'
 import pb from '@/lib/pocketbase/client'
 
@@ -29,7 +29,9 @@ export default function ConfirmEmailChangePage() {
   return (
     <main className="auth-grid flex min-h-screen items-center justify-center bg-[#FFF6EC] p-4">
       <div className="w-full max-w-md rounded-2xl border bg-white p-8 text-center shadow-xl">
-        <img src={logo} alt="AEROCAD" className="mx-auto w-48" />
+        <div className="flex justify-center">
+          <AerocadLogo className="h-10 w-auto max-w-[240px] object-contain" />
+        </div>
         <h1 className="mt-8 text-2xl font-bold text-[#4B4B4B]">Troca de e-mail</h1>
         <p className="mt-3 text-sm text-[#737373]">{message}</p>
         <Button asChild className="mt-6 w-full bg-[#FF6A13] hover:bg-[#E85B06]">

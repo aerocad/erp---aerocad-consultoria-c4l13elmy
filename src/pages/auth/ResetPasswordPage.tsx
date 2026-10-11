@@ -3,7 +3,7 @@ import { CheckCircle2, LockKeyhole } from 'lucide-react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
-import logo from '@/assets/aerocad-logo.svg'
+import { AerocadLogo } from '@/components/common/AerocadLogo'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -41,7 +41,9 @@ export default function ResetPasswordPage() {
   return (
     <main className="auth-grid flex min-h-screen items-center justify-center bg-[#FFF6EC] p-4">
       <div className="w-full max-w-md rounded-2xl border bg-white p-8 shadow-xl">
-        <img src={logo} alt="AEROCAD" className="mx-auto w-48" />
+        <div className="flex justify-center">
+          <AerocadLogo className="h-10 w-auto max-w-[240px] object-contain" />
+        </div>
         {done ? (
           <div className="mt-8 text-center">
             <CheckCircle2 className="mx-auto h-12 w-12 text-emerald-600" />

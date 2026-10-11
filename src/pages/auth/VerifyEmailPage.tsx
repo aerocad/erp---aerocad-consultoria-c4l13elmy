@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { CheckCircle2, CircleX } from 'lucide-react'
 import { Link, useSearchParams } from 'react-router-dom'
 
-import logo from '@/assets/aerocad-logo.svg'
+import { AerocadLogo } from '@/components/common/AerocadLogo'
 import { Button } from '@/components/ui/button'
 import pb from '@/lib/pocketbase/client'
 
@@ -22,7 +22,9 @@ export default function VerifyEmailPage() {
   return (
     <main className="auth-grid flex min-h-screen items-center justify-center bg-[#FFF6EC] p-4">
       <div className="w-full max-w-md rounded-2xl border bg-white p-8 text-center shadow-xl">
-        <img src={logo} alt="AEROCAD" className="mx-auto w-48" />
+        <div className="flex justify-center">
+          <AerocadLogo className="h-10 w-auto max-w-[240px] object-contain" />
+        </div>
         {state === 'loading' && (
           <>
             <div className="mx-auto mt-8 h-10 w-10 animate-spin rounded-full border-4 border-[#FFD3B5] border-t-[#FF6A13]" />

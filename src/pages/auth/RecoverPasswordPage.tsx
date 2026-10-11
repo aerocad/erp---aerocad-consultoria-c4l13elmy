@@ -3,7 +3,7 @@ import { ArrowLeft, Mail } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 
-import logo from '@/assets/aerocad-logo.svg'
+import { AerocadLogo } from '@/components/common/AerocadLogo'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -32,7 +32,9 @@ export default function RecoverPasswordPage() {
   return (
     <main className="auth-grid flex min-h-screen items-center justify-center bg-[#FFF6EC] p-4">
       <div className="w-full max-w-md rounded-2xl border bg-white p-8 shadow-xl">
-        <img src={logo} alt="AEROCAD" className="mx-auto w-48" />
+        <div className="flex justify-center">
+          <AerocadLogo className="h-10 w-auto max-w-[240px] object-contain" />
+        </div>
         <h1 className="mt-7 text-2xl font-bold text-[#4B4B4B]">Recuperar senha</h1>
         <p className="mt-2 text-sm text-[#737373]">
           Informe seu e-mail para receber o link seguro de redefinição.

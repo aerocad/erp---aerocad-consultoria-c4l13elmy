@@ -24,7 +24,7 @@ import {
 } from 'lucide-react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 
-import logo from '@/assets/aerocad-logo.svg'
+import { AerocadLogo } from '@/components/common/AerocadLogo'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -191,13 +191,17 @@ export default function AppLayout() {
           collapsed && !mobile ? 'justify-center px-2' : 'justify-between',
         )}
       >
-        <Link to="/painel" className="flex items-center overflow-hidden">
+        <Link
+          to="/painel"
+          className="flex items-center overflow-hidden"
+          title="Painel Principal · AEROCAD"
+        >
           {collapsed && !mobile ? (
-            <span className="flex h-10 w-10 items-center justify-center border-2 border-[#FF6A13] font-mono text-xl font-black text-[#FF6A13]">
+            <span className="flex h-10 w-10 items-center justify-center rounded-md border-2 border-[#FF6A13] bg-[#FF6A13]/10 font-mono text-xl font-black text-[#FF6A13] transition-colors hover:bg-[#FF6A13]/20">
               A
             </span>
           ) : (
-            <img src={logo} alt="AEROCAD" className="w-[170px]" />
+            <AerocadLogo className="h-8 max-h-9 w-auto max-w-[200px] object-contain drop-shadow-xs" />
           )}
         </Link>
         {mobile && (

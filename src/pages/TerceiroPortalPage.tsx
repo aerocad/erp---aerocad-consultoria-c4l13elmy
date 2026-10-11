@@ -14,7 +14,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 
-import logo from '@/assets/aerocad-logo.svg'
+import { AerocadLogo } from '@/components/common/AerocadLogo'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -127,7 +127,7 @@ export default function TerceiroPortalPage() {
       <header className="sticky top-0 z-30 border-b border-[#E5E5E5] bg-white shadow-sm">
         <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-4 sm:px-6">
           <div className="flex items-center gap-3">
-            <img src={logo} alt="AEROCAD" className="h-7 w-auto" />
+            <AerocadLogo className="h-7 w-auto max-w-[170px] object-contain" />
             <div className="hidden border-l border-neutral-300 pl-3 sm:block">
               <span className="text-xs font-bold uppercase tracking-wider text-[#FF6A13]">
                 Portal do Prestador

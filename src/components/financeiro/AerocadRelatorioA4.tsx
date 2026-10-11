@@ -6,7 +6,7 @@
  */
 
 import React from 'react'
-import logoUrl from '@/assets/aerocad-logo.svg'
+import { AerocadLogo } from '@/components/common/AerocadLogo'
 import { isValoresOcultos, VALOR_MASCARADO } from '@/lib/format'
 
 export interface RelatorioA4Props {
@@ -73,7 +73,7 @@ export function AerocadRelatorioA4({
         <header className="border-b-2 border-[#FF6A13] pb-4 mb-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <img src={logoUrl} alt="AEROCAD" className="h-10 w-auto object-contain" />
+              <AerocadLogo className="h-10 w-auto max-w-[200px] object-contain" />
               <div>
                 <p className="text-[10px] font-bold tracking-[0.2em] text-[#FF6A13] uppercase">
                   Engenharia & Consultoria Aeroportuária

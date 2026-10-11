@@ -18,7 +18,7 @@ import {
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
-import logo from '@/assets/aerocad-logo.svg'
+import { AerocadLogo } from '@/components/common/AerocadLogo'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -1605,7 +1605,7 @@ ${emailObj.bodyText}
           >
             {/* Cabeçalho Institucional AEROCAD */}
             <header className="flex items-end justify-between border-b-2 border-[#FF6A13] pb-4">
-              <img src={logo} alt="AEROCAD" className="w-48 object-contain" />
+              <AerocadLogo className="h-10 w-auto max-w-[240px] object-contain" />
               <div className="text-right">
                 <p className="text-[10px] font-bold uppercase tracking-[.18em] text-[#FF6A13]">
                   CONSULTORIA & AEROPORTOS
