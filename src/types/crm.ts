@@ -336,7 +336,18 @@ export interface AlertaItem {
 export interface AlertaDispensadoRecord extends RecordModel {
   usuario: string
   chave_unica: string
-  severidade_dispensada: AlertaSeveridade
-  data_dispensa?: string
+  severidade_dispensada: 'critico' | 'atencao' | 'informativo'
+  data_dispensa: string
   motivo?: string
+}
+
+export interface TarefaRecord extends RecordModel {
+  titulo: string
+  responsavel: string
+  prazo?: string
+  tipo?: 'ligacao' | 'reuniao' | 'envio' | 'elaboracao' | 'protocolo'
+  oportunidade?: string
+  projeto?: string
+  concluida?: boolean
+  expand?: { responsavel?: UserRecord; projeto?: ProjetoRecord; oportunidade?: OportunidadeRecord }
 }

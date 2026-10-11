@@ -26,6 +26,7 @@ import { AnexoDialog } from '@/components/forms/AnexoDialog'
 import { ClienteDialog } from '@/components/forms/ClienteDialog'
 import { OportunidadeDialog } from '@/components/forms/OportunidadeDialog'
 import { ProjetoDialog } from '@/components/forms/ProjetoDialog'
+import { ExcluirClienteModal } from '@/components/clientes/ExcluirClienteModal'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
@@ -67,7 +68,9 @@ export default function ClientDetailPage() {
   const [opportunityOpen, setOpportunityOpen] = useState(false)
   const [projectOpen, setProjectOpen] = useState(false)
   const [anexoOpen, setAnexoOpen] = useState(false)
+  const [excluirModalOpen, setExcluirModalOpen] = useState(false)
   const canWrite = user?.role === 'admin' || user?.role === 'comercial'
+  const isAdmin = user?.role === 'admin'
   const load = async () => {
     setLoading(true)
     try {
@@ -488,6 +491,31 @@ export default function ClientDetailPage() {
         onOpenChange={setAnexoOpen}
         presetCliente={id}
         onSuccess={() => void load()}
+      />
+
+      {/* Rodapé administrativo discreto para exclusão do cliente */}
+      {isAdmin && (
+        <div className="mt-12 pt-6 border-t border-neutral-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-neutral-500">
+          <div>
+            <span className="font-semibold text-neutral-700">Zona Administrativa:</span> Exclusão
+            permanente da ficha cadastral de {client.razao_social}. Ação restrita a administradores.
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setExcluirModalOpen(true)}
+            className="text-neutral-500 hover:text-rose-700 hover:bg-rose-50"
+          >
+            Excluir cliente...
+          </Button>
+        </div>
+      )}
+
+      {/* Modal de Exclusão do Cliente */}
+      <ExcluirClienteModal
+        open={excluirModalOpen}
+        onOpenChange={setExcluirModalOpen}
+        cliente={client}
       />
     </div>
   )

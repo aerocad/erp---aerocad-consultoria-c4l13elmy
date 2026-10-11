@@ -22,6 +22,7 @@ import { ErrorState, PageLoading } from '@/components/common/States'
 import { AnexoDialog } from '@/components/forms/AnexoDialog'
 import { OrdemServicoDialog } from '@/components/forms/OrdemServicoDialog'
 import { ProcessDialog } from '@/components/forms/ProcessDialog'
+import { ExcluirProjetoModal } from '@/components/projetos/ExcluirProjetoModal'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Sparkles, Bot } from 'lucide-react'
@@ -71,6 +72,7 @@ export default function ProjectDetailPage() {
   const [osOpen, setOsOpen] = useState(false)
   const [editingOs, setEditingOs] = useState<OrdemServicoRecord | null>(null)
   const [note, setNote] = useState('')
+  const [excluirModalOpen, setExcluirModalOpen] = useState(false)
   const canWrite = ['admin', 'comercial', 'tecnico'].includes(user?.role || '')
   const isAdmin = user?.role === 'admin'
   const canManageOS = ['admin', 'tecnico'].includes(user?.role || '')
@@ -710,6 +712,31 @@ export default function ProjectDetailPage() {
         presetProjetoNome={project.nome}
         editingOS={editingOs}
         onSuccess={() => void load()}
+      />
+
+      {/* Rodapé administrativo discreto para exclusão do projeto */}
+      {isAdmin && (
+        <div className="mt-12 pt-6 border-t border-neutral-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-neutral-500">
+          <div>
+            <span className="font-semibold text-neutral-700">Zona Administrativa:</span> Exclusão
+            permanente e em cascata do projeto {project.numero}. Ação restrita a administradores.
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setExcluirModalOpen(true)}
+            className="text-neutral-500 hover:text-rose-700 hover:bg-rose-50"
+          >
+            Excluir projeto...
+          </Button>
+        </div>
+      )}
+
+      {/* Modal de Exclusão do Projeto */}
+      <ExcluirProjetoModal
+        open={excluirModalOpen}
+        onOpenChange={setExcluirModalOpen}
+        projeto={project}
       />
     </div>
   )
