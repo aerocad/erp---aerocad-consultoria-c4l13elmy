@@ -4,20 +4,25 @@ import {
   ArchiveRestore,
   ArrowUpDown,
   CalendarDays,
+  CheckSquare,
   Edit3,
   MoreVertical,
   Plus,
   Search,
+  Square,
+  X,
 } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 
 import { CrmBadge } from '@/components/common/CrmBadge'
 import { EmptyState, ErrorState, PageLoading } from '@/components/common/States'
 import { SectionHeader } from '@/components/common/SectionHeader'
+import { ArquivarLoteProjetosModal } from '@/components/projetos/ArquivarLoteProjetosModal'
 import { ArquivarProjetoModal } from '@/components/projetos/ArquivarProjetoModal'
 import { EditarNomeProjetoModal } from '@/components/projetos/EditarNomeProjetoModal'
 import { ProjetoDialog } from '@/components/forms/ProjetoDialog'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -60,6 +65,8 @@ export default function ProjectsPage() {
   const [archiveFilter, setArchiveFilter] = useState<'ativos' | 'arquivados' | 'todos'>('ativos')
   const [editingProject, setEditingProject] = useState<ProjetoRecord | null>(null)
   const [archivingProject, setArchivingProject] = useState<ProjetoRecord | null>(null)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [batchAction, setBatchAction] = useState<'arquivar' | 'desarquivar' | null>(null)
   const [sortOrder, setSortOrder] = useState<
     'recentes' | 'cronologica' | 'numero_desc' | 'numero_asc'
   >(() => {
@@ -90,6 +97,24 @@ export default function ProjectsPage() {
   const canWrite = ['admin', 'comercial', 'tecnico', 'financeiro'].includes(user?.role || '')
   const canEditName = ['admin', 'tecnico'].includes(user?.role || '')
   const canArchive = ['admin', 'tecnico'].includes(user?.role || '')
+
+  // Limpa seleção que não exista mais nos projetos
+  const handleToggleSelect = (id: string, e?: React.MouseEvent) => {
+    e?.stopPropagation()
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      return next
+    })
+  }
+
+  const handleClearSelection = () => {
+    setSelectedIds(new Set())
+  }
 
   const resumosFinanceiros = useMemo(() => {
     return calcularResumoFinanceiroTodosProjetos(projects.data, installments.data)
@@ -176,6 +201,44 @@ export default function ProjectsPage() {
     sortOrder,
     resumosFinanceiros,
   ])
+
+  // Projetos selecionados a partir do conjunto de IDs
+  const selectedProjects = useMemo(() => {
+    return projects.data.filter((p) => selectedIds.has(p.id))
+  }, [projects.data, selectedIds])
+
+  // Contadores de ativos e arquivados entre os selecionados
+  const countSelectedAtivos = useMemo(() => {
+    return selectedProjects.filter((p) => !p.arquivado).length
+  }, [selectedProjects])
+
+  const countSelectedArquivados = useMemo(() => {
+    return selectedProjects.filter((p) => Boolean(p.arquivado)).length
+  }, [selectedProjects])
+
+  // Lógica de "Selecionar todos" da visão filtrada atual
+  const allFilteredSelected = useMemo(() => {
+    if (rows.length === 0) return false
+    return rows.every((r) => selectedIds.has(r.id))
+  }, [rows, selectedIds])
+
+  const handleToggleSelectAll = () => {
+    if (allFilteredSelected) {
+      // Remove da seleção os projetos visíveis atualmente
+      setSelectedIds((prev) => {
+        const next = new Set(prev)
+        rows.forEach((r) => next.delete(r.id))
+        return next
+      })
+    } else {
+      // Adiciona todos os visíveis
+      setSelectedIds((prev) => {
+        const next = new Set(prev)
+        rows.forEach((r) => next.add(r.id))
+        return next
+      })
+    }
+  }
   if (projects.loading) return <PageLoading />
   if (projects.error) return <ErrorState onRetry={() => void projects.reload()} />
   return (
@@ -195,7 +258,105 @@ export default function ProjectsPage() {
           </Button>
         }
       />
-      <div className="mb-5 flex flex-col gap-3 rounded-xl border bg-white p-3 md:flex-row">
+      {/* Barra de Ações em Massa (quando há seleção de projetos) */}
+      {selectedIds.size > 0 && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border-2 border-[#FF6A13]/40 bg-gradient-to-r from-orange-50/90 to-amber-50/90 p-3 sm:p-4 shadow-sm animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#FF6A13] text-white font-bold text-sm shadow-xs">
+              {selectedIds.size}
+            </div>
+            <div>
+              <p className="text-sm font-bold text-[#4B4B4B]">
+                {selectedIds.size}{' '}
+                {selectedIds.size === 1 ? 'projeto selecionado' : 'projetos selecionados'}
+              </p>
+              <p className="text-xs text-neutral-600">
+                {countSelectedAtivos > 0 && `${countSelectedAtivos} ativo(s)`}
+                {countSelectedAtivos > 0 && countSelectedArquivados > 0 && ' · '}
+                {countSelectedArquivados > 0 && `${countSelectedArquivados} arquivado(s)`}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {canArchive && countSelectedAtivos > 0 && (
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => setBatchAction('arquivar')}
+                className="bg-[#FF6A13] hover:bg-[#E85B06] text-white shadow-xs font-semibold gap-1.5"
+              >
+                <Archive className="h-4 w-4" />
+                Arquivar selecionados ({countSelectedAtivos})
+              </Button>
+            )}
+
+            {canArchive && countSelectedArquivados > 0 && (
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => setBatchAction('desarquivar')}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs font-semibold gap-1.5"
+              >
+                <ArchiveRestore className="h-4 w-4" />
+                Desarquivar selecionados ({countSelectedArquivados})
+              </Button>
+            )}
+
+            {!canArchive && (
+              <span className="text-xs text-amber-800 bg-amber-100/70 border border-amber-200 rounded-md px-2.5 py-1">
+                Arquivamento restrito a Admin/Técnico
+              </span>
+            )}
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleClearSelection}
+              className="border-neutral-300 text-neutral-700 hover:bg-neutral-100 gap-1.5"
+            >
+              <X className="h-3.5 w-3.5 text-neutral-500" />
+              Limpar seleção
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Barra de Filtros, Ordenação e Ação "Selecionar Todos" */}
+      <div className="mb-5 flex flex-col gap-3 rounded-xl border bg-white p-3 md:flex-row md:items-center">
+        {/* Botão de Selecionar Todos / Limpar da visão atual */}
+        {rows.length > 0 && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleToggleSelectAll}
+            className={`h-10 px-3 text-xs font-semibold gap-1.5 shrink-0 border-neutral-300 ${
+              allFilteredSelected
+                ? 'bg-orange-50 text-[#FF6A13] border-[#FF6A13]'
+                : selectedIds.size > 0
+                  ? 'bg-neutral-50 text-neutral-800'
+                  : 'text-neutral-600 hover:text-neutral-900'
+            }`}
+            title={
+              allFilteredSelected
+                ? 'Desmarcar todos os visíveis'
+                : 'Marcar todos os projetos visíveis nesta listagem'
+            }
+          >
+            {allFilteredSelected ? (
+              <CheckSquare className="h-4 w-4 text-[#FF6A13]" />
+            ) : (
+              <Square className="h-4 w-4 text-neutral-400" />
+            )}
+            <span className="hidden sm:inline">
+              {allFilteredSelected ? 'Desmarcar visíveis' : 'Selecionar todos'}
+            </span>
+            <span className="sm:hidden">Todos</span>
+            <span className="text-[11px] text-neutral-500">({rows.length})</span>
+          </Button>
+        )}
+
         <div className="relative flex-1">
           <Search className="absolute left-3 top-3 h-4 w-4 text-[#9A9A9A]" />
           <Input
@@ -310,14 +471,32 @@ export default function ProjectsPage() {
                 key={item.id}
                 onClick={() => navigate(`/projetos/${item.id}`)}
                 className={`crm-card p-5 text-left cursor-pointer transition-all hover:shadow-md flex flex-col justify-between relative group ${
-                  item.arquivado
-                    ? 'opacity-70 bg-neutral-50/90 border-dashed border-neutral-300 hover:opacity-100'
-                    : ''
+                  selectedIds.has(item.id)
+                    ? 'ring-2 ring-[#FF6A13] border-[#FF6A13] bg-orange-50/30'
+                    : item.arquivado
+                      ? 'opacity-70 bg-neutral-50/90 border-dashed border-neutral-300 hover:opacity-100'
+                      : ''
                 }`}
               >
                 <div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2.5">
+                      {/* Checkbox para seleção individual do card */}
+                      <div
+                        onClick={(e) => handleToggleSelect(item.id, e)}
+                        className="flex items-center justify-center p-0.5 -ml-1 rounded cursor-pointer hover:bg-neutral-100/80 transition-colors"
+                        title={
+                          selectedIds.has(item.id) ? 'Desmarcar projeto' : 'Selecionar projeto'
+                        }
+                      >
+                        <Checkbox
+                          checked={selectedIds.has(item.id)}
+                          onCheckedChange={() => handleToggleSelect(item.id)}
+                          aria-label={`Selecionar projeto ${item.numero}`}
+                          className="data-[state=checked]:bg-[#FF6A13] data-[state=checked]:border-[#FF6A13]"
+                        />
+                      </div>
+
                       <span className="mono-value text-base font-black text-[#D65100]">
                         {item.numero}
                       </span>
@@ -475,7 +654,7 @@ export default function ProjectsPage() {
         }}
       />
 
-      {/* Modal para arquivar/desarquivar projeto diretamente da listagem */}
+      {/* Modal para arquivar/desarquivar projeto individual diretamente da listagem */}
       <ArquivarProjetoModal
         open={Boolean(archivingProject)}
         onOpenChange={(open) => {
@@ -483,6 +662,24 @@ export default function ProjectsPage() {
         }}
         projeto={archivingProject}
         onSuccess={() => {
+          void projects.reload()
+        }}
+      />
+
+      {/* Modal para arquivamento / desarquivamento simultâneo em lote */}
+      <ArquivarLoteProjetosModal
+        open={Boolean(batchAction)}
+        onOpenChange={(open) => {
+          if (!open) setBatchAction(null)
+        }}
+        acao={batchAction || 'arquivar'}
+        projetos={
+          batchAction === 'desarquivar'
+            ? selectedProjects.filter((p) => Boolean(p.arquivado))
+            : selectedProjects.filter((p) => !p.arquivado)
+        }
+        onSuccess={() => {
+          setSelectedIds(new Set())
           void projects.reload()
         }}
       />
