@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { CalendarDays, Plus, Search } from 'lucide-react'
+import { ArrowUpDown, CalendarDays, Plus, Search } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 
 import { CrmBadge } from '@/components/common/CrmBadge'
@@ -40,7 +40,30 @@ export default function ProjectsPage() {
   const [trail, setTrail] = useState('todos')
   const [status, setStatus] = useState('todos')
   const [financialFilter, setFinancialFilter] = useState('todos')
+  const [sortOrder, setSortOrder] = useState<
+    'recentes' | 'cronologica' | 'numero_desc' | 'numero_asc'
+  >(() => {
+    const saved = localStorage.getItem('crm_projetos_ordem')
+    if (
+      saved === 'recentes' ||
+      saved === 'cronologica' ||
+      saved === 'numero_desc' ||
+      saved === 'numero_asc'
+    ) {
+      return saved
+    }
+    return 'recentes'
+  })
   const [dialog, setDialog] = useState(params.get('novo') === '1')
+
+  const handleSortChange = (val: 'recentes' | 'cronologica' | 'numero_desc' | 'numero_asc') => {
+    setSortOrder(val)
+    try {
+      localStorage.setItem('crm_projetos_ordem', val)
+    } catch {
+      // Ignora erro de storage se indisponível
+    }
+  }
   useEffect(() => {
     if (params.get('novo') === '1') setDialog(true)
   }, [params])
@@ -50,24 +73,73 @@ export default function ProjectsPage() {
     return calcularResumoFinanceiroTodosProjetos(projects.data, installments.data)
   }, [projects.data, installments.data])
 
-  const rows = useMemo(
-    () =>
-      projects.data.filter((item) => {
-        const matchTrail = trail === 'todos' || item.trilha === trail
-        const matchStatus = status === 'todos' || item.status === status
-        const resumo = resumosFinanceiros.get(item.id)
-        const matchFinancial =
-          financialFilter === 'todos' || resumo?.statusFinanceiro === financialFilter
-        const matchQuery =
-          !query ||
-          `${item.numero} ${item.nome} ${item.expand?.cliente?.razao_social}`
-            .toLowerCase()
-            .includes(query.toLowerCase())
+  // Decomposição segura da numeração AAAA-NNN para ordenação cronológica precisa
+  const parseProjectOrder = (proj: ProjetoRecord) => {
+    const match = (proj.numero || '').match(/^(\d{4})-(\d+)$/)
+    if (match) {
+      return {
+        ano: parseInt(match[1], 10),
+        seq: parseInt(match[2], 10),
+        hasNumber: true,
+      }
+    }
+    const anoMatch = (proj.numero || '').match(/\b(20\d{2})\b/)
+    const ano = anoMatch ? parseInt(anoMatch[1], 10) : 0
+    return {
+      ano,
+      seq: 0,
+      hasNumber: false,
+    }
+  }
 
-        return matchTrail && matchStatus && matchFinancial && matchQuery
-      }),
-    [projects.data, query, trail, status, financialFilter, resumosFinanceiros],
-  )
+  const rows = useMemo(() => {
+    const filtered = projects.data.filter((item) => {
+      const matchTrail = trail === 'todos' || item.trilha === trail
+      const matchStatus = status === 'todos' || item.status === status
+      const resumo = resumosFinanceiros.get(item.id)
+      const matchFinancial =
+        financialFilter === 'todos' || resumo?.statusFinanceiro === financialFilter
+      const matchQuery =
+        !query ||
+        `${item.numero} ${item.nome} ${item.expand?.cliente?.razao_social}`
+          .toLowerCase()
+          .includes(query.toLowerCase())
+
+      return matchTrail && matchStatus && matchFinancial && matchQuery
+    })
+
+    return filtered.sort((a, b) => {
+      const orderA = parseProjectOrder(a)
+      const orderB = parseProjectOrder(b)
+
+      if (sortOrder === 'cronologica' || sortOrder === 'numero_asc') {
+        // Mais antigos primeiro (Ordem cronológica crescente: ex.: 2024-06 -> 2026-01 -> 2026-286)
+        if (orderA.ano !== orderB.ano) {
+          return orderA.ano - orderB.ano
+        }
+        if (orderA.seq !== orderB.seq) {
+          return orderA.seq - orderB.seq
+        }
+        // Fallback para data de criação ou número textual
+        const dateA = a.created ? new Date(a.created).getTime() : 0
+        const dateB = b.created ? new Date(b.created).getTime() : 0
+        if (dateA !== dateB) return dateA - dateB
+        return (a.numero || '').localeCompare(b.numero || '', undefined, { numeric: true })
+      }
+
+      // 'recentes' ou 'numero_desc': Mais recentes primeiro (Ordem decrescente: 2026-286 -> 2024-06)
+      if (orderA.ano !== orderB.ano) {
+        return orderB.ano - orderA.ano
+      }
+      if (orderA.seq !== orderB.seq) {
+        return orderB.seq - orderA.seq
+      }
+      const dateA = a.created ? new Date(a.created).getTime() : 0
+      const dateB = b.created ? new Date(b.created).getTime() : 0
+      if (dateA !== dateB) return dateB - dateA
+      return (b.numero || '').localeCompare(a.numero || '', undefined, { numeric: true })
+    })
+  }, [projects.data, query, trail, status, financialFilter, sortOrder, resumosFinanceiros])
   if (projects.loading) return <PageLoading />
   if (projects.error) return <ErrorState onRetry={() => void projects.reload()} />
   return (
@@ -129,6 +201,47 @@ export default function ProjectsPage() {
             <SelectItem value="faturamento_integral">Faturado 100%</SelectItem>
             <SelectItem value="pagamento_parcial">Pagamento parcial</SelectItem>
             <SelectItem value="sem_nfse">Sem NFS-e</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select
+          value={sortOrder}
+          onValueChange={(val) =>
+            handleSortChange(val as 'recentes' | 'cronologica' | 'numero_desc' | 'numero_asc')
+          }
+        >
+          <SelectTrigger className="md:w-56">
+            <div className="flex items-center gap-1.5 truncate text-left">
+              <ArrowUpDown className="h-3.5 w-3.5 text-[#9A9A9A] shrink-0" />
+              <SelectValue placeholder="Ordenação" />
+            </div>
+          </SelectTrigger>
+          <SelectContent align="end">
+            <SelectItem value="recentes">
+              <div className="flex flex-col">
+                <span className="font-medium">Mais recentes</span>
+                <span className="text-[11px] text-[#8A8A8A]">Do mais novo ao mais antigo</span>
+              </div>
+            </SelectItem>
+            <SelectItem value="cronologica">
+              <div className="flex flex-col">
+                <span className="font-medium">Ordem cronológica</span>
+                <span className="text-[11px] text-[#8A8A8A]">
+                  Histórico: mais antigos → recentes
+                </span>
+              </div>
+            </SelectItem>
+            <SelectItem value="numero_desc">
+              <div className="flex flex-col">
+                <span className="font-medium">Nº do projeto (maior → menor)</span>
+                <span className="text-[11px] text-[#8A8A8A]">Sequencial AAAA-NNN desc</span>
+              </div>
+            </SelectItem>
+            <SelectItem value="numero_asc">
+              <div className="flex flex-col">
+                <span className="font-medium">Nº do projeto (menor → maior)</span>
+                <span className="text-[11px] text-[#8A8A8A]">Sequencial AAAA-NNN asc</span>
+              </div>
+            </SelectItem>
           </SelectContent>
         </Select>
       </div>
