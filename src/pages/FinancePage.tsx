@@ -15,6 +15,7 @@ import {
   Search,
   Sparkles,
   Square,
+  Trash2,
   TriangleAlert,
 } from 'lucide-react'
 import { Link, useSearchParams } from 'react-router-dom'
@@ -23,9 +24,11 @@ import { toast } from 'sonner'
 import { CrmBadge } from '@/components/common/CrmBadge'
 import { SectionHeader } from '@/components/common/SectionHeader'
 import { EmptyState, ErrorState, PageLoading } from '@/components/common/States'
+import { ConfirmarExcluirNotaModal } from '@/components/financeiro/ConfirmarExcluirNotaModal'
 import { ImportacaoNfseModal } from '@/components/financeiro/ImportacaoNfseModal'
 import { ExcluirDuplicadasModal } from '@/components/financeiro/ExcluirDuplicadasModal'
 import { ExtrairProjetosModal } from '@/components/financeiro/ExtrairProjetosModal'
+import { NotaExclusaoAlvo } from '@/services/exclusaoService'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -77,13 +80,16 @@ export function FinancePage() {
   const [importNfseOpen, setImportNfseOpen] = useState(false)
   const [duplicadasModalOpen, setDuplicadasModalOpen] = useState(false)
   const [extrairProjetosModalOpen, setExtrairProjetosModalOpen] = useState(false)
+  const [excluirNotaOpen, setExcluirNotaOpen] = useState(false)
+  const [notasParaExcluir, setNotasParaExcluir] = useState<NotaExclusaoAlvo[]>([])
   const [payment, setPayment] = useState<ParcelaRecord | null>(null)
   const [newOpen, setNewOpen] = useState(false)
   const [payDate, setPayDate] = useState(new Date().toISOString().slice(0, 10))
   const [payValue, setPayValue] = useState('')
 
-  // Estados de seleção múltipla e ações manuais de recebimento em lote
+  // Estados de seleção múltipla e ações manuais de recebimento/exclusão em lote
   const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [selectedOrfasIds, setSelectedOrfasIds] = useState<string[]>([])
   const [bulkMarkModalOpen, setBulkMarkModalOpen] = useState(false)
   const [bulkPayDate, setBulkPayDate] = useState(new Date().toISOString().slice(0, 10))
   const [isBulkProcessing, setIsBulkProcessing] = useState(false)
@@ -555,7 +561,32 @@ export function FinancePage() {
               </div>
             </div>
             {canWrite && notasOrfas.length > 0 && (
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                {selectedOrfasIds.length > 0 && (
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      const alvos: NotaExclusaoAlvo[] = notasOrfas
+                        .filter((o) => selectedOrfasIds.includes(o.idTemp))
+                        .map((o) => ({
+                          tipo: 'orfa',
+                          id: o.idTemp,
+                          numero: o.numero,
+                          valor: o.valorLiquido || o.valorBruto,
+                          dataEmissao: o.dataEmissao,
+                          descricao: o.descricaoServico,
+                          clienteNome: o.tomadorRazao,
+                        }))
+                      setNotasParaExcluir(alvos)
+                      setExcluirNotaOpen(true)
+                    }}
+                    className="bg-rose-600 hover:bg-rose-700 text-white shadow-sm"
+                    title="Excluir notas órfãs selecionadas com auditoria"
+                  >
+                    <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                    Excluir selecionadas ({selectedOrfasIds.length})
+                  </Button>
+                )}
                 <Button
                   size="sm"
                   onClick={() => setExtrairProjetosModalOpen(true)}
@@ -593,81 +624,168 @@ export function FinancePage() {
             />
           ) : (
             <div className="crm-card divide-y overflow-hidden">
-              {notasOrfas.map((nota) => (
-                <div
-                  key={nota.idTemp}
-                  className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-[#FFF6EC]/30"
-                >
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="mono-value font-bold text-sm text-[#FF6A13]">
-                        NFS-e nº {nota.numero}
-                      </span>
-                      <CrmBadge tone="gray">{nota.situacao.toUpperCase()}</CrmBadge>
-                      <span className="text-xs text-[#737373]">
-                        Emissão: {formatDate(nota.dataEmissao)}
-                      </span>
-                    </div>
-                    <p className="text-sm font-semibold text-[#333]">
-                      Tomador: {nota.tomadorRazao}{' '}
-                      {nota.tomadorCnpjCpf && `(${nota.tomadorCnpjCpf})`}
-                    </p>
-                    {nota.descricaoServico && (
-                      <p className="text-xs text-[#777] line-clamp-1 italic">
-                        {nota.descricaoServico}
-                      </p>
+              {/* Barra de seleção de órfãs */}
+              {canWrite && notasOrfas.length > 0 && (
+                <div className="p-3 bg-neutral-50 flex items-center justify-between text-xs border-b">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (selectedOrfasIds.length === notasOrfas.length) {
+                        setSelectedOrfasIds([])
+                      } else {
+                        setSelectedOrfasIds(notasOrfas.map((o) => o.idTemp))
+                      }
+                    }}
+                    className="flex items-center gap-1.5 font-semibold text-neutral-700 hover:text-neutral-900"
+                  >
+                    {selectedOrfasIds.length === notasOrfas.length ? (
+                      <CheckSquare className="h-4 w-4 text-[#FF6A13]" />
+                    ) : (
+                      <Square className="h-4 w-4 text-neutral-400" />
                     )}
-                  </div>
+                    <span>
+                      {selectedOrfasIds.length > 0
+                        ? `${selectedOrfasIds.length} selecionada(s)`
+                        : 'Selecionar todas as notas órfãs'}
+                    </span>
+                  </button>
+                  {selectedOrfasIds.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedOrfasIds([])}
+                      className="text-[11px] text-neutral-500 hover:underline"
+                    >
+                      (Limpar seleção)
+                    </button>
+                  )}
+                </div>
+              )}
 
-                  <div className="flex items-center gap-4">
-                    <div className="text-right">
-                      <p className="mono-value font-bold text-base text-[#1F1F1F]">
-                        {formatCurrency(nota.valorBruto)}
-                      </p>
-                      {nota.retencoesTexto && (
-                        <p className="text-[10px] text-amber-700">{nota.retencoesTexto}</p>
+              {notasOrfas.map((nota) => {
+                const isOrfaSelected = selectedOrfasIds.includes(nota.idTemp)
+                return (
+                  <div
+                    key={nota.idTemp}
+                    className={`p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition ${
+                      isOrfaSelected ? 'bg-orange-50/50' : 'hover:bg-[#FFF6EC]/30'
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      {canWrite && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedOrfasIds((prev) =>
+                              prev.includes(nota.idTemp)
+                                ? prev.filter((id) => id !== nota.idTemp)
+                                : [...prev, nota.idTemp],
+                            )
+                          }}
+                          className="mt-1 text-neutral-500"
+                        >
+                          {isOrfaSelected ? (
+                            <CheckSquare className="h-4 w-4 text-[#FF6A13]" />
+                          ) : (
+                            <Square className="h-4 w-4 text-neutral-300" />
+                          )}
+                        </button>
+                      )}
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="mono-value font-bold text-sm text-[#FF6A13]">
+                            NFS-e nº {nota.numero}
+                          </span>
+                          <CrmBadge tone="gray">{nota.situacao.toUpperCase()}</CrmBadge>
+                          <span className="text-xs text-[#737373]">
+                            Emissão: {formatDate(nota.dataEmissao)}
+                          </span>
+                        </div>
+                        <p className="text-sm font-semibold text-[#333]">
+                          Tomador: {nota.tomadorRazao}{' '}
+                          {nota.tomadorCnpjCpf && `(${nota.tomadorCnpjCpf})`}
+                        </p>
+                        {nota.descricaoServico && (
+                          <p className="text-xs text-[#777] line-clamp-1 italic">
+                            {nota.descricaoServico}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3 shrink-0">
+                      <div className="text-right">
+                        <p className="mono-value font-bold text-base text-[#1F1F1F]">
+                          {formatCurrency(nota.valorBruto)}
+                        </p>
+                        {nota.retencoesTexto && (
+                          <p className="text-[10px] text-amber-700">{nota.retencoesTexto}</p>
+                        )}
+                      </div>
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          setVinculandoNota(nota)
+                          setDescricaoVinculoOrfa('')
+                          setParcelaDestinoId('')
+                          // Verifica se o tomador já existe na base de clientes
+                          const limpo = nota.tomadorCnpjCpf
+                            ? nota.tomadorCnpjCpf.replace(/\D/g, '')
+                            : ''
+                          const cliExistente = clients.data.find(
+                            (c) =>
+                              (limpo && c.cnpj_cpf && c.cnpj_cpf.replace(/\D/g, '') === limpo) ||
+                              c.razao_social.toLowerCase() === nota.tomadorRazao.toLowerCase(),
+                          )
+                          if (cliExistente) {
+                            setModoClienteOrfa('existente')
+                            setClienteSelecionadoOrfaId(cliExistente.id)
+                          } else if (
+                            nota.tomadorRazao &&
+                            nota.tomadorRazao !== 'Tomador não informado'
+                          ) {
+                            setModoClienteOrfa('novo')
+                            setNovoClienteOrfaRazao(nota.tomadorRazao)
+                            setNovoClienteOrfaCnpj(nota.tomadorCnpjCpf || '')
+                            setNovoClienteOrfaEndereco(nota.tomadorEndereco || '')
+                            setNovoClienteOrfaMunicipio(nota.tomadorMunicipio || '')
+                            setNovoClienteOrfaUf(nota.tomadorUf || '')
+                          } else {
+                            setModoClienteOrfa('manter_atual')
+                          }
+                        }}
+                        className="bg-[#FF6A13] hover:bg-[#E85B06] text-white shrink-0"
+                      >
+                        <LinkIcon className="mr-1.5 h-3.5 w-3.5" />
+                        Vincular a Parcela
+                      </Button>
+                      {canWrite && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setNotasParaExcluir([
+                              {
+                                tipo: 'orfa',
+                                id: nota.idTemp,
+                                numero: nota.numero,
+                                valor: nota.valorLiquido || nota.valorBruto,
+                                dataEmissao: nota.dataEmissao,
+                                descricao: nota.descricaoServico,
+                                clienteNome: nota.tomadorRazao,
+                              },
+                            ])
+                            setExcluirNotaOpen(true)
+                          }}
+                          className="h-8 w-8 p-0 text-neutral-400 hover:text-rose-600 hover:bg-rose-50"
+                          title={`Excluir NFS-e nº ${nota.numero} da lista de órfãs`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       )}
                     </div>
-                    <Button
-                      size="sm"
-                      onClick={() => {
-                        setVinculandoNota(nota)
-                        setDescricaoVinculoOrfa('')
-                        setParcelaDestinoId('')
-                        // Verifica se o tomador já existe na base de clientes
-                        const limpo = nota.tomadorCnpjCpf
-                          ? nota.tomadorCnpjCpf.replace(/\D/g, '')
-                          : ''
-                        const cliExistente = clients.data.find(
-                          (c) =>
-                            (limpo && c.cnpj_cpf && c.cnpj_cpf.replace(/\D/g, '') === limpo) ||
-                            c.razao_social.toLowerCase() === nota.tomadorRazao.toLowerCase(),
-                        )
-                        if (cliExistente) {
-                          setModoClienteOrfa('existente')
-                          setClienteSelecionadoOrfaId(cliExistente.id)
-                        } else if (
-                          nota.tomadorRazao &&
-                          nota.tomadorRazao !== 'Tomador não informado'
-                        ) {
-                          setModoClienteOrfa('novo')
-                          setNovoClienteOrfaRazao(nota.tomadorRazao)
-                          setNovoClienteOrfaCnpj(nota.tomadorCnpjCpf || '')
-                          setNovoClienteOrfaEndereco(nota.tomadorEndereco || '')
-                          setNovoClienteOrfaMunicipio(nota.tomadorMunicipio || '')
-                          setNovoClienteOrfaUf(nota.tomadorUf || '')
-                        } else {
-                          setModoClienteOrfa('manter_atual')
-                        }
-                      }}
-                      className="bg-[#FF6A13] hover:bg-[#E85B06] text-white shrink-0"
-                    >
-                      <LinkIcon className="mr-1.5 h-3.5 w-3.5" />
-                      Vincular a Parcela
-                    </Button>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>
@@ -758,17 +876,48 @@ export function FinancePage() {
 
               <div className="flex flex-wrap items-center gap-2">
                 {selectedIds.length > 0 && (
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      setBulkPayDate(new Date().toISOString().slice(0, 10))
-                      setBulkMarkModalOpen(true)
-                    }}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
-                  >
-                    <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
-                    Marcar selecionadas como recebidas ({selectedIds.length})
-                  </Button>
+                  <>
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        setBulkPayDate(new Date().toISOString().slice(0, 10))
+                        setBulkMarkModalOpen(true)
+                      }}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+                    >
+                      <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
+                      Marcar selecionadas como recebidas ({selectedIds.length})
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        const selecionadas = installments.data.filter((p) =>
+                          selectedIds.includes(p.id),
+                        )
+                        const alvos: NotaExclusaoAlvo[] = selecionadas.map((p) => ({
+                          tipo: 'parcela',
+                          id: p.id,
+                          numero: p.nf_numero || p.id,
+                          valor: p.valor_recebido || p.valor,
+                          dataEmissao: p.data_faturamento || p.vencimento,
+                          descricao: p.descricao,
+                          projetoId: p.projeto,
+                          projetoNumero: p.expand?.projeto?.numero,
+                          clienteId: p.cliente,
+                          clienteNome: p.expand?.cliente?.razao_social,
+                          statusParcela: p.status,
+                          isGatilho: p.origem === 'gatilho',
+                        }))
+                        setNotasParaExcluir(alvos)
+                        setExcluirNotaOpen(true)
+                      }}
+                      className="bg-rose-600 hover:bg-rose-700 text-white shadow-sm"
+                      title="Excluir notas/parcelas selecionadas com auditoria"
+                    >
+                      <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                      Excluir selecionadas ({selectedIds.length})
+                    </Button>
+                  </>
                 )}
 
                 {/* Botão de conveniência para marcar pendentes da visualização */}
@@ -945,6 +1094,33 @@ export function FinancePage() {
                                     Reabrir / Desmarcar
                                   </Button>
                                 )}
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    setNotasParaExcluir([
+                                      {
+                                        tipo: 'parcela',
+                                        id: item.id,
+                                        numero: item.nf_numero || item.descricao,
+                                        valor: item.valor_recebido || item.valor,
+                                        dataEmissao: item.data_faturamento || item.vencimento,
+                                        descricao: item.descricao,
+                                        projetoId: item.projeto,
+                                        projetoNumero: item.expand?.projeto?.numero,
+                                        clienteId: item.cliente,
+                                        clienteNome: item.expand?.cliente?.razao_social,
+                                        statusParcela: item.status,
+                                        isGatilho: item.origem === 'gatilho',
+                                      },
+                                    ])
+                                    setExcluirNotaOpen(true)
+                                  }}
+                                  className="h-8 w-8 p-0 text-neutral-400 hover:text-rose-600 hover:bg-rose-50"
+                                  title={`Excluir ${item.nf_numero ? `NFS-e nº ${item.nf_numero}` : 'esta parcela'}`}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
                               </div>
                             )}
                           </td>
@@ -1034,6 +1210,33 @@ export function FinancePage() {
                             Reabrir / Desmarcar recebimento
                           </Button>
                         )}
+                        <Button
+                          className="w-full text-rose-600 hover:bg-rose-50 border-rose-200"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setNotasParaExcluir([
+                              {
+                                tipo: 'parcela',
+                                id: item.id,
+                                numero: item.nf_numero || item.descricao,
+                                valor: item.valor_recebido || item.valor,
+                                dataEmissao: item.data_faturamento || item.vencimento,
+                                descricao: item.descricao,
+                                projetoId: item.projeto,
+                                projetoNumero: item.expand?.projeto?.numero,
+                                clienteId: item.cliente,
+                                clienteNome: item.expand?.cliente?.razao_social,
+                                statusParcela: item.status,
+                                isGatilho: item.origem === 'gatilho',
+                              },
+                            ])
+                            setExcluirNotaOpen(true)
+                          }}
+                        >
+                          <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                          Excluir nota / parcela
+                        </Button>
                       </div>
                     )}
                   </div>
@@ -1502,6 +1705,24 @@ export function FinancePage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Modal de Exclusão de NFS-e / Parcelas com Auditoria */}
+      <ConfirmarExcluirNotaModal
+        open={excluirNotaOpen}
+        onOpenChange={setExcluirNotaOpen}
+        notas={notasParaExcluir}
+        onSuccess={() => {
+          setSelectedIds([])
+          setSelectedOrfasIds([])
+          // Se for exclusão de órfã, sincroniza estado local
+          const orfasExcluidas = notasParaExcluir.filter((n) => n.tipo === 'orfa').map((n) => n.id)
+          if (orfasExcluidas.length > 0) {
+            setNotasOrfas((prev) => prev.filter((o) => !orfasExcluidas.includes(o.idTemp)))
+          }
+          void installments.reload()
+          void projects.reload()
+        }}
+      />
 
       {/* Modal de Deduplicação de Notas Órfãs */}
       <ExcluirDuplicadasModal

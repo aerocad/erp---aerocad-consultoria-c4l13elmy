@@ -412,6 +412,226 @@ export async function excluirProjetoEmCascata(
   return { notasOrfasDevolvidas }
 }
 
+export interface NotaExclusaoAlvo {
+  tipo: 'parcela' | 'orfa'
+  id: string // id da parcela ou idTemp da nota órfã
+  numero: string
+  valor: number
+  dataEmissao?: string
+  descricao?: string
+  projetoId?: string
+  projetoNumero?: string
+  clienteId?: string
+  clienteNome?: string
+  statusParcela?: string
+  isGatilho?: boolean
+}
+
+export interface ExcluirNotaResultado {
+  sucesso: boolean
+  numero: string
+  mensagem?: string
+}
+
+/**
+ * Exclui ou desvincula uma nota fiscal NFS-e (associada a uma parcela no banco de dados ou nota órfã em memória).
+ * Registra auditoria em atividades e importacoes_log para conformidade fiscal.
+ */
+export async function excluirNotaNfse(
+  alvo: NotaExclusaoAlvo,
+  usuarioNome: string,
+  usuarioId: string,
+): Promise<ExcluirNotaResultado> {
+  const currentUserId = usuarioId || pb.authStore.record?.id || ''
+  const currentUserName = usuarioNome || pb.authStore.record?.name || 'Administrador'
+
+  if (alvo.tipo === 'orfa') {
+    // 1. Nota órfã em memória (sessionStorage)
+    try {
+      const raw = sessionStorage.getItem(STORAGE_KEY_ORPHANS)
+      if (raw) {
+        const orfas: NfseDadoExtraido[] = JSON.parse(raw)
+        const filtradas = orfas.filter((o) => o.idTemp !== alvo.id && o.numero !== alvo.numero)
+        sessionStorage.setItem(STORAGE_KEY_ORPHANS, JSON.stringify(filtradas))
+      }
+    } catch (err) {
+      console.warn('Erro ao remover nota órfã de sessionStorage:', err)
+    }
+
+    // Registrar auditoria no importacoes_log
+    try {
+      await pb.collection('importacoes_log').create({
+        arquivo_nome: `AUDITORIA_EXCLUSAO_NFSE_ORFA_${alvo.numero}.json`,
+        tamanho_bytes: 0,
+        usuario: currentUserId || null,
+        total_clientes: 0,
+        total_projetos: 0,
+        total_financeiro: 1,
+        total_comunicacoes: 0,
+        resumo: {
+          acao: 'exclusao_nfse_orfa',
+          numeroNfse: alvo.numero,
+          valor: alvo.valor,
+          dataEmissao: alvo.dataEmissao,
+          usuarioId: currentUserId || null,
+          usuarioNome: currentUserName,
+          dataHora: new Date().toISOString(),
+        },
+      })
+    } catch {
+      // ignore
+    }
+
+    return {
+      sucesso: true,
+      numero: alvo.numero,
+      mensagem: `NFS-e nº ${alvo.numero} removida com sucesso.`,
+    }
+  }
+
+  // 2. Nota cadastrada em uma parcela do banco de dados
+  const parcelaId = alvo.id
+  let parcelaDb: ParcelaRecord | null = null
+  try {
+    parcelaDb = await pb.collection('parcelas').getOne<ParcelaRecord>(parcelaId, {
+      expand: 'projeto,cliente',
+    })
+  } catch (err) {
+    return {
+      sucesso: false,
+      numero: alvo.numero,
+      mensagem: `Parcela/Nota não encontrada: ${err instanceof Error ? err.message : String(err)}`,
+    }
+  }
+
+  const projId = parcelaDb.projeto || alvo.projetoId
+  const cliId = parcelaDb.cliente || alvo.clienteId
+  const numeroNf = parcelaDb.nf_numero || alvo.numero
+  const valorNf = parcelaDb.valor_recebido || parcelaDb.valor || alvo.valor
+  const isGatilho = parcelaDb.origem === 'gatilho'
+
+  // Decisão de negócio consistente:
+  // Se a parcela foi gerada puramente por importação manual da nota (origem === 'manual' e sem histórico de gatilho de contrato),
+  // e o usuário está excluindo a nota, apagamos a parcela para não deixar lixo financeiro;
+  // se for parcela de gatilho contratual (origem === 'gatilho' ou contratual), reabrimos a parcela como pendente/vencida,
+  // limpando dados da NFS-e (nf_numero = '', nfse_chave = '', nfse_dados = null, status_pagamento = 'Pendente', valor_recebido = 0, status = 'pendente' ou 'vencida').
+  try {
+    if (isGatilho) {
+      // Reabre a parcela contratual
+      const now = new Date()
+      const venc = parcelaDb.vencimento ? new Date(parcelaDb.vencimento) : now
+      const novoStatus = venc < now ? 'vencida' : 'pendente'
+
+      await pb.collection('parcelas').update(parcelaId, {
+        nf_numero: '',
+        nfse_chave: '',
+        nfse_dados: null,
+        data_faturamento: null,
+        data_pagamento: null,
+        valor_recebido: 0,
+        status: novoStatus,
+        status_pagamento: 'Pendente (NFS-e excluída)',
+        observacoes: parcelaDb.observacoes
+          ? `${parcelaDb.observacoes}\n[AUDITORIA] NFS-e nº ${numeroNf} desvinculada/excluída por ${currentUserName} em ${new Date().toLocaleDateString('pt-BR')}. Parcela reaberta.`
+          : `[AUDITORIA] NFS-e nº ${numeroNf} desvinculada/excluída por ${currentUserName} em ${new Date().toLocaleDateString('pt-BR')}. Parcela reaberta.`,
+      })
+    } else {
+      // Parcela manual originada de NFS-e ou desvinculação completa: excluir o registro da parcela
+      await pb.collection('parcelas').delete(parcelaId)
+    }
+
+    // Registrar atividade de auditoria no projeto
+    if (projId) {
+      try {
+        await pb.collection('atividades').create({
+          usuario: currentUserId || null,
+          projeto: projId,
+          cliente: cliId || null,
+          texto: `[AUDITORIA FISCAL] NFS-e nº ${numeroNf} (R$ ${valorNf.toFixed(2)}) foi excluída do sistema por ${currentUserName}. ${
+            isGatilho
+              ? 'A parcela associada foi reaberta como pendente.'
+              : 'A parcela avulsa foi removida.'
+          }`,
+          tipo: 'auditoria',
+          data_hora: new Date().toISOString(),
+        })
+      } catch (errAtiv) {
+        console.warn('Erro ao registrar atividade de exclusão de nota:', errAtiv)
+      }
+    }
+
+    // Gravar auditoria no importacoes_log para conformidade fiscal permanente
+    try {
+      await pb.collection('importacoes_log').create({
+        arquivo_nome: `AUDITORIA_EXCLUSAO_NFSE_${numeroNf}.json`,
+        tamanho_bytes: 0,
+        usuario: currentUserId || null,
+        total_clientes: 0,
+        total_projetos: projId ? 1 : 0,
+        total_financeiro: 1,
+        total_comunicacoes: 1,
+        resumo: {
+          acao: 'exclusao_nfse',
+          numeroNfse: numeroNf,
+          valor: valorNf,
+          dataEmissao: parcelaDb.data_faturamento || parcelaDb.vencimento,
+          parcelaId: parcelaDb.id,
+          parcelaDescricao: parcelaDb.descricao,
+          origemParcela: parcelaDb.origem,
+          acaoExecutada: isGatilho ? 'reabrir_parcela' : 'apagar_parcela',
+          projetoId: projId || null,
+          clienteId: cliId || null,
+          usuarioId: currentUserId || null,
+          usuarioNome: currentUserName,
+          dataHora: new Date().toISOString(),
+        },
+      })
+    } catch (errLog) {
+      console.warn('Erro ao salvar auditoria de exclusão de nota:', errLog)
+    }
+
+    return {
+      sucesso: true,
+      numero: numeroNf,
+      mensagem: `NFS-e nº ${numeroNf} excluída com sucesso.`,
+    }
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return {
+      sucesso: false,
+      numero: numeroNf,
+      mensagem: `Falha ao excluir NFS-e nº ${numeroNf}: ${msg}`,
+    }
+  }
+}
+
+/**
+ * Exclusão de múltiplas notas fiscais (em lote)
+ */
+export async function excluirNotasNfseEmLote(
+  alvos: NotaExclusaoAlvo[],
+  usuarioNome: string,
+  usuarioId: string,
+): Promise<{ total: number; excluidas: number; falhas: string[] }> {
+  let excluidas = 0
+  const falhas: string[] = []
+
+  for (const alvo of alvos) {
+    const res = await excluirNotaNfse(alvo, usuarioNome, usuarioId)
+    if (res.sucesso) {
+      excluidas++
+    } else {
+      falhas.push(res.mensagem || `Falha na NFS-e nº ${alvo.numero}`)
+    }
+  }
+
+  return {
+    total: alvos.length,
+    excluidas,
+    falhas,
+  }
+}
+
 /**
  * Consulta detalhes e projetos vinculados ao cliente antes de exclusão
  */

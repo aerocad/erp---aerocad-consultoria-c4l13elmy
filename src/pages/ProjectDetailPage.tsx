@@ -11,6 +11,7 @@ import {
   Paperclip,
   Plus,
   Send,
+  Trash2,
   WalletCards,
 } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
@@ -28,6 +29,8 @@ import { EditarNomeProjetoModal } from '@/components/projetos/EditarNomeProjetoM
 import { EditarProjetoModal } from '@/components/projetos/EditarProjetoModal'
 import { ExcluirProjetoModal } from '@/components/projetos/ExcluirProjetoModal'
 import { VincularNfseProjetoModal } from '@/components/financeiro/VincularNfseProjetoModal'
+import { ConfirmarExcluirNotaModal } from '@/components/financeiro/ConfirmarExcluirNotaModal'
+import { NotaExclusaoAlvo } from '@/services/exclusaoService'
 import { Button } from '@/components/ui/button'
 import { Archive, ArchiveRestore } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -80,6 +83,8 @@ export default function ProjectDetailPage() {
   const [osOpen, setOsOpen] = useState(false)
   const [editingOs, setEditingOs] = useState<OrdemServicoRecord | null>(null)
   const [vincularNfseOpen, setVincularNfseOpen] = useState(false)
+  const [excluirNotaOpen, setExcluirNotaOpen] = useState(false)
+  const [notasParaExcluir, setNotasParaExcluir] = useState<NotaExclusaoAlvo[]>([])
   const [note, setNote] = useState('')
   const [excluirModalOpen, setExcluirModalOpen] = useState(false)
   const [editNomeOpen, setEditNomeOpen] = useState(false)
@@ -95,6 +100,8 @@ export default function ProjectDetailPage() {
   const canEditProject = ['admin', 'tecnico', 'financeiro'].includes(user?.role || '')
   const canArchive = ['admin', 'tecnico'].includes(user?.role || '')
   const canManageFinanceiro = ['admin', 'financeiro'].includes(user?.role || '')
+  const canAnexarNfse = ['admin', 'financeiro', 'tecnico'].includes(user?.role || '')
+  const canExcluirNfse = ['admin', 'financeiro'].includes(user?.role || '')
 
   const load = async () => {
     setLoading(true)
@@ -790,12 +797,13 @@ export default function ProjectDetailPage() {
                 <p className="text-[11px] font-bold uppercase tracking-wider text-neutral-500">
                   Notas NFS-e & Parcelas ({installments.length})
                 </p>
-                {canManageFinanceiro && (
+                {canAnexarNfse && (
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => setVincularNfseOpen(true)}
-                    className="h-6 text-[11px] border-orange-300 text-[#D65100] hover:bg-orange-50 px-2"
+                    className="h-6 text-[11px] border-orange-300 text-[#D65100] hover:bg-orange-50 px-2 font-medium"
+                    title="Anexar XML de NFS-e ou vincular nota existente"
                   >
                     <Plus className="mr-1 h-3 w-3 text-[#FF6A13]" />
                     Anexar NFS-e
@@ -806,7 +814,10 @@ export default function ProjectDetailPage() {
               {installments.length > 0 ? (
                 <div className="divide-y max-h-64 overflow-y-auto">
                   {installments.map((inst) => (
-                    <div key={inst.id} className="py-2 flex items-center justify-between">
+                    <div
+                      key={inst.id}
+                      className="py-2 flex items-center justify-between group hover:bg-neutral-50/70 px-1 rounded transition"
+                    >
                       <div className="min-w-0 pr-2 space-y-0.5">
                         <p className="font-semibold text-[#333] truncate">{inst.descricao}</p>
                         <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
@@ -825,12 +836,44 @@ export default function ProjectDetailPage() {
                           )}
                         </div>
                       </div>
-                      <div className="text-right shrink-0">
-                        <span className="mono-value font-bold text-[11px] text-[#1F1F1F]">
-                          {formatCurrency(inst.valor)}
-                        </span>
-                        {inst.status === 'paga' && (
-                          <p className="text-[10px] text-emerald-600 font-semibold">Quitada</p>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <div className="text-right">
+                          <span className="mono-value font-bold text-[11px] text-[#1F1F1F]">
+                            {formatCurrency(inst.valor)}
+                          </span>
+                          {inst.status === 'paga' && (
+                            <p className="text-[10px] text-emerald-600 font-semibold">Quitada</p>
+                          )}
+                        </div>
+                        {canExcluirNfse && inst.nf_numero && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setNotasParaExcluir([
+                                {
+                                  tipo: 'parcela',
+                                  id: inst.id,
+                                  numero: inst.nf_numero || '',
+                                  valor: inst.valor_recebido || inst.valor,
+                                  dataEmissao: inst.data_faturamento || inst.vencimento,
+                                  descricao: inst.descricao,
+                                  projetoId: project.id,
+                                  projetoNumero: project.numero,
+                                  clienteId: project.cliente,
+                                  clienteNome: project.expand?.cliente?.razao_social,
+                                  statusParcela: inst.status,
+                                  isGatilho: inst.origem === 'gatilho',
+                                },
+                              ])
+                              setExcluirNotaOpen(true)
+                            }}
+                            className="h-7 w-7 p-0 text-neutral-400 hover:text-rose-600 hover:bg-rose-50 opacity-70 group-hover:opacity-100 transition"
+                            title={`Excluir NFS-e nº ${inst.nf_numero}`}
+                            aria-label={`Excluir NFS-e nº ${inst.nf_numero}`}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
                         )}
                       </div>
                     </div>
@@ -960,6 +1003,14 @@ export default function ProjectDetailPage() {
         onOpenChange={setVincularNfseOpen}
         projeto={project}
         parcelasExistentes={installments}
+        onSuccess={() => void load()}
+      />
+
+      {/* Modal de Excluir NFS-e com Auditoria Fiscal */}
+      <ConfirmarExcluirNotaModal
+        open={excluirNotaOpen}
+        onOpenChange={setExcluirNotaOpen}
+        notas={notasParaExcluir}
         onSuccess={() => void load()}
       />
     </div>
