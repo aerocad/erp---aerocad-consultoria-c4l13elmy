@@ -22,15 +22,16 @@ import { useAlertas } from '@/contexts/AlertasContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { useFinanceiroVisibilidade } from '@/contexts/FinanceiroVisibilidadeContext'
 import { useCrmData } from '@/hooks/use-crm-data'
+import { osStatusColors, osStatusLabels, stageColors, stageLabels, trailLabels } from '@/lib/crm'
 import {
-  firstName,
-  osStatusColors,
-  osStatusLabels,
-  stageColors,
-  stageLabels,
-  trailLabels,
-} from '@/lib/crm'
-import { formatCurrency, formatDate, formatDateLong, initials, relativeTime } from '@/lib/format'
+  formatCurrency,
+  formatDate,
+  formatDateBrasilia,
+  formatDateLong,
+  initials,
+  relativeTime,
+} from '@/lib/format'
+import { montarSaudacao } from '@/lib/saudacao'
 import { AlertasWidget } from '@/components/common/AlertasWidget'
 import type {
   AtividadeRecord,
@@ -263,9 +264,9 @@ export default function DashboardPage() {
     <div className="space-y-6">
       <div className="animate-blueprint-rise flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
         <div>
-          <p className="technical-label">VISÃO GERAL · {formatDate(new Date())}</p>
+          <p className="technical-label">VISÃO GERAL · {formatDateBrasilia()}</p>
           <h1 className="mt-1 text-2xl font-bold text-[#424242] sm:text-[28px]">
-            Bom dia, {firstName(user?.name)}
+            {montarSaudacao(user?.name)}
           </h1>
           <p className="mt-1 text-sm capitalize text-[#737373]">{formatDateLong()}</p>
         </div>

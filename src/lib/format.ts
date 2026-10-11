@@ -81,6 +81,8 @@ export function formatCurrencyRaw(value?: number | null) {
   return currency.format(Number(value || 0))
 }
 
+export const FUSO_HORARIO_BRASILIA = 'America/Sao_Paulo'
+
 export function formatDate(value?: string | Date | null) {
   if (!value) return '—'
   const date = value instanceof Date ? value : new Date(value)
@@ -88,8 +90,26 @@ export function formatDate(value?: string | Date | null) {
   return new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC' }).format(date)
 }
 
+/**
+ * Formata a data atual em formato de Brasília (America/Sao_Paulo) para exibição simples (ex.: 24/02/2026).
+ */
+export function formatDateBrasilia(value: Date = new Date()) {
+  return new Intl.DateTimeFormat('pt-BR', {
+    timeZone: FUSO_HORARIO_BRASILIA,
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(value)
+}
+
+/**
+ * Formata a data por extenso usando estritamente o fuso horário oficial de Brasília (America/Sao_Paulo),
+ * garantindo que usuários em outros fusos vejam o dia correto de Brasília.
+ * Exemplo: "segunda-feira, 24 de fevereiro de 2026"
+ */
 export function formatDateLong(value: Date = new Date()) {
   return new Intl.DateTimeFormat('pt-BR', {
+    timeZone: FUSO_HORARIO_BRASILIA,
     weekday: 'long',
     day: '2-digit',
     month: 'long',
