@@ -2,6 +2,7 @@ import { useMemo, useState, type FormEvent } from 'react'
 import {
   Banknote,
   BarChart3,
+  Calendar,
   CalendarClock,
   Check,
   CheckCircle2,
@@ -29,6 +30,7 @@ import { CrmBadge } from '@/components/common/CrmBadge'
 import { SectionHeader } from '@/components/common/SectionHeader'
 import { EmptyState, ErrorState, PageLoading } from '@/components/common/States'
 import { ConfirmarExcluirNotaModal } from '@/components/financeiro/ConfirmarExcluirNotaModal'
+import { EditarVencimentoParcelaModal } from '@/components/financeiro/EditarVencimentoParcelaModal'
 import { ImportacaoNfseModal } from '@/components/financeiro/ImportacaoNfseModal'
 import { ExcluirDuplicadasModal } from '@/components/financeiro/ExcluirDuplicadasModal'
 import { ExtrairProjetosModal } from '@/components/financeiro/ExtrairProjetosModal'
@@ -124,6 +126,9 @@ export function FinancePage() {
   const [extrairProjetosModalOpen, setExtrairProjetosModalOpen] = useState(false)
   const [excluirNotaOpen, setExcluirNotaOpen] = useState(false)
   const [notasParaExcluir, setNotasParaExcluir] = useState<NotaExclusaoAlvo[]>([])
+  const [parcelaParaEditarVencimento, setParcelaParaEditarVencimento] =
+    useState<ParcelaRecord | null>(null)
+  const [editarVencimentoOpen, setEditarVencimentoOpen] = useState(false)
   const [payment, setPayment] = useState<ParcelaRecord | null>(null)
   const [newOpen, setNewOpen] = useState(false)
   const [payDate, setPayDate] = useState(new Date().toISOString().slice(0, 10))
@@ -1238,7 +1243,25 @@ export function FinancePage() {
                             {formatCurrency(item.valor)}
                           </td>
                           <td className="mono-value px-5 py-4 text-xs">
-                            <p>Venc: {formatDate(item.vencimento)}</p>
+                            <div className="flex items-center gap-1.5">
+                              <span>Venc:</span>
+                              {canWrite ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setParcelaParaEditarVencimento(item)
+                                    setEditarVencimentoOpen(true)
+                                  }}
+                                  className="inline-flex items-center gap-1 font-semibold text-neutral-800 hover:text-[#D65100] hover:underline"
+                                  title="Editar data de vencimento da parcela"
+                                >
+                                  {formatDate(item.vencimento)}
+                                  <Calendar className="h-3 w-3 text-neutral-400 hover:text-[#FF6A13]" />
+                                </button>
+                              ) : (
+                                <span>{formatDate(item.vencimento)}</span>
+                              )}
+                            </div>
                             {item.data_pagamento && (
                               <p className="text-emerald-700 font-semibold mt-0.5">
                                 Rec: {formatDate(item.data_pagamento)}
@@ -1283,6 +1306,19 @@ export function FinancePage() {
                                     Reabrir / Desmarcar
                                   </Button>
                                 )}
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    setParcelaParaEditarVencimento(item)
+                                    setEditarVencimentoOpen(true)
+                                  }}
+                                  className="h-8 w-8 p-0 text-neutral-400 hover:text-[#D65100] hover:bg-orange-50"
+                                  title="Editar data de vencimento"
+                                  aria-label={`Editar vencimento da parcela ${item.descricao}`}
+                                >
+                                  <Calendar className="h-4 w-4" />
+                                </Button>
                                 <Button
                                   variant="ghost"
                                   size="sm"
@@ -1369,7 +1405,21 @@ export function FinancePage() {
                         {formatCurrency(item.valor)}
                       </span>
                       <div className="text-right text-[#737373]">
-                        <p>Venc: {formatDate(item.vencimento)}</p>
+                        {canWrite ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setParcelaParaEditarVencimento(item)
+                              setEditarVencimentoOpen(true)
+                            }}
+                            className="inline-flex items-center gap-1 font-mono font-semibold text-neutral-800 hover:text-[#D65100]"
+                          >
+                            <span>Venc: {formatDate(item.vencimento)}</span>
+                            <Calendar className="h-3 w-3 text-neutral-400" />
+                          </button>
+                        ) : (
+                          <p>Venc: {formatDate(item.vencimento)}</p>
+                        )}
                         {item.data_pagamento && (
                           <p className="text-emerald-700 font-semibold">
                             Rec: {formatDate(item.data_pagamento)}
@@ -1378,7 +1428,7 @@ export function FinancePage() {
                       </div>
                     </div>
                     {canWrite && (
-                      <div className="pt-1">
+                      <div className="pt-1 flex flex-col gap-1.5">
                         {item.status !== 'paga' ? (
                           <Button
                             className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
@@ -1399,6 +1449,18 @@ export function FinancePage() {
                             Reabrir / Desmarcar recebimento
                           </Button>
                         )}
+                        <Button
+                          className="w-full border-orange-200 text-[#D65100] hover:bg-orange-50"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setParcelaParaEditarVencimento(item)
+                            setEditarVencimentoOpen(true)
+                          }}
+                        >
+                          <Calendar className="mr-1.5 h-3.5 w-3.5 text-[#FF6A13]" />
+                          Editar vencimento
+                        </Button>
                         <Button
                           className="w-full text-rose-600 hover:bg-rose-50 border-rose-200"
                           variant="outline"
@@ -1910,6 +1972,19 @@ export function FinancePage() {
           }
           void installments.reload()
           void projects.reload()
+        }}
+      />
+
+      {/* Modal de Edição da Data de Vencimento da Parcela */}
+      <EditarVencimentoParcelaModal
+        open={editarVencimentoOpen}
+        onOpenChange={setEditarVencimentoOpen}
+        parcela={parcelaParaEditarVencimento}
+        projetoId={parcelaParaEditarVencimento?.projeto}
+        projetoNumero={parcelaParaEditarVencimento?.expand?.projeto?.numero}
+        clienteId={parcelaParaEditarVencimento?.cliente}
+        onSuccess={() => {
+          void installments.reload()
         }}
       />
 

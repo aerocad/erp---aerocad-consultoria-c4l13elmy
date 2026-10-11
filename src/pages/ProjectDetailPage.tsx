@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import {
   ArrowLeft,
+  Calendar,
   CalendarDays,
   Copy,
   Edit3,
@@ -30,6 +31,7 @@ import { EditarProjetoModal } from '@/components/projetos/EditarProjetoModal'
 import { ExcluirProjetoModal } from '@/components/projetos/ExcluirProjetoModal'
 import { VincularNfseProjetoModal } from '@/components/financeiro/VincularNfseProjetoModal'
 import { ConfirmarExcluirNotaModal } from '@/components/financeiro/ConfirmarExcluirNotaModal'
+import { EditarVencimentoParcelaModal } from '@/components/financeiro/EditarVencimentoParcelaModal'
 import { NotaExclusaoAlvo } from '@/services/exclusaoService'
 import { Button } from '@/components/ui/button'
 import { Archive, ArchiveRestore } from 'lucide-react'
@@ -85,6 +87,9 @@ export default function ProjectDetailPage() {
   const [vincularNfseOpen, setVincularNfseOpen] = useState(false)
   const [excluirNotaOpen, setExcluirNotaOpen] = useState(false)
   const [notasParaExcluir, setNotasParaExcluir] = useState<NotaExclusaoAlvo[]>([])
+  const [parcelaParaEditarVencimento, setParcelaParaEditarVencimento] =
+    useState<ParcelaRecord | null>(null)
+  const [editarVencimentoOpen, setEditarVencimentoOpen] = useState(false)
   const [note, setNote] = useState('')
   const [excluirModalOpen, setExcluirModalOpen] = useState(false)
   const [editNomeOpen, setEditNomeOpen] = useState(false)
@@ -102,6 +107,7 @@ export default function ProjectDetailPage() {
   const canManageFinanceiro = ['admin', 'financeiro'].includes(user?.role || '')
   const canAnexarNfse = ['admin', 'financeiro', 'tecnico'].includes(user?.role || '')
   const canExcluirNfse = ['admin', 'financeiro'].includes(user?.role || '')
+  const canEditVencimento = ['admin', 'financeiro', 'tecnico'].includes(user?.role || '')
 
   const load = async () => {
     setLoading(true)
@@ -834,6 +840,9 @@ export default function ProjectDetailPage() {
                               · Fat: {formatDate(inst.data_faturamento)}
                             </span>
                           )}
+                          <span className="text-neutral-400">
+                            · Venc: {formatDate(inst.vencimento)}
+                          </span>
                         </div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
@@ -841,10 +850,46 @@ export default function ProjectDetailPage() {
                           <span className="mono-value font-bold text-[11px] text-[#1F1F1F]">
                             {formatCurrency(inst.valor)}
                           </span>
+                          <div className="flex items-center justify-end gap-1">
+                            {canEditVencimento ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setParcelaParaEditarVencimento(inst)
+                                  setEditarVencimentoOpen(true)
+                                }}
+                                className="inline-flex items-center gap-1 font-mono text-[10px] text-neutral-600 hover:text-[#D65100] hover:underline transition"
+                                title="Editar data de vencimento da parcela"
+                              >
+                                <Calendar className="h-2.5 w-2.5 text-neutral-400 group-hover:text-[#FF6A13]" />
+                                <span>{formatDate(inst.vencimento)}</span>
+                                <Edit3 className="h-2.5 w-2.5 text-neutral-400 opacity-60 group-hover:opacity-100" />
+                              </button>
+                            ) : (
+                              <span className="font-mono text-[10px] text-neutral-500">
+                                Venc: {formatDate(inst.vencimento)}
+                              </span>
+                            )}
+                          </div>
                           {inst.status === 'paga' && (
                             <p className="text-[10px] text-emerald-600 font-semibold">Quitada</p>
                           )}
                         </div>
+                        {canEditVencimento && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setParcelaParaEditarVencimento(inst)
+                              setEditarVencimentoOpen(true)
+                            }}
+                            className="h-7 w-7 p-0 text-neutral-400 hover:text-[#D65100] hover:bg-orange-50 opacity-80 group-hover:opacity-100 transition"
+                            title="Editar data de vencimento da fatura/parcela"
+                            aria-label={`Editar vencimento da parcela ${inst.descricao}`}
+                          >
+                            <Calendar className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
                         {canExcluirNfse && inst.nf_numero && (
                           <Button
                             variant="ghost"
@@ -1011,6 +1056,17 @@ export default function ProjectDetailPage() {
         open={excluirNotaOpen}
         onOpenChange={setExcluirNotaOpen}
         notas={notasParaExcluir}
+        onSuccess={() => void load()}
+      />
+
+      {/* Modal de Edição da Data de Vencimento da Parcela / Fatura */}
+      <EditarVencimentoParcelaModal
+        open={editarVencimentoOpen}
+        onOpenChange={setEditarVencimentoOpen}
+        parcela={parcelaParaEditarVencimento}
+        projetoId={project.id}
+        projetoNumero={project.numero}
+        clienteId={project.cliente}
         onSuccess={() => void load()}
       />
     </div>

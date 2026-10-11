@@ -18,6 +18,7 @@ import { toast } from 'sonner'
 
 import { CrmBadge } from '@/components/common/CrmBadge'
 import { EmptyState } from '@/components/common/States'
+import { EditarVencimentoParcelaModal } from '@/components/financeiro/EditarVencimentoParcelaModal'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -113,6 +114,9 @@ export function ContasReceberTab({
   )
   const [valorRecebidoModal, setValorRecebidoModal] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [parcelaParaEditarVencimento, setParcelaParaEditarVencimento] =
+    useState<ParcelaRecord | null>(null)
+  const [editarVencimentoOpen, setEditarVencimentoOpen] = useState(false)
 
   // Form avulso
   const [formAvulso, setFormAvulso] = useState<{
@@ -601,15 +605,36 @@ export function ContasReceberTab({
                       }`}
                     >
                       <td className="px-4 py-3 whitespace-nowrap">
-                        <span
-                          className={`font-mono font-medium ${
-                            item.status === 'vencido'
-                              ? 'text-rose-700 font-bold'
-                              : 'text-neutral-800'
-                          }`}
-                        >
-                          {formatDate(item.dataVencimento)}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          {canWrite && item.origemTipo === 'parcela' ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setParcelaParaEditarVencimento(item.rawItem as ParcelaRecord)
+                                setEditarVencimentoOpen(true)
+                              }}
+                              className={`inline-flex items-center gap-1 font-mono font-medium hover:text-[#D65100] hover:underline transition ${
+                                item.status === 'vencido'
+                                  ? 'text-rose-700 font-bold'
+                                  : 'text-neutral-800'
+                              }`}
+                              title="Editar data de vencimento da parcela"
+                            >
+                              <span>{formatDate(item.dataVencimento)}</span>
+                              <Calendar className="h-3 w-3 text-neutral-400 hover:text-[#FF6A13]" />
+                            </button>
+                          ) : (
+                            <span
+                              className={`font-mono font-medium ${
+                                item.status === 'vencido'
+                                  ? 'text-rose-700 font-bold'
+                                  : 'text-neutral-800'
+                              }`}
+                            >
+                              {formatDate(item.dataVencimento)}
+                            </span>
+                          )}
+                        </div>
                         {item.dataRecebimento && (
                           <p className="text-[10px] text-emerald-700 font-semibold">
                             Rec: {formatDate(item.dataRecebimento)}
@@ -703,6 +728,22 @@ export function ContasReceberTab({
                                 >
                                   <RotateCcw className="mr-1 h-3 w-3" />
                                   Reabrir
+                                </Button>
+                              )}
+
+                              {item.origemTipo === 'parcela' && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => {
+                                    setParcelaParaEditarVencimento(item.rawItem as ParcelaRecord)
+                                    setEditarVencimentoOpen(true)
+                                  }}
+                                  className="h-7 w-7 p-0 text-neutral-400 hover:text-[#D65100] hover:bg-orange-50"
+                                  title="Editar data de vencimento da parcela"
+                                  aria-label={`Editar vencimento de ${item.descricao}`}
+                                >
+                                  <Calendar className="h-3.5 w-3.5" />
                                 </Button>
                               )}
 
@@ -1044,6 +1085,19 @@ export function ContasReceberTab({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Modal Editar Vencimento da Parcela */}
+      <EditarVencimentoParcelaModal
+        open={editarVencimentoOpen}
+        onOpenChange={setEditarVencimentoOpen}
+        parcela={parcelaParaEditarVencimento}
+        projetoId={parcelaParaEditarVencimento?.projeto}
+        projetoNumero={parcelaParaEditarVencimento?.expand?.projeto?.numero}
+        clienteId={parcelaParaEditarVencimento?.cliente}
+        onSuccess={async () => {
+          await onReloadParcelas()
+        }}
+      />
 
       {/* Modal Excluir Avulso */}
       <Dialog open={!!excluindoAvulso} onOpenChange={() => setExcluindoAvulso(null)}>
