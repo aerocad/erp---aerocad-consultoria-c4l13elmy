@@ -173,3 +173,89 @@ export function isTecnicoAllowedExtension(ext?: string | null): boolean {
 export function firstName(name?: string) {
   return (name || '').trim().split(' ')[0] || 'equipe'
 }
+
+/**
+ * Cargos padronizados sugeridos na AEROCAD, agrupados por área.
+ * Inclui o cargo SDR na área comercial / pré-vendas.
+ */
+export const CARGOS_SUGERIDOS = [
+  // Comercial / Pré-Vendas
+  { cargo: 'SDR', area: 'Comercial' },
+  { cargo: 'Executivo(a) de Contas', area: 'Comercial' },
+  { cargo: 'Gerente Comercial', area: 'Comercial' },
+  { cargo: 'Consultor(a) de Negócios', area: 'Comercial' },
+
+  // Diretoria & Gestão
+  { cargo: 'Diretor(a) Executivo(a)', area: 'Diretoria' },
+  { cargo: 'Gerente de Negócios e Administração', area: 'Diretoria' },
+  { cargo: 'Coordenador(a) de Projetos', area: 'Diretoria' },
+
+  // Engenharia e Corpo Técnico
+  { cargo: 'Engenheiro(a) Civil', area: 'Técnico' },
+  { cargo: 'Engenheiro(a) Cartógrafo(a)', area: 'Técnico' },
+  { cargo: 'Engenheiro(a) Agrimensor(a)', area: 'Técnico' },
+  { cargo: 'Arquiteto(a) e Urbanista', area: 'Técnico' },
+  { cargo: 'Analista Técnico(a) de Projetos', area: 'Técnico' },
+  { cargo: 'Analista Sênior OPEA', area: 'Técnico' },
+  { cargo: 'Projetista CAD / SIG', area: 'Técnico' },
+
+  // Administrativo & Financeiro
+  { cargo: 'Analista Financeiro(a)', area: 'Administrativo' },
+  { cargo: 'Assistente Administrativo(a)', area: 'Administrativo' },
+] as const
+
+/**
+ * Funções / Especialidades padronizadas na AEROCAD, agrupadas por área.
+ * SDR (Sales Development Representative / Pré-Vendas) atua na qualificação de leads e primeiro contato.
+ */
+export const FUNCOES_SUGERIDAS = [
+  // Comercial / Pré-Vendas
+  { funcao: 'SDR', label: 'SDR (Pré-vendas / Qualificação de Leads)', area: 'Comercial' },
+  { funcao: 'Pré-Vendas & Qualificação', label: 'Pré-Vendas & Qualificação', area: 'Comercial' },
+  {
+    funcao: 'Prospecção & Novos Negócios',
+    label: 'Prospecção & Novos Negócios',
+    area: 'Comercial',
+  },
+  { funcao: 'Negociação & Fechamento', label: 'Negociação & Fechamento', area: 'Comercial' },
+
+  // Gestão & Representação
+  { funcao: 'Representante Legal', label: 'Representante Legal', area: 'Gestão' },
+  {
+    funcao: 'Coordenação de Projetos e Contratos',
+    label: 'Coordenação de Projetos e Contratos',
+    area: 'Gestão',
+  },
+
+  // Técnica & Regulatória
+  { funcao: 'Responsável Técnico (RT)', label: 'Responsável Técnico (RT)', area: 'Técnico' },
+  { funcao: 'Processos OPEA / DECEA', label: 'Processos OPEA / DECEA', area: 'Técnico' },
+  { funcao: 'PBZPA / PZPANA', label: 'PBZPA / PZPANA', area: 'Técnico' },
+  {
+    funcao: 'Registro e Homologação de Aeródromos (ANAC)',
+    label: 'Registro e Homologação de Aeródromos (ANAC)',
+    area: 'Técnico',
+  },
+  {
+    funcao: 'Helipontos e Helipontos Hospitalares',
+    label: 'Helipontos e Helipontos Hospitalares',
+    area: 'Técnico',
+  },
+  {
+    funcao: 'Estudos de Viabilidade & Espaço Aéreo',
+    label: 'Estudos de Viabilidade & Espaço Aéreo',
+    area: 'Técnico',
+  },
+
+  // Administrativo & Financeiro
+  {
+    funcao: 'Faturamento & Conciliação',
+    label: 'Faturamento & Conciliação',
+    area: 'Administrativo',
+  },
+  {
+    funcao: 'Gestão Financeira & Balancetes',
+    label: 'Gestão Financeira & Balancetes',
+    area: 'Administrativo',
+  },
+] as const
