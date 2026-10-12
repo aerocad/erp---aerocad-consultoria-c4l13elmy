@@ -17,6 +17,7 @@ import {
   Trash2,
   Users,
   WalletCards,
+  Layers,
 } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -32,6 +33,7 @@ import { ArquivarProjetoModal } from '@/components/projetos/ArquivarProjetoModal
 import { EditarNomeProjetoModal } from '@/components/projetos/EditarNomeProjetoModal'
 import { EditarProjetoModal } from '@/components/projetos/EditarProjetoModal'
 import { ExcluirProjetoModal } from '@/components/projetos/ExcluirProjetoModal'
+import { GerenciarParcelamentoModal } from '@/components/projetos/GerenciarParcelamentoModal'
 import { VincularNfseProjetoModal } from '@/components/financeiro/VincularNfseProjetoModal'
 import { ConfirmarExcluirNotaModal } from '@/components/financeiro/ConfirmarExcluirNotaModal'
 import { EditarVencimentoParcelaModal } from '@/components/financeiro/EditarVencimentoParcelaModal'
@@ -101,6 +103,7 @@ export default function ProjectDetailPage() {
   const [parcelaParaEditarVencimento, setParcelaParaEditarVencimento] =
     useState<ParcelaRecord | null>(null)
   const [editarVencimentoOpen, setEditarVencimentoOpen] = useState(false)
+  const [parcelamentoModalOpen, setParcelamentoModalOpen] = useState(false)
   const [note, setNote] = useState('')
   const [excluirModalOpen, setExcluirModalOpen] = useState(false)
   const [editNomeOpen, setEditNomeOpen] = useState(false)
@@ -117,10 +120,11 @@ export default function ProjectDetailPage() {
   const canArchive = ['admin', 'tecnico'].includes(user?.role || '')
   const canManageFinanceiro = ['admin', 'financeiro'].includes(user?.role || '')
   const userCanViewFinancials = canViewFinancials(user?.role)
-  const userCanViewNfse = canViewNfse(user?.role)
-  const canAnexarNfse = userCanViewNfse && ['admin', 'financeiro'].includes(user?.role || '')
-  const canExcluirNfse = userCanViewNfse && ['admin', 'financeiro'].includes(user?.role || '')
-  const canEditVencimento = userCanViewNfse && ['admin', 'financeiro'].includes(user?.role || '')
+  const userCanViewNfseRole = canViewNfse(user?.role)
+  const canAnexarNfse = userCanViewNfseRole && ['admin', 'financeiro'].includes(user?.role || '')
+  const canExcluirNfse = userCanViewNfseRole && ['admin', 'financeiro'].includes(user?.role || '')
+  const canEditVencimento =
+    userCanViewNfseRole && ['admin', 'financeiro'].includes(user?.role || '')
   const canAccessClients = canAccess(user?.role, 'clientes')
 
   const load = async () => {
@@ -220,6 +224,15 @@ export default function ProjectDetailPage() {
   const paid = installments
     .filter((i) => i.status === 'paga')
     .reduce((s, i) => s + (i.valor_recebido || i.valor), 0)
+  const paidCount = installments.filter((i) => i.status === 'paga').length
+  const totalCount = installments.length
+
+  // Próximo vencimento em aberto
+  const parcelasEmAberto = installments
+    .filter((i) => i.status !== 'paga' && i.vencimento)
+    .sort((a, b) => new Date(a.vencimento).getTime() - new Date(b.vencimento).getTime())
+  const proximoVencimento = parcelasEmAberto[0]?.vencimento || null
+
   const resumoFinanceiro = calcularResumoFinanceiroProjeto(project, installments)
   const badgeFinanceiro = getStatusFinanceiroBadgeConfig(resumoFinanceiro)
   const days = project.prazo
@@ -809,14 +822,14 @@ export default function ProjectDetailPage() {
           </section>
         </div>
         <aside className="space-y-5">
-          {userCanViewFinancials && userCanViewNfse && (
+          {userCanViewFinancials && userCanViewNfseRole && (
             <section className="crm-card p-5">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="technical-label">FINANCEIRO & FATURAMENTO</p>
                   <h2 className="font-bold">Resumo do projeto</h2>
                 </div>
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1">
                   {canEditProject && (
                     <Button
                       variant="ghost"
@@ -825,11 +838,23 @@ export default function ProjectDetailPage() {
                         setEditProjetoInitialTab('financeiro')
                         setEditProjetoModalOpen(true)
                       }}
-                      className="h-7 px-2 text-xs text-[#FF6A13] hover:bg-orange-50"
-                      title="Editar valor global e faturamento"
+                      className="h-7 px-2 text-xs text-[#FF6A13] hover:bg-orange-50 font-medium"
+                      title="Editar valor global e proposta/contrato"
                     >
                       <Edit3 className="mr-1 h-3.5 w-3.5" />
                       Editar valor
+                    </Button>
+                  )}
+                  {canManageFinanceiro && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setParcelamentoModalOpen(true)}
+                      className="h-7 px-2.5 text-xs border-orange-300 bg-orange-50/70 text-[#D65100] hover:bg-orange-100 font-semibold"
+                      title="Criar, recalcular ou alterar parcelas do projeto"
+                    >
+                      <Layers className="mr-1 h-3.5 w-3.5 text-[#FF6A13]" />
+                      Parcelamento
                     </Button>
                   )}
                   <WalletCards className="h-5 w-5 text-[#FF6A13]" />
@@ -908,6 +933,41 @@ export default function ProjectDetailPage() {
                   </div>
                 </div>
 
+                {/* Resumo do Parcelamento (X de Y quitadas, Total, Próximo Vencimento) */}
+                <div className="pt-2 border-t border-neutral-200/80 text-[11px] space-y-1">
+                  <div className="flex items-center justify-between text-neutral-600">
+                    <span className="font-semibold text-neutral-700">Parcelamento:</span>
+                    <span className="font-medium">
+                      {totalCount > 0 ? (
+                        <>
+                          <strong className="text-emerald-700">{paidCount}</strong> de{' '}
+                          <strong>{totalCount}</strong> quitada(s)
+                        </>
+                      ) : (
+                        <span className="text-neutral-400">Nenhum parcelamento ativo</span>
+                      )}
+                    </span>
+                  </div>
+
+                  {totalCount > 0 && (
+                    <div className="flex items-center justify-between text-neutral-600">
+                      <span>Total das parcelas:</span>
+                      <span className="mono-value font-bold text-neutral-800">
+                        {formatCurrency(financialTotal)}
+                      </span>
+                    </div>
+                  )}
+
+                  {proximoVencimento && (
+                    <div className="flex items-center justify-between text-neutral-600">
+                      <span>Próximo vencimento:</span>
+                      <span className="font-mono font-bold text-[#D65100]">
+                        {formatDate(proximoVencimento)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
                 {resumoFinanceiro.numerosNotas.length > 0 && (
                   <div className="pt-2 border-t text-[11px] text-[#666]">
                     <span className="font-medium">
@@ -926,18 +986,32 @@ export default function ProjectDetailPage() {
                   <p className="text-[11px] font-bold uppercase tracking-wider text-neutral-500">
                     Notas NFS-e & Parcelas ({installments.length})
                   </p>
-                  {canAnexarNfse && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setVincularNfseOpen(true)}
-                      className="h-6 text-[11px] border-orange-300 text-[#D65100] hover:bg-orange-50 px-2 font-medium"
-                      title="Anexar XML de NFS-e ou vincular nota existente"
-                    >
-                      <Plus className="mr-1 h-3 w-3 text-[#FF6A13]" />
-                      Anexar NFS-e
-                    </Button>
-                  )}
+                  <div className="flex items-center gap-1.5">
+                    {canManageFinanceiro && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setParcelamentoModalOpen(true)}
+                        className="h-6 text-[11px] border-orange-200 text-[#D65100] hover:bg-orange-50 px-2 font-semibold"
+                        title="Criar ou editar parcelas do projeto"
+                      >
+                        <Layers className="mr-1 h-3 w-3 text-[#FF6A13]" />
+                        Criar/Editar parcelas
+                      </Button>
+                    )}
+                    {canAnexarNfse && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setVincularNfseOpen(true)}
+                        className="h-6 text-[11px] border-orange-300 text-[#D65100] hover:bg-orange-50 px-2 font-medium"
+                        title="Anexar XML de NFS-e ou vincular nota existente"
+                      >
+                        <Plus className="mr-1 h-3 w-3 text-[#FF6A13]" />
+                        Anexar NFS-e
+                      </Button>
+                    )}
+                  </div>
                 </div>
 
                 {installments.length > 0 ? (
@@ -1191,6 +1265,15 @@ export default function ProjectDetailPage() {
         projetoId={project.id}
         projetoNumero={project.numero}
         clienteId={project.cliente}
+        onSuccess={() => void load()}
+      />
+
+      {/* Modal Completo de Criar / Alterar Parcelamento */}
+      <GerenciarParcelamentoModal
+        open={parcelamentoModalOpen}
+        onOpenChange={setParcelamentoModalOpen}
+        projeto={project}
+        parcelas={installments}
         onSuccess={() => void load()}
       />
     </div>
