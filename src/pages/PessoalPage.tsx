@@ -6,6 +6,7 @@ import {
   Calendar,
   CheckCircle2,
   DollarSign,
+  Download,
   Edit2,
   Filter,
   GraduationCap,
@@ -22,6 +23,7 @@ import {
   XCircle,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { exportarTabelaParaXlsx, ColunaXlsx } from '@/services/aerocadXlsxExporter'
 
 import { CrmBadge } from '@/components/common/CrmBadge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -63,6 +65,7 @@ export const REGIME_CONTRATACAO_LABELS: Record<RegimeContratacao, string> = {
   pf_clt: 'CLT (Pessoa Física)',
   pf_autonomo: 'Autônomo / RPA (Pessoa Física)',
   pj: 'PJ (Pessoa Jurídica)',
+  socio: 'Sócio(a)',
 }
 
 interface ColaboradorFormData {
@@ -341,6 +344,75 @@ export default function PessoalPage() {
     }
   }
 
+  async function handleExportarXlsx() {
+    try {
+      const colunas: ColunaXlsx[] = [
+        { header: 'Nome Completo', key: 'nome_completo', width: 32 },
+        { header: 'CPF / CNPJ', key: 'cpf_cnpj', width: 18 },
+        { header: 'Cargo', key: 'cargo', width: 26 },
+        { header: 'Função', key: 'funcao', width: 26 },
+        { header: 'Regime de Contratação', key: 'regime_formatado', width: 24 },
+        { header: 'Empresa PJ / Vínculo', key: 'empresa_pj', width: 26 },
+        { header: 'E-mail', key: 'email', width: 28 },
+        { header: 'Telefone', key: 'telefone', width: 18 },
+        { header: 'Data Admissão', key: 'data_admissao_formatada', width: 16 },
+        { header: 'Situação', key: 'situacao_formatada', width: 14 },
+        { header: 'Perfil Técnico', key: 'perfil_tecnico', width: 20 },
+        { header: 'Conselho / Registro', key: 'registro_profissional', width: 20 },
+        { header: 'Remuneração Base (R$)', key: 'remuneracao_base', width: 20, tipo: 'moeda' },
+      ]
+
+      const linhas = colaboradoresFiltrados.map((c) => {
+        const regimeFormatado =
+          REGIME_CONTRATACAO_LABELS[c.regime_contratacao] || c.regime_contratacao
+        const perfil = c.eh_rt
+          ? 'Responsável Técnico (RT)'
+          : c.eh_tecnico
+            ? 'Corpo Técnico'
+            : 'Administrativo / Geral'
+        const registro = c.registro_profissional_numero
+          ? `${c.registro_profissional_tipo || 'CREA'} ${c.registro_profissional_numero}${
+              c.registro_profissional_uf ? `/${c.registro_profissional_uf}` : ''
+            }`
+          : ''
+        return {
+          nome_completo: c.nome_completo || '',
+          cpf_cnpj: c.cpf_cnpj || '',
+          cargo: c.cargo || '',
+          funcao: c.funcao || '',
+          regime_formatado: regimeFormatado,
+          empresa_pj:
+            c.empresa_pj ||
+            c.expand?.fornecedor_vinculado?.razao_social ||
+            (c.regime_contratacao === 'socio' ? 'Sócio(a) Cotista AEROCAD' : ''),
+          email: c.email || '',
+          telefone: c.telefone || '',
+          data_admissao_formatada: c.data_admissao ? formatDate(c.data_admissao) : '',
+          situacao_formatada: c.situacao === 'ativo' ? 'Ativo' : 'Inativo',
+          perfil_tecnico: perfil,
+          registro_profissional: registro,
+          remuneracao_base: c.remuneracao_base || 0,
+        }
+      })
+
+      await exportarTabelaParaXlsx({
+        nomeArquivo: 'colaboradores_aerocad',
+        tituloRelatorio: 'Quadro Geral de Pessoal e Colaboradores',
+        subtitulo: `Total de ${linhas.length} colaboradores filtrados`,
+        usuarioNome: user?.name,
+        userRole: user?.role,
+        permitirValoresReais: !ocultarValores,
+        colunas,
+        linhas,
+      })
+
+      toast.success('Listagem de colaboradores exportada em XLSX!')
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      toast.error('Erro ao exportar planilha: ' + msg)
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Cabeçalho */}
@@ -362,20 +434,33 @@ export default function PessoalPage() {
               <h1 className="text-xl font-bold text-[#333]">Pessoal & Colaboradores</h1>
               <p className="text-xs text-[#737373] mt-0.5">
                 Gestão da equipe interna AEROCAD, cargos, funções técnicas, regime de contratação
-                (CLT, Autônomo e PJ) e vínculos fornecedor.
+                (CLT, Autônomo, PJ e Sócio(a)) e vínculos fornecedor.
               </p>
             </div>
           </div>
 
-          {canEdit && (
+          <div className="flex items-center gap-2 shrink-0">
             <Button
-              onClick={handleOpenCreate}
-              className="bg-[#FF6A13] hover:bg-[#E85B06] text-white font-bold text-xs shrink-0"
+              variant="outline"
+              size="sm"
+              onClick={handleExportarXlsx}
+              disabled={loading || colaboradoresFiltrados.length === 0}
+              className="text-xs h-9 border-[#FF6A13]/40 text-[#D65100] hover:bg-orange-50 font-semibold"
+              title="Exportar listagem de colaboradores para Excel (.XLSX)"
             >
-              <UserPlus className="mr-1.5 h-4 w-4" />
-              Novo Colaborador
+              <Download className="mr-1.5 h-3.5 w-3.5" />
+              Exportar XLSX
             </Button>
-          )}
+            {canEdit && (
+              <Button
+                onClick={handleOpenCreate}
+                className="bg-[#FF6A13] hover:bg-[#E85B06] text-white font-bold text-xs h-9"
+              >
+                <UserPlus className="mr-1.5 h-4 w-4" />
+                Novo Colaborador
+              </Button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -415,6 +500,7 @@ export default function PessoalPage() {
               <SelectItem value="pf_clt">PF — CLT</SelectItem>
               <SelectItem value="pf_autonomo">PF — Autônomo</SelectItem>
               <SelectItem value="pj">PJ — Pessoa Jurídica</SelectItem>
+              <SelectItem value="socio">Sócio(a)</SelectItem>
             </SelectContent>
           </Select>
 
@@ -536,7 +622,17 @@ export default function PessoalPage() {
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      <span className="inline-flex rounded-full bg-neutral-100 text-neutral-800 text-[10px] font-semibold px-2 py-0.5 border border-neutral-200">
+                      <span
+                        className={`inline-flex rounded-full text-[10px] font-semibold px-2 py-0.5 border ${
+                          item.regime_contratacao === 'socio'
+                            ? 'bg-purple-50 text-purple-700 border-purple-200'
+                            : item.regime_contratacao === 'pj'
+                              ? 'bg-blue-50 text-blue-700 border-blue-200'
+                              : item.regime_contratacao === 'pf_clt'
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                : 'bg-neutral-100 text-neutral-800 border-neutral-200'
+                        }`}
+                      >
                         {REGIME_CONTRATACAO_LABELS[item.regime_contratacao] ||
                           item.regime_contratacao}
                       </span>
@@ -548,6 +644,11 @@ export default function PessoalPage() {
                               {item.empresa_pj || item.expand?.fornecedor_vinculado?.razao_social}
                             </span>
                           ) : null}
+                        </div>
+                      )}
+                      {item.regime_contratacao === 'socio' && (
+                        <div className="text-[10px] text-purple-600 font-medium mt-0.5 flex items-center gap-1">
+                          <span>Quadro Societário AEROCAD</span>
                         </div>
                       )}
                     </td>
@@ -817,6 +918,7 @@ export default function PessoalPage() {
                     <SelectItem value="pf_clt">PF — CLT</SelectItem>
                     <SelectItem value="pf_autonomo">PF — Autônomo / RPA</SelectItem>
                     <SelectItem value="pj">PJ — Pessoa Jurídica</SelectItem>
+                    <SelectItem value="socio">Sócio(a)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

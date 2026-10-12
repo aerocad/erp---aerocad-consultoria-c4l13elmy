@@ -453,7 +453,7 @@ export interface FornecedorRecord extends RecordModel {
   }
 }
 
-export type RegimeContratacao = 'pf_clt' | 'pf_autonomo' | 'pj'
+export type RegimeContratacao = 'pf_clt' | 'pf_autonomo' | 'pj' | 'socio'
 
 export type RegistroProfissionalTipo = 'CREA' | 'CAU' | 'CFT' | 'CRQ' | 'OUTRO'
 

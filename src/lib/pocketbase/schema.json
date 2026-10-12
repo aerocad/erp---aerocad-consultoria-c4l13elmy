@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-11T22:30:25.954Z",
+  "generatedAt": "2026-10-12T00:31:46.377Z",
   "collections": [
     {
       "name": "users",
@@ -2957,7 +2957,7 @@
           "type": "select",
           "required": true,
           "system": false,
-          "selectValues": ["pf_clt", "pf_autonomo", "pj"]
+          "selectValues": ["pf_clt", "pf_autonomo", "pj", "socio"]
         },
         {
           "name": "empresa_pj",
