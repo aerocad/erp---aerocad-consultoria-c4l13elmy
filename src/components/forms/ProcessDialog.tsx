@@ -25,7 +25,14 @@ import {
   type EquipeTecnicaValue,
 } from '@/components/projetos/EquipeTecnicaSection'
 import { createOne, listAll } from '@/services/api'
-import type { ColaboradorRecord, ProcessoRecord, ProjetoRecord } from '@/types/crm'
+import type {
+  ColaboradorRecord,
+  ProcessoOrgao,
+  ProcessoRecord,
+  ProcessoStatus,
+  ProjetoRecord,
+} from '@/types/crm'
+import { processOrgaoList, processStatusLabels } from '@/lib/crm'
 
 type Props = {
   open: boolean
@@ -43,7 +50,19 @@ export function ProcessDialog({ open, onOpenChange, presetProject, onSaved }: Pr
     analistaId: undefined,
     rtsIds: [],
   })
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<{
+    projeto: string
+    orgao: ProcessoOrgao
+    numero_protocolo: string
+    data_protocolo: string
+    status: ProcessoStatus
+    prazo_orgao: string
+    parecer: 'favoravel' | 'favoravel_com_restricoes' | 'desfavoravel' | 'pendente'
+    link_ambiente: string
+    link_drive: string
+    link_emails: string
+    observacoes: string
+  }>({
     projeto: '',
     orgao: 'DECEA-CINDACTA',
     numero_protocolo: '',
@@ -163,14 +182,19 @@ export function ProcessDialog({ open, onOpenChange, presetProject, onSaved }: Pr
           </div>
           <div className="space-y-2">
             <Label>Órgão *</Label>
-            <Select value={form.orgao} onValueChange={(orgao) => setForm((v) => ({ ...v, orgao }))}>
+            <Select
+              value={form.orgao}
+              onValueChange={(orgao) => setForm((v) => ({ ...v, orgao: orgao as ProcessoOrgao }))}
+            >
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="DECEA-CINDACTA">DECEA-CINDACTA</SelectItem>
-                <SelectItem value="COMAER">COMAER</SelectItem>
-                <SelectItem value="ANAC">ANAC</SelectItem>
+                {processOrgaoList.map((org) => (
+                  <SelectItem key={org} value={org}>
+                    {org}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -178,15 +202,19 @@ export function ProcessDialog({ open, onOpenChange, presetProject, onSaved }: Pr
             <Label>Status</Label>
             <Select
               value={form.status}
-              onValueChange={(status) => setForm((v) => ({ ...v, status }))}
+              onValueChange={(status) =>
+                setForm((v) => ({ ...v, status: status as ProcessoStatus }))
+              }
             >
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="nao_protocolado">Não protocolado</SelectItem>
-                <SelectItem value="protocolado">Protocolado</SelectItem>
-                <SelectItem value="em_exigencia">Em exigência</SelectItem>
+                {(Object.keys(processStatusLabels) as ProcessoStatus[]).map((stKey) => (
+                  <SelectItem key={stKey} value={stKey}>
+                    {processStatusLabels[stKey]}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>

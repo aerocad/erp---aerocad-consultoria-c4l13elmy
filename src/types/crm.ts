@@ -118,18 +118,31 @@ export interface ProjetoRecord extends RecordModel {
   }
 }
 
+export type ProcessoOrgao =
+  | 'DECEA-CINDACTA'
+  | 'COMAER'
+  | 'ANAC'
+  | 'DECEA'
+  | 'CINDACTA'
+  | 'SAC'
+  | 'Prefeitura / Órgão Municipal'
+  | 'Outro'
+
+export type ProcessoStatus =
+  | 'nao_protocolado'
+  | 'protocolado'
+  | 'em_analise'
+  | 'em_exigencia'
+  | 'deferido'
+  | 'indeferido'
+  | 'arquivado'
+
 export interface ProcessoRecord extends RecordModel {
   projeto: string
-  orgao: 'DECEA-CINDACTA' | 'COMAER' | 'ANAC'
+  orgao: ProcessoOrgao
   numero_protocolo: string
   data_protocolo: string
-  status:
-    | 'nao_protocolado'
-    | 'protocolado'
-    | 'em_exigencia'
-    | 'deferido'
-    | 'indeferido'
-    | 'arquivado'
+  status: ProcessoStatus
   prazo_orgao: string
   parecer: 'favoravel' | 'favoravel_com_restricoes' | 'desfavoravel' | 'pendente'
   data_parecer: string

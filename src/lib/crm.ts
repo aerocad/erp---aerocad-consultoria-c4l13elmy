@@ -82,13 +82,25 @@ export const trailPhases: Record<Trail, string[]> = {
 }
 
 export const processStatusLabels = {
-  nao_protocolado: 'Não protocolado',
-  protocolado: 'Protocolado',
-  em_exigencia: 'Em exigência',
-  deferido: 'Deferido',
+  nao_protocolado: 'A protocolar',
+  protocolado: 'Protocolado (aguardando análise)',
+  em_analise: 'Em análise no órgão',
+  em_exigencia: 'Exigência pendente',
+  deferido: 'Deferido/Aprovado',
   indeferido: 'Indeferido',
   arquivado: 'Arquivado',
 } as const
+
+export const processOrgaoList = [
+  'DECEA-CINDACTA',
+  'COMAER',
+  'ANAC',
+  'DECEA',
+  'CINDACTA',
+  'SAC',
+  'Prefeitura / Órgão Municipal',
+  'Outro',
+] as const
 
 export const permissions: Record<Role, string[]> = {
   admin: [

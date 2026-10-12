@@ -17,7 +17,7 @@ import {
 } from '@/components/ui/select'
 import { useAuth } from '@/contexts/AuthContext'
 import { useCrmData } from '@/hooks/use-crm-data'
-import { processStatusLabels } from '@/lib/crm'
+import { processOrgaoList, processStatusLabels } from '@/lib/crm'
 import { formatDate } from '@/lib/format'
 import type { ProcessoRecord } from '@/types/crm'
 
@@ -99,9 +99,11 @@ export default function ProcessesPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="todos">Todos os órgãos</SelectItem>
-            <SelectItem value="DECEA-CINDACTA">DECEA-CINDACTA</SelectItem>
-            <SelectItem value="COMAER">COMAER</SelectItem>
-            <SelectItem value="ANAC">ANAC</SelectItem>
+            {processOrgaoList.map((org) => (
+              <SelectItem key={org} value={org}>
+                {org}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>
@@ -150,7 +152,7 @@ export default function ProcessesPage() {
                         tone={
                           item.status === 'deferido'
                             ? 'green'
-                            : item.status === 'em_exigencia'
+                            : item.status === 'em_exigencia' || item.status === 'em_analise'
                               ? 'amber'
                               : item.status === 'indeferido'
                                 ? 'red'

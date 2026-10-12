@@ -597,9 +597,30 @@ export default function ProjectDetailPage() {
             </div>
           </section>
           <section className="crm-card overflow-hidden">
-            <div className="border-b p-5">
-              <p className="technical-label">DOCUMENTAÇÃO</p>
-              <h2 className="font-bold">Documentos Gerados</h2>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b p-5">
+              <div>
+                <p className="technical-label">DOCUMENTAÇÃO</p>
+                <h2 className="font-bold">Documentos Gerados</h2>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  size="sm"
+                  onClick={() => navigate(`/documentos/novo?projeto=${project.id}`)}
+                  className="bg-[#FF6A13] hover:bg-[#E85B06] text-white"
+                >
+                  <Plus className="mr-1.5 h-4 w-4" />
+                  Gerar Documento
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setAnexoOpen(true)}
+                  className="border-[#FF6A13]/40 text-[#D65100] hover:bg-orange-50"
+                >
+                  <FileUp className="mr-1.5 h-4 w-4 text-[#FF6A13]" />
+                  Anexar Documento
+                </Button>
+              </div>
             </div>
             <div className="divide-y">
               {documents.map((item) => (
