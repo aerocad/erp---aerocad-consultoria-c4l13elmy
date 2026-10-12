@@ -245,7 +245,12 @@ export function ProcessDialog({ open, onOpenChange, presetProject, onSaved }: Pr
             <Label>Parecer</Label>
             <Select
               value={form.parecer}
-              onValueChange={(parecer) => setForm((v) => ({ ...v, parecer }))}
+              onValueChange={(parecer) =>
+                setForm((v) => ({
+                  ...v,
+                  parecer: parecer as ProcessoRecord['parecer'],
+                }))
+              }
             >
               <SelectTrigger>
                 <SelectValue />
