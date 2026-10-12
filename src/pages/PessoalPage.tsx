@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import {
   Award,
   Briefcase,
@@ -198,6 +198,84 @@ export default function PessoalPage() {
     })
   }, [colaboradores, busca, regimeFiltro, situacaoFiltro, cargoFiltro, perfilTecnicoFiltro])
 
+  // Agrupamento hierárquico com ordenação alfabética em cada grupo:
+  // Grupo 1: Sócios (regime_contratacao = 'socio')
+  // Grupo 2: Responsáveis Técnicos (eh_rt = true, não sócio)
+  // Grupo 3: Corpo Técnico (eh_tecnico = true, não socio e não rt)
+  // Grupo 4: Demais Colaboradores (administrativo, financeiro, operacional geral)
+  const gruposHierarquicos = useMemo(() => {
+    const sortByName = (a: ColaboradorRecord, b: ColaboradorRecord) =>
+      (a.nome_completo || '').localeCompare(b.nome_completo || '', 'pt-BR', {
+        sensitivity: 'base',
+      })
+
+    const socios: ColaboradorRecord[] = []
+    const rts: ColaboradorRecord[] = []
+    const tecnicos: ColaboradorRecord[] = []
+    const demais: ColaboradorRecord[] = []
+
+    for (const c of colaboradoresFiltrados) {
+      if (c.regime_contratacao === 'socio') {
+        socios.push(c)
+      } else if (c.eh_rt) {
+        rts.push(c)
+      } else if (c.eh_tecnico) {
+        tecnicos.push(c)
+      } else {
+        demais.push(c)
+      }
+    }
+
+    socios.sort(sortByName)
+    rts.sort(sortByName)
+    tecnicos.sort(sortByName)
+    demais.sort(sortByName)
+
+    return [
+      {
+        id: 'socios',
+        titulo: 'Sócios',
+        descricao: 'Quadro societário e representação executiva',
+        icone: Users,
+        badge: 'Diretoria / Sócios',
+        corBadge: 'bg-purple-100 text-purple-800 border-purple-200',
+        itens: socios,
+      },
+      {
+        id: 'rts',
+        titulo: 'Responsáveis Técnicos',
+        descricao: 'Profissionais legalmente habilitados para assunção de ART/RRT',
+        icone: ShieldCheck,
+        badge: 'RT Habilitado',
+        corBadge: 'bg-orange-100 text-[#D65100] border-orange-200',
+        itens: rts,
+      },
+      {
+        id: 'tecnicos',
+        titulo: 'Corpo Técnico',
+        descricao: 'Engenheiros, arquitetos, analistas técnicos e projetistas',
+        icone: Award,
+        badge: 'Técnicos',
+        corBadge: 'bg-blue-100 text-blue-800 border-blue-200',
+        itens: tecnicos,
+      },
+      {
+        id: 'demais',
+        titulo: 'Demais Colaboradores',
+        descricao: 'Áreas administrativa, financeira, operacional e apoio',
+        icone: Briefcase,
+        badge: 'Geral / Administrativo',
+        corBadge: 'bg-neutral-100 text-neutral-700 border-neutral-200',
+        itens: demais,
+      },
+    ]
+  }, [colaboradoresFiltrados])
+
+  // Lista linear de colaboradores seguindo a mesma ordem hierárquica (para XLSX e contagem)
+  const colaboradoresOrdenadosHierarquico = useMemo(() => {
+    return gruposHierarquicos.flatMap((g) => g.itens)
+  }, [gruposHierarquicos])
+
   function handleOpenCreate() {
     setEditingItem(null)
     setFormData(emptyForm)
@@ -362,14 +440,17 @@ export default function PessoalPage() {
         { header: 'Remuneração Base (R$)', key: 'remuneracao_base', width: 20, tipo: 'moeda' },
       ]
 
-      const linhas = colaboradoresFiltrados.map((c) => {
+      const linhas = colaboradoresOrdenadosHierarquico.map((c) => {
         const regimeFormatado =
           REGIME_CONTRATACAO_LABELS[c.regime_contratacao] || c.regime_contratacao
-        const perfil = c.eh_rt
-          ? 'Responsável Técnico (RT)'
-          : c.eh_tecnico
-            ? 'Corpo Técnico'
-            : 'Administrativo / Geral'
+        const perfil =
+          c.regime_contratacao === 'socio'
+            ? 'Sócio(a)'
+            : c.eh_rt
+              ? 'Responsável Técnico (RT)'
+              : c.eh_tecnico
+                ? 'Corpo Técnico'
+                : 'Administrativo / Geral'
         const registro = c.registro_profissional_numero
           ? `${c.registro_profissional_tipo || 'CREA'} ${c.registro_profissional_numero}${
               c.registro_profissional_uf ? `/${c.registro_profissional_uf}` : ''
@@ -565,151 +646,209 @@ export default function PessoalPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-200 bg-white">
-                {colaboradoresFiltrados.map((item) => (
-                  <tr key={item.id} className="hover:bg-[#FFF6EC]/30 transition-colors">
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2.5">
-                        <Avatar className="h-8 w-8 border border-neutral-200">
-                          <AvatarFallback className="bg-[#FF6A13] text-white text-[11px] font-bold">
-                            {initials(item.nome_completo)}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="font-bold text-neutral-900">{item.nome_completo}</span>
-                            {item.eh_rt && (
-                              <Badge className="bg-[#FF6A13] hover:bg-[#E85B06] text-white text-[9px] px-1.5 py-0 h-4 font-bold uppercase tracking-wider">
-                                RT Habilitado
-                              </Badge>
-                            )}
-                            {item.eh_tecnico && !item.eh_rt && (
-                              <Badge
-                                variant="outline"
-                                className="border-blue-400 text-blue-700 bg-blue-50 text-[9px] px-1.5 py-0 h-4 font-medium"
-                              >
-                                Técnico
-                              </Badge>
-                            )}
-                          </div>
-                          <div className="font-mono text-[11px] text-neutral-500">
-                            {item.cpf_cnpj}
-                          </div>
-                          {item.registro_profissional_numero && (
-                            <div className="text-[10px] text-neutral-600 font-medium flex items-center gap-1 mt-0.5">
-                              <Award className="h-3 w-3 text-[#FF6A13]" />
-                              <span>
-                                {item.registro_profissional_tipo || 'CREA'}:{' '}
-                                {item.registro_profissional_numero}
-                                {item.registro_profissional_uf
-                                  ? `/${item.registro_profissional_uf}`
-                                  : ''}
+                {gruposHierarquicos
+                  .filter((grupo) => grupo.itens.length > 0)
+                  .map((grupo) => {
+                    const IconeGrupo = grupo.icone
+                    return (
+                      <Fragment key={grupo.id}>
+                        {/* Linha separadora de cabeçalho da seção hierárquica */}
+                        <tr className="bg-gradient-to-r from-[#FFF5ED] via-[#FFFBF8] to-neutral-50 border-y border-[#FF6A13]/25">
+                          <td colSpan={8} className="px-4 py-2.5">
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="flex items-center gap-2">
+                                <div className="flex h-6 w-6 items-center justify-center rounded-md bg-[#FF6A13] text-white shadow-xs">
+                                  <IconeGrupo className="h-3.5 w-3.5 stroke-[2.5]" />
+                                </div>
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-bold text-xs text-neutral-900 tracking-tight font-[Arial]">
+                                      {grupo.titulo}
+                                    </span>
+                                    <span
+                                      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold border ${grupo.corBadge}`}
+                                    >
+                                      {grupo.itens.length}{' '}
+                                      {grupo.itens.length === 1 ? 'colaborador' : 'colaboradores'}
+                                    </span>
+                                  </div>
+                                  <p className="text-[10px] text-neutral-500 leading-none mt-0.5">
+                                    {grupo.descricao}
+                                  </p>
+                                </div>
+                              </div>
+                              <span className="text-[10px] font-mono font-medium text-neutral-400 uppercase tracking-wider hidden sm:inline">
+                                Ordem Alfabética
                               </span>
                             </div>
-                          )}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="font-semibold text-neutral-800">{item.cargo}</div>
-                      <div className="text-[11px] text-neutral-500">{item.funcao || '—'}</div>
-                      {item.area_atuacao && (
-                        <div
-                          className="text-[10px] text-neutral-500 italic truncate max-w-[200px]"
-                          title={item.area_atuacao}
-                        >
-                          {item.area_atuacao}
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`inline-flex rounded-full text-[10px] font-semibold px-2 py-0.5 border ${
-                          item.regime_contratacao === 'socio'
-                            ? 'bg-purple-50 text-purple-700 border-purple-200'
-                            : item.regime_contratacao === 'pj'
-                              ? 'bg-blue-50 text-blue-700 border-blue-200'
-                              : item.regime_contratacao === 'pf_clt'
-                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                : 'bg-neutral-100 text-neutral-800 border-neutral-200'
-                        }`}
-                      >
-                        {REGIME_CONTRATACAO_LABELS[item.regime_contratacao] ||
-                          item.regime_contratacao}
-                      </span>
-                      {item.regime_contratacao === 'pj' && (
-                        <div className="text-[11px] text-neutral-500 mt-0.5">
-                          {item.empresa_pj || item.expand?.fornecedor_vinculado?.razao_social ? (
-                            <span className="flex items-center gap-1 text-[#D65100]">
-                              <Building2 className="h-3 w-3" />
-                              {item.empresa_pj || item.expand?.fornecedor_vinculado?.razao_social}
-                            </span>
-                          ) : null}
-                        </div>
-                      )}
-                      {item.regime_contratacao === 'socio' && (
-                        <div className="text-[10px] text-purple-600 font-medium mt-0.5 flex items-center gap-1">
-                          <span>Quadro Societário AEROCAD</span>
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      {item.email && (
-                        <div className="flex items-center gap-1 text-[11px] text-neutral-600">
-                          <Mail className="h-3 w-3 text-neutral-400" />
-                          {item.email}
-                        </div>
-                      )}
-                      {item.telefone && (
-                        <div className="flex items-center gap-1 text-[11px] text-neutral-500">
-                          <Phone className="h-3 w-3 text-neutral-400" />
-                          {item.telefone}
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 font-mono text-neutral-600">
-                      {item.data_admissao ? formatDate(item.data_admissao) : '—'}
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono font-semibold text-neutral-800">
-                      {item.remuneracao_base && item.remuneracao_base > 0
-                        ? formatCurrency(item.remuneracao_base)
-                        : '—'}
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <CrmBadge tone={item.situacao === 'ativo' ? 'green' : 'gray'}>
-                        {item.situacao.toUpperCase()}
-                      </CrmBadge>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        {canEdit && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleOpenEdit(item)}
-                            className="h-8 w-8 text-neutral-500 hover:text-[#FF6A13]"
-                            title="Editar colaborador"
-                          >
-                            <Edit2 className="h-3.5 w-3.5" />
-                          </Button>
-                        )}
-                        {canDelete && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => {
-                              setItemToDelete(item)
-                              setDeleteModalOpen(true)
-                            }}
-                            className="h-8 w-8 text-neutral-400 hover:text-rose-600"
-                            title="Excluir colaborador (Apenas Admin)"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                          </td>
+                        </tr>
+
+                        {/* Linhas de colaboradores deste grupo */}
+                        {grupo.itens.map((item) => (
+                          <tr key={item.id} className="hover:bg-[#FFF6EC]/30 transition-colors">
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-2.5">
+                                <Avatar className="h-8 w-8 border border-neutral-200">
+                                  <AvatarFallback className="bg-[#FF6A13] text-white text-[11px] font-bold">
+                                    {initials(item.nome_completo)}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <div>
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="font-bold text-neutral-900">
+                                      {item.nome_completo}
+                                    </span>
+                                    {item.regime_contratacao === 'socio' && (
+                                      <Badge
+                                        variant="outline"
+                                        className="border-purple-300 text-purple-700 bg-purple-50 text-[9px] px-1.5 py-0 h-4 font-bold uppercase tracking-wider"
+                                      >
+                                        Sócio(a)
+                                      </Badge>
+                                    )}
+                                    {item.eh_rt && item.regime_contratacao !== 'socio' && (
+                                      <Badge className="bg-[#FF6A13] hover:bg-[#E85B06] text-white text-[9px] px-1.5 py-0 h-4 font-bold uppercase tracking-wider">
+                                        RT Habilitado
+                                      </Badge>
+                                    )}
+                                    {item.eh_tecnico &&
+                                      !item.eh_rt &&
+                                      item.regime_contratacao !== 'socio' && (
+                                        <Badge
+                                          variant="outline"
+                                          className="border-blue-400 text-blue-700 bg-blue-50 text-[9px] px-1.5 py-0 h-4 font-medium"
+                                        >
+                                          Técnico
+                                        </Badge>
+                                      )}
+                                  </div>
+                                  <div className="font-mono text-[11px] text-neutral-500">
+                                    {item.cpf_cnpj}
+                                  </div>
+                                  {item.registro_profissional_numero && (
+                                    <div className="text-[10px] text-neutral-600 font-medium flex items-center gap-1 mt-0.5">
+                                      <Award className="h-3 w-3 text-[#FF6A13]" />
+                                      <span>
+                                        {item.registro_profissional_tipo || 'CREA'}:{' '}
+                                        {item.registro_profissional_numero}
+                                        {item.registro_profissional_uf
+                                          ? `/${item.registro_profissional_uf}`
+                                          : ''}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="font-semibold text-neutral-800">{item.cargo}</div>
+                              <div className="text-[11px] text-neutral-500">
+                                {item.funcao || '—'}
+                              </div>
+                              {item.area_atuacao && (
+                                <div
+                                  className="text-[10px] text-neutral-500 italic truncate max-w-[200px]"
+                                  title={item.area_atuacao}
+                                >
+                                  {item.area_atuacao}
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-4 py-3">
+                              <span
+                                className={`inline-flex rounded-full text-[10px] font-semibold px-2 py-0.5 border ${
+                                  item.regime_contratacao === 'socio'
+                                    ? 'bg-purple-50 text-purple-700 border-purple-200'
+                                    : item.regime_contratacao === 'pj'
+                                      ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                      : item.regime_contratacao === 'pf_clt'
+                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                        : 'bg-neutral-100 text-neutral-800 border-neutral-200'
+                                }`}
+                              >
+                                {REGIME_CONTRATACAO_LABELS[item.regime_contratacao] ||
+                                  item.regime_contratacao}
+                              </span>
+                              {item.regime_contratacao === 'pj' && (
+                                <div className="text-[11px] text-neutral-500 mt-0.5">
+                                  {item.empresa_pj ||
+                                  item.expand?.fornecedor_vinculado?.razao_social ? (
+                                    <span className="flex items-center gap-1 text-[#D65100]">
+                                      <Building2 className="h-3 w-3" />
+                                      {item.empresa_pj ||
+                                        item.expand?.fornecedor_vinculado?.razao_social}
+                                    </span>
+                                  ) : null}
+                                </div>
+                              )}
+                              {item.regime_contratacao === 'socio' && (
+                                <div className="text-[10px] text-purple-600 font-medium mt-0.5 flex items-center gap-1">
+                                  <span>Quadro Societário AEROCAD</span>
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-4 py-3">
+                              {item.email && (
+                                <div className="flex items-center gap-1 text-[11px] text-neutral-600">
+                                  <Mail className="h-3 w-3 text-neutral-400" />
+                                  {item.email}
+                                </div>
+                              )}
+                              {item.telefone && (
+                                <div className="flex items-center gap-1 text-[11px] text-neutral-500">
+                                  <Phone className="h-3 w-3 text-neutral-400" />
+                                  {item.telefone}
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 font-mono text-neutral-600">
+                              {item.data_admissao ? formatDate(item.data_admissao) : '—'}
+                            </td>
+                            <td className="px-4 py-3 text-right font-mono font-semibold text-neutral-800">
+                              {item.remuneracao_base && item.remuneracao_base > 0
+                                ? formatCurrency(item.remuneracao_base)
+                                : '—'}
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <CrmBadge tone={item.situacao === 'ativo' ? 'green' : 'gray'}>
+                                {item.situacao.toUpperCase()}
+                              </CrmBadge>
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <div className="flex items-center justify-end gap-1">
+                                {canEdit && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => handleOpenEdit(item)}
+                                    className="h-8 w-8 text-neutral-500 hover:text-[#FF6A13]"
+                                    title="Editar colaborador"
+                                  >
+                                    <Edit2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                )}
+                                {canDelete && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => {
+                                      setItemToDelete(item)
+                                      setDeleteModalOpen(true)
+                                    }}
+                                    className="h-8 w-8 text-neutral-400 hover:text-rose-600"
+                                    title="Excluir colaborador (Apenas Admin)"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </Fragment>
+                    )
+                  })}
               </tbody>
             </table>
           </div>
