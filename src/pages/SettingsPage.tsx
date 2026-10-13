@@ -16,6 +16,7 @@ import {
 import { toast } from 'sonner'
 import { ImportacaoWizard } from '@/components/importacao/ImportacaoWizard'
 import { WhatsAppSettingsSection } from '@/components/settings/WhatsAppSettingsSection'
+import { ExportarDadosSection } from '@/components/settings/ExportarDadosSection'
 
 import { CrmBadge } from '@/components/common/CrmBadge'
 import { ErrorState, PageLoading } from '@/components/common/States'
@@ -196,6 +197,13 @@ export default function SettingsPage() {
               >
                 <FileSpreadsheet className="h-3.5 w-3.5" />
                 Importação
+              </TabsTrigger>
+              <TabsTrigger
+                value="exportacao"
+                className="flex items-center gap-1.5 font-semibold text-[#D65100]"
+              >
+                <FileSpreadsheet className="h-3.5 w-3.5" />
+                Exportar Dados
               </TabsTrigger>
             </>
           )}
@@ -504,6 +512,9 @@ export default function SettingsPage() {
               <div className="crm-card p-6">
                 <ImportacaoWizard />
               </div>
+            </TabsContent>
+            <TabsContent value="exportacao">
+              <ExportarDadosSection />
             </TabsContent>
           </>
         )}
