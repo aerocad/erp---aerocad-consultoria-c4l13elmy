@@ -492,7 +492,8 @@ export function FinancePage() {
     const now = new Date()
     const allowedMonths = selectedYear !== 'todos' ? periodMonthsMap[selectedPeriod] : undefined
 
-    return installments.data.reduce(
+    // 1. Acumulador inicial com parcelas de projetos
+    const totals = installments.data.reduce(
       (acc, item) => {
         // Extrai anos e meses de referência da parcela
         const anoVencimento = item.vencimento ? item.vencimento.slice(0, 4) : ''
@@ -546,7 +547,10 @@ export function FinancePage() {
           if (matchRecebido) {
             acc.paid += item.valor_recebido || item.valor
           }
-        } else if (item.status === 'vencida' || new Date(item.vencimento) < now) {
+        } else if (
+          item.status === 'vencida' ||
+          (item.vencimento && new Date(item.vencimento) < now)
+        ) {
           // Em atraso: parcelas vencidas cujo vencimento pertence ao ano/período filtrado
           if (matchPrevisto) {
             acc.overdue += item.valor
@@ -561,7 +565,52 @@ export function FinancePage() {
       },
       { total: 0, paid: 0, open: 0, overdue: 0 },
     )
-  }, [installments.data, selectedYear, selectedPeriod, ocultarValores])
+
+    // 2. Acumula receitas avulsas (contas_receber) no mesmo recorte de ano e período
+    for (const cr of contasReceber.data) {
+      if (cr.status === 'cancelado') continue
+
+      const anoVenc = cr.data_vencimento ? cr.data_vencimento.slice(0, 4) : ''
+      const mesVenc = cr.data_vencimento ? parseInt(cr.data_vencimento.slice(5, 7), 10) : 0
+
+      const anoRec = cr.data_recebimento ? cr.data_recebimento.slice(0, 4) : anoVenc
+      const mesRec = cr.data_recebimento ? parseInt(cr.data_recebimento.slice(5, 7), 10) : mesVenc
+
+      const matchYearPrevisto = selectedYear === 'todos' || anoVenc === selectedYear
+      const matchPeriodPrevisto = !allowedMonths || (mesVenc > 0 && allowedMonths.includes(mesVenc))
+      const matchPrevisto = matchYearPrevisto && matchPeriodPrevisto
+
+      const matchYearRecebido = selectedYear === 'todos' || anoRec === selectedYear
+      const matchPeriodRecebido = !allowedMonths || (mesRec > 0 && allowedMonths.includes(mesRec))
+      const matchRecebido = matchYearRecebido && matchPeriodRecebido
+
+      if (matchPrevisto) {
+        totals.total += cr.valor || 0
+      }
+
+      if (cr.status === 'recebido') {
+        if (matchRecebido) {
+          totals.paid += cr.valor_recebido || cr.valor || 0
+        }
+      } else {
+        // pendente
+        const vencDate = cr.data_vencimento ? new Date(cr.data_vencimento.slice(0, 10)) : null
+        const isAtrasado = vencDate ? vencDate < now : false
+
+        if (isAtrasado) {
+          if (matchPrevisto) {
+            totals.overdue += cr.valor || 0
+          }
+        } else {
+          if (matchPrevisto) {
+            totals.open += cr.valor || 0
+          }
+        }
+      }
+    }
+
+    return totals
+  }, [installments.data, contasReceber.data, selectedYear, selectedPeriod, ocultarValores])
 
   async function registerPayment() {
     if (!payment) return
@@ -876,11 +925,13 @@ export function FinancePage() {
                       <SelectLabel className="text-[11px] font-bold text-neutral-500 uppercase tracking-wider">
                         Quadrimestres
                       </SelectLabel>
-                      {PERIOD_OPTIONS.filter((o) => o.value.startsWith('quadrimestre_')).map((opt) => (
-                        <SelectItem key={opt.value} value={opt.value} className="text-xs">
-                          {opt.label}
-                        </SelectItem>
-                      ))}
+                      {PERIOD_OPTIONS.filter((o) => o.value.startsWith('quadrimestre_')).map(
+                        (opt) => (
+                          <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                            {opt.label}
+                          </SelectItem>
+                        ),
+                      )}
                     </SelectGroup>
                     <SelectSeparator />
                     <SelectGroup>
