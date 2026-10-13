@@ -175,87 +175,384 @@ export function firstName(name?: string) {
 }
 
 /**
- * Cargos padronizados sugeridos na AEROCAD, agrupados por área.
- * Inclui o cargo SDR na área comercial / pré-vendas.
+ * Áreas de atuação corporativas da AEROCAD.
  */
-export const CARGOS_SUGERIDOS = [
-  // Comercial / Pré-Vendas
-  { cargo: 'SDR', area: 'Comercial' },
-  { cargo: 'Executivo(a) de Contas', area: 'Comercial' },
-  { cargo: 'Gerente Comercial', area: 'Comercial' },
-  { cargo: 'Consultor(a) de Negócios', area: 'Comercial' },
+export const AREAS_ATUACAO_COLABORADOR = [
+  'Administrativo',
+  'Comercial',
+  'Financeiro',
+  'Técnico',
+] as const
 
-  // Diretoria & Gestão
-  { cargo: 'Diretor(a) Executivo(a)', area: 'Diretoria' },
-  { cargo: 'Gerente de Negócios e Administração', area: 'Diretoria' },
-  { cargo: 'Coordenador(a) de Projetos', area: 'Diretoria' },
+export type AreaAtuacaoColaborador = (typeof AREAS_ATUACAO_COLABORADOR)[number]
 
-  // Engenharia e Corpo Técnico
-  { cargo: 'Engenheiro(a) Civil', area: 'Técnico' },
-  { cargo: 'Engenheiro(a) Cartógrafo(a)', area: 'Técnico' },
-  { cargo: 'Engenheiro(a) Agrimensor(a)', area: 'Técnico' },
-  { cargo: 'Arquiteto(a) e Urbanista', area: 'Técnico' },
-  { cargo: 'Analista Técnico(a) de Projetos', area: 'Técnico' },
-  { cargo: 'Analista Sênior OPEA', area: 'Técnico' },
-  { cargo: 'Projetista CAD / SIG', area: 'Técnico' },
+/**
+ * Níveis hierárquicos da AEROCAD em ordem decrescente de senioridade/comando:
+ * 1. Diretor
+ * 2. Gerente
+ * 3. Coordenador
+ * 4. Analista Sênior
+ * 5. Analista Pleno
+ * 6. Analista Júnior
+ * 7. Técnico
+ * 8. Auxiliar
+ * 9. Estagiário
+ */
+export const HIERARQUIA_NIVEIS_ORDENADOS = [
+  'Diretor',
+  'Gerente',
+  'Coordenador',
+  'Analista Sênior',
+  'Analista Pleno',
+  'Analista Júnior',
+  'Técnico',
+  'Auxiliar',
+  'Estagiário',
+] as const
 
-  // Administrativo & Financeiro
-  { cargo: 'Analista Financeiro(a)', area: 'Administrativo' },
-  { cargo: 'Assistente Administrativo(a)', area: 'Administrativo' },
+export type NivelHierarquico = (typeof HIERARQUIA_NIVEIS_ORDENADOS)[number]
+
+export interface CargoItem {
+  cargo: string
+  area: AreaAtuacaoColaborador
+  nivel: NivelHierarquico
+  descricao?: string
+}
+
+export interface FuncaoItem {
+  funcao: string
+  label: string
+  area: AreaAtuacaoColaborador
+  nivel?: NivelHierarquico
+  descricao?: string
+}
+
+/**
+ * Cargos padronizados sugeridos na AEROCAD, agrupados pelas 4 áreas solicitadas
+ * (Administrativo, Comercial, Financeiro, Técnico) e ordenados segundo a hierarquia decrescente.
+ * O SDR (Sales Development Representative) é listado como cargo de qualificação/prospecção na área Comercial.
+ * Topógrafo na área Técnica; Contador na área Financeira.
+ */
+export const CARGOS_SUGERIDOS: readonly CargoItem[] = [
+  // ==========================================
+  // ÁREA ADMINISTRATIVO
+  // ==========================================
+  { cargo: 'Diretor(a) Administrativo(a)', area: 'Administrativo', nivel: 'Diretor' },
+  { cargo: 'Gerente Administrativo(a)', area: 'Administrativo', nivel: 'Gerente' },
+  { cargo: 'Coordenador(a) Administrativo(a)', area: 'Administrativo', nivel: 'Coordenador' },
+  { cargo: 'Analista Administrativo(a) Sênior', area: 'Administrativo', nivel: 'Analista Sênior' },
+  { cargo: 'Analista Administrativo(a) Pleno', area: 'Administrativo', nivel: 'Analista Pleno' },
+  { cargo: 'Analista Administrativo(a) Júnior', area: 'Administrativo', nivel: 'Analista Júnior' },
+  { cargo: 'Assistente Administrativo(a)', area: 'Administrativo', nivel: 'Técnico' },
+  { cargo: 'Auxiliar Administrativo(a)', area: 'Administrativo', nivel: 'Auxiliar' },
+  { cargo: 'Estagiário(a) de Administração', area: 'Administrativo', nivel: 'Estagiário' },
+
+  // ==========================================
+  // ÁREA COMERCIAL
+  // ==========================================
+  { cargo: 'Diretor(a) Comercial', area: 'Comercial', nivel: 'Diretor' },
+  { cargo: 'Gerente Comercial', area: 'Comercial', nivel: 'Gerente' },
+  { cargo: 'Coordenador(a) Comercial / Vendas', area: 'Comercial', nivel: 'Coordenador' },
+  { cargo: 'Executivo(a) de Contas Sênior', area: 'Comercial', nivel: 'Analista Sênior' },
+  { cargo: 'Consultor(a) de Negócios Sênior', area: 'Comercial', nivel: 'Analista Sênior' },
+  { cargo: 'Executivo(a) de Contas Pleno', area: 'Comercial', nivel: 'Analista Pleno' },
+  { cargo: 'Consultor(a) de Negócios Pleno', area: 'Comercial', nivel: 'Analista Pleno' },
+  {
+    cargo: 'SDR',
+    area: 'Comercial',
+    nivel: 'Analista Júnior',
+    descricao: 'Sales Development Representative / Pré-Vendas',
+  },
+  { cargo: 'SDR (Pré-Vendas)', area: 'Comercial', nivel: 'Analista Júnior' },
+  { cargo: 'Executivo(a) de Contas Júnior', area: 'Comercial', nivel: 'Analista Júnior' },
+  { cargo: 'Assistente Comercial', area: 'Comercial', nivel: 'Técnico' },
+  { cargo: 'Auxiliar de Vendas / Prospecção', area: 'Comercial', nivel: 'Auxiliar' },
+  { cargo: 'Estagiário(a) Comercial / SDR', area: 'Comercial', nivel: 'Estagiário' },
+
+  // ==========================================
+  // ÁREA FINANCEIRO
+  // ==========================================
+  { cargo: 'Diretor(a) Financeiro(a) / CFO', area: 'Financeiro', nivel: 'Diretor' },
+  { cargo: 'Gerente Financeiro(a)', area: 'Financeiro', nivel: 'Gerente' },
+  {
+    cargo: 'Coordenador(a) Financeiro(a) / Controladoria',
+    area: 'Financeiro',
+    nivel: 'Coordenador',
+  },
+  { cargo: 'Contador(a) Responsável', area: 'Financeiro', nivel: 'Analista Sênior' },
+  { cargo: 'Analista Financeiro(a) Sênior', area: 'Financeiro', nivel: 'Analista Sênior' },
+  { cargo: 'Contador(a)', area: 'Financeiro', nivel: 'Analista Pleno' },
+  { cargo: 'Analista Financeiro(a) Pleno', area: 'Financeiro', nivel: 'Analista Pleno' },
+  { cargo: 'Analista Financeiro(a) Júnior', area: 'Financeiro', nivel: 'Analista Júnior' },
+  { cargo: 'Assistente Financeiro(a) / Fiscal', area: 'Financeiro', nivel: 'Técnico' },
+  { cargo: 'Auxiliar Financeiro(a) / Cobrança', area: 'Financeiro', nivel: 'Auxiliar' },
+  { cargo: 'Estagiário(a) de Finanças / Contabilidade', area: 'Financeiro', nivel: 'Estagiário' },
+
+  // ==========================================
+  // ÁREA TÉCNICO
+  // ==========================================
+  { cargo: 'Diretor(a) Técnico(a)', area: 'Técnico', nivel: 'Diretor' },
+  { cargo: 'Gerente de Engenharia e Projetos', area: 'Técnico', nivel: 'Gerente' },
+  { cargo: 'Coordenador(a) de Projetos', area: 'Técnico', nivel: 'Coordenador' },
+  { cargo: 'Engenheiro(a) Civil Sênior', area: 'Técnico', nivel: 'Analista Sênior' },
+  { cargo: 'Engenheiro(a) Cartógrafo(a) Sênior', area: 'Técnico', nivel: 'Analista Sênior' },
+  { cargo: 'Engenheiro(a) Agrimensor(a) Sênior', area: 'Técnico', nivel: 'Analista Sênior' },
+  { cargo: 'Analista Sênior OPEA / DECEA', area: 'Técnico', nivel: 'Analista Sênior' },
+  { cargo: 'Arquiteto(a) e Urbanista Sênior', area: 'Técnico', nivel: 'Analista Sênior' },
+  { cargo: 'Engenheiro(a) Civil', area: 'Técnico', nivel: 'Analista Pleno' },
+  { cargo: 'Engenheiro(a) Cartógrafo(a)', area: 'Técnico', nivel: 'Analista Pleno' },
+  { cargo: 'Engenheiro(a) Agrimensor(a)', area: 'Técnico', nivel: 'Analista Pleno' },
+  { cargo: 'Arquiteto(a) e Urbanista', area: 'Técnico', nivel: 'Analista Pleno' },
+  { cargo: 'Analista Técnico(a) de Projetos Pleno', area: 'Técnico', nivel: 'Analista Pleno' },
+  { cargo: 'Engenheiro(a) Júnior', area: 'Técnico', nivel: 'Analista Júnior' },
+  { cargo: 'Analista Técnico(a) Júnior', area: 'Técnico', nivel: 'Analista Júnior' },
+  {
+    cargo: 'Topógrafo(a)',
+    area: 'Técnico',
+    nivel: 'Técnico',
+    descricao: 'Levantamentos topográficos e georreferenciamento',
+  },
+  { cargo: 'Projetista CAD / SIG', area: 'Técnico', nivel: 'Técnico' },
+  { cargo: 'Técnico(a) em Agrimensura / Edificações', area: 'Técnico', nivel: 'Técnico' },
+  { cargo: 'Auxiliar Técnico(a) de Campo / Projetos', area: 'Técnico', nivel: 'Auxiliar' },
+  { cargo: 'Estagiário(a) de Engenharia / Cartografia', area: 'Técnico', nivel: 'Estagiário' },
 ] as const
 
 /**
- * Funções / Especialidades padronizadas na AEROCAD, agrupadas por área.
- * SDR (Sales Development Representative / Pré-Vendas) atua na qualificação de leads e primeiro contato.
+ * Funções / Especialidades padronizadas na AEROCAD, agrupadas pelas 4 áreas
+ * (Administrativo, Comercial, Financeiro, Técnico) com ordenação hierárquica por nível.
  */
-export const FUNCOES_SUGERIDAS = [
-  // Comercial / Pré-Vendas
-  { funcao: 'SDR', label: 'SDR (Pré-vendas / Qualificação de Leads)', area: 'Comercial' },
-  { funcao: 'Pré-Vendas & Qualificação', label: 'Pré-Vendas & Qualificação', area: 'Comercial' },
+export const FUNCOES_SUGERIDAS: readonly FuncaoItem[] = [
+  // ==========================================
+  // ÁREA ADMINISTRATIVO
+  // ==========================================
+  {
+    funcao: 'Representante Legal',
+    label: 'Representante Legal / Quadro Societário',
+    area: 'Administrativo',
+    nivel: 'Diretor',
+  },
+  {
+    funcao: 'Gestão de Contratos & Pessoal',
+    label: 'Gestão de Contratos & Pessoal',
+    area: 'Administrativo',
+    nivel: 'Gerente',
+  },
+  {
+    funcao: 'Apoio Administrativo & RH',
+    label: 'Apoio Administrativo & RH',
+    area: 'Administrativo',
+    nivel: 'Técnico',
+  },
+  {
+    funcao: 'Rotinas de Escritório & Atendimento',
+    label: 'Rotinas de Escritório & Atendimento',
+    area: 'Administrativo',
+    nivel: 'Auxiliar',
+  },
+
+  // ==========================================
+  // ÁREA COMERCIAL
+  // ==========================================
+  {
+    funcao: 'Gestão Comercial & Parcerias Estratégicas',
+    label: 'Gestão Comercial & Parcerias Estratégicas',
+    area: 'Comercial',
+    nivel: 'Gerente',
+  },
+  {
+    funcao: 'Negociação & Fechamento de Contratos',
+    label: 'Negociação & Fechamento de Contratos',
+    area: 'Comercial',
+    nivel: 'Coordenador',
+  },
   {
     funcao: 'Prospecção & Novos Negócios',
     label: 'Prospecção & Novos Negócios',
     area: 'Comercial',
+    nivel: 'Analista Sênior',
   },
-  { funcao: 'Negociação & Fechamento', label: 'Negociação & Fechamento', area: 'Comercial' },
+  {
+    funcao: 'SDR',
+    label: 'SDR (Pré-vendas / Qualificação de Leads)',
+    area: 'Comercial',
+    nivel: 'Analista Júnior',
+  },
+  {
+    funcao: 'Pré-Vendas & Qualificação',
+    label: 'Pré-Vendas & Qualificação',
+    area: 'Comercial',
+    nivel: 'Analista Júnior',
+  },
+  {
+    funcao: 'Atendimento & Follow-up de Propostas',
+    label: 'Atendimento & Follow-up de Propostas',
+    area: 'Comercial',
+    nivel: 'Técnico',
+  },
 
-  // Gestão & Representação
-  { funcao: 'Representante Legal', label: 'Representante Legal', area: 'Gestão' },
+  // ==========================================
+  // ÁREA FINANCEIRO
+  // ==========================================
+  {
+    funcao: 'Gestão Financeira & Balancetes',
+    label: 'Gestão Financeira & Balancetes',
+    area: 'Financeiro',
+    nivel: 'Gerente',
+  },
+  {
+    funcao: 'Controladoria & Fechamento Contábil',
+    label: 'Controladoria & Fechamento Contábil',
+    area: 'Financeiro',
+    nivel: 'Coordenador',
+  },
+  {
+    funcao: 'Contabilidade & Escrituração',
+    label: 'Contabilidade & Escrituração',
+    area: 'Financeiro',
+    nivel: 'Analista Sênior',
+  },
+  {
+    funcao: 'Faturamento & Emissão de NFS-e',
+    label: 'Faturamento & Emissão de NFS-e',
+    area: 'Financeiro',
+    nivel: 'Analista Pleno',
+  },
+  {
+    funcao: 'Contas a Pagar & Receber',
+    label: 'Contas a Pagar & Receber',
+    area: 'Financeiro',
+    nivel: 'Analista Júnior',
+  },
+  {
+    funcao: 'Conciliação Bancária & Cobrança',
+    label: 'Conciliação Bancária & Cobrança',
+    area: 'Financeiro',
+    nivel: 'Técnico',
+  },
+
+  // ==========================================
+  // ÁREA TÉCNICO
+  // ==========================================
   {
     funcao: 'Coordenação de Projetos e Contratos',
     label: 'Coordenação de Projetos e Contratos',
-    area: 'Gestão',
+    area: 'Técnico',
+    nivel: 'Coordenador',
   },
-
-  // Técnica & Regulatória
-  { funcao: 'Responsável Técnico (RT)', label: 'Responsável Técnico (RT)', area: 'Técnico' },
-  { funcao: 'Processos OPEA / DECEA', label: 'Processos OPEA / DECEA', area: 'Técnico' },
-  { funcao: 'PBZPA / PZPANA', label: 'PBZPA / PZPANA', area: 'Técnico' },
+  {
+    funcao: 'Responsável Técnico (RT)',
+    label: 'Responsável Técnico (RT) — ART / RRT',
+    area: 'Técnico',
+    nivel: 'Analista Sênior',
+  },
+  {
+    funcao: 'Processos OPEA / DECEA',
+    label: 'Processos OPEA / DECEA',
+    area: 'Técnico',
+    nivel: 'Analista Sênior',
+  },
+  { funcao: 'PBZPA / PZPANA', label: 'PBZPA / PZPANA', area: 'Técnico', nivel: 'Analista Sênior' },
   {
     funcao: 'Registro e Homologação de Aeródromos (ANAC)',
     label: 'Registro e Homologação de Aeródromos (ANAC)',
     area: 'Técnico',
+    nivel: 'Analista Sênior',
   },
   {
     funcao: 'Helipontos e Helipontos Hospitalares',
     label: 'Helipontos e Helipontos Hospitalares',
     area: 'Técnico',
+    nivel: 'Analista Sênior',
   },
   {
     funcao: 'Estudos de Viabilidade & Espaço Aéreo',
     label: 'Estudos de Viabilidade & Espaço Aéreo',
     area: 'Técnico',
-  },
-
-  // Administrativo & Financeiro
-  {
-    funcao: 'Faturamento & Conciliação',
-    label: 'Faturamento & Conciliação',
-    area: 'Administrativo',
+    nivel: 'Analista Pleno',
   },
   {
-    funcao: 'Gestão Financeira & Balancetes',
-    label: 'Gestão Financeira & Balancetes',
-    area: 'Administrativo',
+    funcao: 'Levantamentos Topográficos & Georreferenciamento',
+    label: 'Levantamentos Topográficos & Georreferenciamento',
+    area: 'Técnico',
+    nivel: 'Técnico',
+  },
+  {
+    funcao: 'Desenho Técnico CAD & GIS',
+    label: 'Desenho Técnico CAD & GIS',
+    area: 'Técnico',
+    nivel: 'Técnico',
+  },
+  {
+    funcao: 'Suporte Técnico de Campo',
+    label: 'Suporte Técnico de Campo',
+    area: 'Técnico',
+    nivel: 'Auxiliar',
   },
 ] as const
+
+/**
+ * Retorna o peso hierárquico (menor valor = maior na hierarquia)
+ */
+export function getNivelHierarquicoWeight(nivel?: string): number {
+  if (!nivel) return 999
+  const idx = (HIERARQUIA_NIVEIS_ORDENADOS as readonly string[]).indexOf(nivel)
+  return idx === -1 ? 999 : idx
+}
+
+/**
+ * Agrupa cargos por área e os ordena pela hierarquia da AEROCAD.
+ */
+export function getCargosAgrupadosPorArea(): Record<AreaAtuacaoColaborador, CargoItem[]> {
+  const grupos: Record<AreaAtuacaoColaborador, CargoItem[]> = {
+    Administrativo: [],
+    Comercial: [],
+    Financeiro: [],
+    Técnico: [],
+  }
+
+  CARGOS_SUGERIDOS.forEach((c) => {
+    if (grupos[c.area]) {
+      grupos[c.area].push(c)
+    }
+  })
+
+  // Ordena cada grupo pela hierarquia decrescente
+  for (const area of AREAS_ATUACAO_COLABORADOR) {
+    grupos[area].sort((a, b) => {
+      const diff = getNivelHierarquicoWeight(a.nivel) - getNivelHierarquicoWeight(b.nivel)
+      if (diff !== 0) return diff
+      return a.cargo.localeCompare(b.cargo, 'pt-BR')
+    })
+  }
+
+  return grupos
+}
+
+/**
+ * Agrupa funções por área e as ordena pela hierarquia.
+ */
+export function getFuncoesAgrupadasPorArea(): Record<AreaAtuacaoColaborador, FuncaoItem[]> {
+  const grupos: Record<AreaAtuacaoColaborador, FuncaoItem[]> = {
+    Administrativo: [],
+    Comercial: [],
+    Financeiro: [],
+    Técnico: [],
+  }
+
+  FUNCOES_SUGERIDAS.forEach((f) => {
+    if (grupos[f.area]) {
+      grupos[f.area].push(f)
+    }
+  })
+
+  for (const area of AREAS_ATUACAO_COLABORADOR) {
+    grupos[area].sort((a, b) => {
+      const diff = getNivelHierarquicoWeight(a.nivel) - getNivelHierarquicoWeight(b.nivel)
+      if (diff !== 0) return diff
+      return a.label.localeCompare(b.label, 'pt-BR')
+    })
+  }
+
+  return grupos
+}

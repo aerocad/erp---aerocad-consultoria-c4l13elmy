@@ -43,7 +43,10 @@ import { Label } from '@/components/ui/label'
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
@@ -51,6 +54,12 @@ import { Textarea } from '@/components/ui/textarea'
 import { useAuth } from '@/contexts/AuthContext'
 import { useFinanceiroVisibilidade } from '@/contexts/FinanceiroVisibilidadeContext'
 import { useCrmData } from '@/hooks/use-crm-data'
+import {
+  AREAS_ATUACAO_COLABORADOR,
+  AreaAtuacaoColaborador,
+  getCargosAgrupadosPorArea,
+  getFuncoesAgrupadasPorArea,
+} from '@/lib/crm'
 import { formatCurrency, formatDate, initials } from '@/lib/format'
 import pb from '@/lib/pocketbase/client'
 import type {
@@ -156,6 +165,14 @@ export default function PessoalPage() {
   const [editingItem, setEditingItem] = useState<ColaboradorRecord | null>(null)
   const [formData, setFormData] = useState<ColaboradorFormData>(emptyForm)
   const [saving, setSaving] = useState(false)
+
+  // Controle de modo customizado para Cargo e Função
+  const [modoCargoCustomizado, setModoCargoCustomizado] = useState(false)
+  const [cargoAreaCustomizada, setCargoAreaCustomizada] =
+    useState<AreaAtuacaoColaborador>('Técnico')
+  const [modoFuncaoCustomizada, setModoFuncaoCustomizada] = useState(false)
+  const [funcaoAreaCustomizada, setFuncaoAreaCustomizada] =
+    useState<AreaAtuacaoColaborador>('Técnico')
 
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [itemToDelete, setItemToDelete] = useState<ColaboradorRecord | null>(null)
@@ -276,19 +293,57 @@ export default function PessoalPage() {
     return gruposHierarquicos.flatMap((g) => g.itens)
   }, [gruposHierarquicos])
 
+  // Catálogo agrupado por área e ordenado pela hierarquia decrescente da AEROCAD
+  const cargosAgrupados = useMemo(() => getCargosAgrupadosPorArea(), [])
+  const funcoesAgrupadas = useMemo(() => getFuncoesAgrupadasPorArea(), [])
+
+  // Conjuntos para detecção rápida se o valor já está na lista sugerida
+  const cargosPadraoSet = useMemo(() => {
+    const s = new Set<string>()
+    Object.values(cargosAgrupados).forEach((lista) => lista.forEach((c) => s.add(c.cargo)))
+    return s
+  }, [cargosAgrupados])
+
+  const funcoesPadraoSet = useMemo(() => {
+    const s = new Set<string>()
+    Object.values(funcoesAgrupadas).forEach((lista) => lista.forEach((f) => s.add(f.funcao)))
+    return s
+  }, [funcoesAgrupadas])
+
   function handleOpenCreate() {
     setEditingItem(null)
     setFormData(emptyForm)
+    setModoCargoCustomizado(false)
+    setCargoAreaCustomizada('Técnico')
+    setModoFuncaoCustomizada(false)
+    setFuncaoAreaCustomizada('Técnico')
     setModalOpen(true)
   }
 
   function handleOpenEdit(item: ColaboradorRecord) {
     setEditingItem(item)
+    const cargoAtual = item.cargo || ''
+    const funcaoAtual = item.funcao || ''
+
+    // Se o cargo atual não está na lista padrão e tem valor, podemos deixar acessível no select
+    // ou manter visível sem forçar customizado a não ser que o usuário queira
+    setModoCargoCustomizado(false)
+    setModoFuncaoCustomizada(false)
+
+    // Tentar inferir a área do colaborador se ele já tiver
+    const areaInferida = (AREAS_ATUACAO_COLABORADOR as readonly string[]).includes(
+      item.area_atuacao || '',
+    )
+      ? (item.area_atuacao as AreaAtuacaoColaborador)
+      : 'Técnico'
+    setCargoAreaCustomizada(areaInferida)
+    setFuncaoAreaCustomizada(areaInferida)
+
     setFormData({
       nome_completo: item.nome_completo || '',
       cpf_cnpj: item.cpf_cnpj || '',
-      cargo: item.cargo || '',
-      funcao: item.funcao || '',
+      cargo: cargoAtual,
+      funcao: funcaoAtual,
       regime_contratacao: item.regime_contratacao || 'pj',
       empresa_pj: item.empresa_pj || '',
       fornecedor_vinculado: item.fornecedor_vinculado || '',
@@ -1062,26 +1117,305 @@ export default function PessoalPage() {
                 </Select>
               </div>
 
-              <div className="space-y-1">
-                <Label className="text-xs font-semibold">Cargo *</Label>
-                <Input
-                  required
-                  value={formData.cargo}
-                  onChange={(e) => setFormData({ ...formData, cargo: e.target.value })}
-                  placeholder="Ex: Engenheiro Cartógrafo Pleno"
-                  className="h-9 text-xs"
-                />
+              {/* Seletor Hierárquico de Cargo Agrupado por Área */}
+              <div className="space-y-1 sm:col-span-1">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-semibold text-neutral-800 flex items-center gap-1.5">
+                    <Briefcase className="h-3.5 w-3.5 text-[#FF6A13]" />
+                    <span>Cargo *</span>
+                  </Label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-5 px-1.5 text-[10px] text-[#D65100] hover:text-[#FF6A13] hover:bg-orange-50"
+                    onClick={() => setModoCargoCustomizado(!modoCargoCustomizado)}
+                  >
+                    {modoCargoCustomizado ? 'Escolher da Lista' : '+ Outro / Criar cargo'}
+                  </Button>
+                </div>
+
+                {!modoCargoCustomizado ? (
+                  <Select
+                    value={formData.cargo || '__empty__'}
+                    onValueChange={(val) => {
+                      if (val === '__custom__') {
+                        setModoCargoCustomizado(true)
+                        return
+                      }
+                      const novoCargo = val === '__empty__' ? '' : val
+                      // Encontrar área do cargo para pré-preencher a área de atuação caso esteja vazia
+                      let areaEncontrada: AreaAtuacaoColaborador | null = null
+                      for (const area of AREAS_ATUACAO_COLABORADOR) {
+                        if (cargosAgrupados[area].some((c) => c.cargo === novoCargo)) {
+                          areaEncontrada = area
+                          break
+                        }
+                      }
+                      setFormData({
+                        ...formData,
+                        cargo: novoCargo,
+                        area_atuacao:
+                          !formData.area_atuacao && areaEncontrada
+                            ? areaEncontrada
+                            : formData.area_atuacao,
+                      })
+                    }}
+                  >
+                    <SelectTrigger className="h-9 text-xs bg-white">
+                      <SelectValue placeholder="Selecione o cargo por área..." />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-80">
+                      <SelectItem value="__empty__" className="text-neutral-400 italic">
+                        -- Selecione um cargo --
+                      </SelectItem>
+
+                      {/* Se o cargo atual for legado e não estiver no catálogo, exibir para manter selecionado */}
+                      {formData.cargo && !cargosPadraoSet.has(formData.cargo) && (
+                        <SelectGroup>
+                          <SelectLabel className="text-[11px] font-bold text-amber-700 bg-amber-50/70 py-1 px-2">
+                            Cargo Atual / Personalizado
+                          </SelectLabel>
+                          <SelectItem value={formData.cargo}>
+                            {formData.cargo} (Atual do colaborador)
+                          </SelectItem>
+                          <SelectSeparator />
+                        </SelectGroup>
+                      )}
+
+                      {/* Grupos por Área ordenados pela hierarquia */}
+                      {AREAS_ATUACAO_COLABORADOR.map((area) => {
+                        const lista = cargosAgrupados[area]
+                        const badgeColor =
+                          area === 'Comercial'
+                            ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+                            : area === 'Técnico'
+                              ? 'text-blue-700 bg-blue-50 border-blue-200'
+                              : area === 'Financeiro'
+                                ? 'text-amber-700 bg-amber-50 border-amber-200'
+                                : 'text-purple-700 bg-purple-50 border-purple-200'
+
+                        return (
+                          <SelectGroup key={area}>
+                            <SelectLabel className="text-[11px] font-bold text-neutral-800 flex items-center justify-between py-1.5 px-2 bg-neutral-50/90 border-y border-neutral-100">
+                              <span>Área {area}</span>
+                              <span
+                                className={`text-[9px] font-mono font-medium px-1.5 py-0.2 rounded border ${badgeColor}`}
+                              >
+                                Hierarquia AEROCAD
+                              </span>
+                            </SelectLabel>
+                            {lista.map((c) => (
+                              <SelectItem key={c.cargo} value={c.cargo} className="text-xs pl-4">
+                                <div className="flex items-center justify-between gap-2 w-full">
+                                  <span className="font-medium text-neutral-900">{c.cargo}</span>
+                                  <span className="text-[10px] text-neutral-400 font-normal shrink-0">
+                                    [{c.nivel}]
+                                  </span>
+                                </div>
+                              </SelectItem>
+                            ))}
+                            <SelectSeparator />
+                          </SelectGroup>
+                        )
+                      })}
+
+                      <SelectGroup>
+                        <SelectItem
+                          value="__custom__"
+                          className="text-xs font-semibold text-[#D65100] bg-orange-50/60 hover:bg-orange-100 cursor-pointer"
+                        >
+                          + Outro / Digitar novo cargo livre...
+                        </SelectItem>
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <div className="space-y-2 p-2.5 rounded border border-orange-200 bg-orange-50/30">
+                    <div className="flex items-center gap-2">
+                      <Input
+                        required
+                        value={formData.cargo}
+                        onChange={(e) => setFormData({ ...formData, cargo: e.target.value })}
+                        placeholder="Digite o novo cargo (ex: Consultor Sênior de Tráfego)"
+                        className="h-8 text-xs bg-white flex-1"
+                        autoFocus
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Label className="text-[10px] text-neutral-600 shrink-0">
+                        Área do novo cargo:
+                      </Label>
+                      <Select
+                        value={cargoAreaCustomizada}
+                        onValueChange={(val: AreaAtuacaoColaborador) => {
+                          setCargoAreaCustomizada(val)
+                          if (!formData.area_atuacao) {
+                            setFormData({ ...formData, area_atuacao: val })
+                          }
+                        }}
+                      >
+                        <SelectTrigger className="h-7 text-[11px] bg-white flex-1">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {AREAS_ATUACAO_COLABORADOR.map((a) => (
+                            <SelectItem key={a} value={a} className="text-xs">
+                              {a}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <p className="text-[10px] text-neutral-500">
+                      O cargo customizado será salvo livremente no cadastro do colaborador.
+                    </p>
+                  </div>
+                )}
               </div>
 
-              <div className="space-y-1">
-                <Label className="text-xs font-semibold">Função / Especialidade *</Label>
-                <Input
-                  required
-                  value={formData.funcao}
-                  onChange={(e) => setFormData({ ...formData, funcao: e.target.value })}
-                  placeholder="Ex: Responsável Técnico OPEA / DECEA"
-                  className="h-9 text-xs"
-                />
+              {/* Seletor Hierárquico de Função Agrupado por Área */}
+              <div className="space-y-1 sm:col-span-1">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-semibold text-neutral-800 flex items-center gap-1.5">
+                    <Award className="h-3.5 w-3.5 text-blue-600" />
+                    <span>Função / Especialidade *</span>
+                  </Label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-5 px-1.5 text-[10px] text-[#D65100] hover:text-[#FF6A13] hover:bg-orange-50"
+                    onClick={() => setModoFuncaoCustomizada(!modoFuncaoCustomizada)}
+                  >
+                    {modoFuncaoCustomizada ? 'Escolher da Lista' : '+ Outra / Criar função'}
+                  </Button>
+                </div>
+
+                {!modoFuncaoCustomizada ? (
+                  <Select
+                    value={formData.funcao || '__empty__'}
+                    onValueChange={(val) => {
+                      if (val === '__custom__') {
+                        setModoFuncaoCustomizada(true)
+                        return
+                      }
+                      const novaFuncao = val === '__empty__' ? '' : val
+                      setFormData({ ...formData, funcao: novaFuncao })
+                    }}
+                  >
+                    <SelectTrigger className="h-9 text-xs bg-white">
+                      <SelectValue placeholder="Selecione a função por área..." />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-80">
+                      <SelectItem value="__empty__" className="text-neutral-400 italic">
+                        -- Selecione uma função --
+                      </SelectItem>
+
+                      {/* Se a função atual for legada e não estiver no catálogo, exibir para manter selecionada */}
+                      {formData.funcao && !funcoesPadraoSet.has(formData.funcao) && (
+                        <SelectGroup>
+                          <SelectLabel className="text-[11px] font-bold text-amber-700 bg-amber-50/70 py-1 px-2">
+                            Função Atual / Personalizada
+                          </SelectLabel>
+                          <SelectItem value={formData.funcao}>
+                            {formData.funcao} (Atual do colaborador)
+                          </SelectItem>
+                          <SelectSeparator />
+                        </SelectGroup>
+                      )}
+
+                      {/* Grupos por Área */}
+                      {AREAS_ATUACAO_COLABORADOR.map((area) => {
+                        const lista = funcoesAgrupadas[area]
+                        const badgeColor =
+                          area === 'Comercial'
+                            ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+                            : area === 'Técnico'
+                              ? 'text-blue-700 bg-blue-50 border-blue-200'
+                              : area === 'Financeiro'
+                                ? 'text-amber-700 bg-amber-50 border-amber-200'
+                                : 'text-purple-700 bg-purple-50 border-purple-200'
+
+                        return (
+                          <SelectGroup key={area}>
+                            <SelectLabel className="text-[11px] font-bold text-neutral-800 flex items-center justify-between py-1.5 px-2 bg-neutral-50/90 border-y border-neutral-100">
+                              <span>Área {area}</span>
+                              <span
+                                className={`text-[9px] font-mono font-medium px-1.5 py-0.2 rounded border ${badgeColor}`}
+                              >
+                                Hierarquia AEROCAD
+                              </span>
+                            </SelectLabel>
+                            {lista.map((f) => (
+                              <SelectItem key={f.funcao} value={f.funcao} className="text-xs pl-4">
+                                <div className="flex items-center justify-between gap-2 w-full">
+                                  <span className="font-medium text-neutral-900">{f.label}</span>
+                                  {f.nivel && (
+                                    <span className="text-[10px] text-neutral-400 font-normal shrink-0">
+                                      [{f.nivel}]
+                                    </span>
+                                  )}
+                                </div>
+                              </SelectItem>
+                            ))}
+                            <SelectSeparator />
+                          </SelectGroup>
+                        )
+                      })}
+
+                      <SelectGroup>
+                        <SelectItem
+                          value="__custom__"
+                          className="text-xs font-semibold text-[#D65100] bg-orange-50/60 hover:bg-orange-100 cursor-pointer"
+                        >
+                          + Outra / Digitar nova função livre...
+                        </SelectItem>
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <div className="space-y-2 p-2.5 rounded border border-orange-200 bg-orange-50/30">
+                    <div className="flex items-center gap-2">
+                      <Input
+                        required
+                        value={formData.funcao}
+                        onChange={(e) => setFormData({ ...formData, funcao: e.target.value })}
+                        placeholder="Digite a nova função / especialidade"
+                        className="h-8 text-xs bg-white flex-1"
+                        autoFocus
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Label className="text-[10px] text-neutral-600 shrink-0">
+                        Área da nova função:
+                      </Label>
+                      <Select
+                        value={funcaoAreaCustomizada}
+                        onValueChange={(val: AreaAtuacaoColaborador) => {
+                          setFuncaoAreaCustomizada(val)
+                          if (!formData.area_atuacao) {
+                            setFormData({ ...formData, area_atuacao: val })
+                          }
+                        }}
+                      >
+                        <SelectTrigger className="h-7 text-[11px] bg-white flex-1">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {AREAS_ATUACAO_COLABORADOR.map((a) => (
+                            <SelectItem key={a} value={a} className="text-xs">
+                              {a}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <p className="text-[10px] text-neutral-500">
+                      A função customizada será salva no cadastro do colaborador.
+                    </p>
+                  </div>
+                )}
               </div>
 
               {formData.regime_contratacao === 'pj' && (
