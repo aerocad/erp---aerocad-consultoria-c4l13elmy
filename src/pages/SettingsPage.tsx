@@ -11,9 +11,11 @@ import {
   UserCheck,
   UserRound,
   XCircle,
+  MessageSquare,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { ImportacaoWizard } from '@/components/importacao/ImportacaoWizard'
+import { WhatsAppSettingsSection } from '@/components/settings/WhatsAppSettingsSection'
 
 import { CrmBadge } from '@/components/common/CrmBadge'
 import { ErrorState, PageLoading } from '@/components/common/States'
@@ -180,13 +182,22 @@ export default function SettingsPage() {
           <TabsTrigger value="servicos">Serviços e preços</TabsTrigger>
           <TabsTrigger value="numeracao">Numeração</TabsTrigger>
           {isAdmin && (
-            <TabsTrigger
-              value="importacao"
-              className="flex items-center gap-1.5 font-semibold text-[#D65100]"
-            >
-              <FileSpreadsheet className="h-3.5 w-3.5" />
-              Importação
-            </TabsTrigger>
+            <>
+              <TabsTrigger
+                value="whatsapp"
+                className="flex items-center gap-1.5 font-semibold text-[#D65100]"
+              >
+                <MessageSquare className="h-3.5 w-3.5" />
+                WhatsApp (Artesanal)
+              </TabsTrigger>
+              <TabsTrigger
+                value="importacao"
+                className="flex items-center gap-1.5 font-semibold text-[#D65100]"
+              >
+                <FileSpreadsheet className="h-3.5 w-3.5" />
+                Importação
+              </TabsTrigger>
+            </>
           )}
         </TabsList>
         <TabsContent value="usuarios">
@@ -485,11 +496,16 @@ export default function SettingsPage() {
           </section>
         </TabsContent>
         {isAdmin && (
-          <TabsContent value="importacao">
-            <div className="crm-card p-6">
-              <ImportacaoWizard />
-            </div>
-          </TabsContent>
+          <>
+            <TabsContent value="whatsapp">
+              <WhatsAppSettingsSection />
+            </TabsContent>
+            <TabsContent value="importacao">
+              <div className="crm-card p-6">
+                <ImportacaoWizard />
+              </div>
+            </TabsContent>
+          </>
         )}
       </Tabs>
       <Dialog open={templateOpen} onOpenChange={setTemplateOpen}>

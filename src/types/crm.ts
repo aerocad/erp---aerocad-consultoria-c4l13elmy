@@ -65,7 +65,22 @@ export interface OportunidadeRecord extends RecordModel {
   responsavel: string
   trilha_prevista: Trail
   observacoes: string
+  origem_canal?: 'whatsapp' | 'site' | 'indicacao' | 'email' | 'outro'
+  whatsapp_remetente?: string
+  whatsapp_mensagem?: string
   expand?: { cliente?: ClienteRecord; responsavel?: UserRecord; tipo_servico?: ServiceRecord }
+}
+
+export type WhatsAppProvider = 'meta' | 'zapi' | 'outro'
+
+export interface WhatsAppConfigRecord extends RecordModel {
+  chave: string
+  provider: WhatsAppProvider
+  webhook_secret: string
+  auto_resposta_ativa: boolean
+  mensagem_auto_resposta: string
+  numero_empresa: string
+  observacoes?: string
 }
 
 export interface ProjetoRecord extends RecordModel {

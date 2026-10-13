@@ -57,6 +57,7 @@ export function OportunidadeDialog({
     responsavel: '',
     trilha_prevista: 'opea',
     observacoes: '',
+    origem_canal: 'outro' as 'whatsapp' | 'site' | 'indicacao' | 'email' | 'outro',
   })
 
   useEffect(() => {
@@ -86,6 +87,7 @@ export function OportunidadeDialog({
         responsavel: oportunidade.responsavel,
         trilha_prevista: oportunidade.trilha_prevista || 'opea',
         observacoes: oportunidade.observacoes || '',
+        origem_canal: oportunidade.origem_canal || 'outro',
       })
     else
       setForm({
@@ -99,6 +101,7 @@ export function OportunidadeDialog({
         responsavel: user?.id || '',
         trilha_prevista: 'opea',
         observacoes: '',
+        origem_canal: 'outro',
       })
   }, [oportunidade, open, presetClient, user?.id])
 
@@ -247,6 +250,29 @@ export function OportunidadeDialog({
                 <SelectItem value="negociacao">Negociação</SelectItem>
                 <SelectItem value="ganho">Fechado (ganho)</SelectItem>
                 <SelectItem value="perdido">Fechado (perdido)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Canal de Origem</Label>
+            <Select
+              value={form.origem_canal}
+              onValueChange={(val) =>
+                setForm((v) => ({
+                  ...v,
+                  origem_canal: val as 'whatsapp' | 'site' | 'indicacao' | 'email' | 'outro',
+                }))
+              }
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="whatsapp">WhatsApp</SelectItem>
+                <SelectItem value="site">Site Institucional</SelectItem>
+                <SelectItem value="indicacao">Indicação</SelectItem>
+                <SelectItem value="email">E-mail</SelectItem>
+                <SelectItem value="outro">Outro</SelectItem>
               </SelectContent>
             </Select>
           </div>

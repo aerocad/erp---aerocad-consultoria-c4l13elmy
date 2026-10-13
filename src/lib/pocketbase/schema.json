@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-13T02:59:13.394Z",
+  "generatedAt": "2026-10-13T03:50:19.979Z",
   "collections": [
     {
       "name": "users",
@@ -536,6 +536,25 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "origem_canal",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["whatsapp", "site", "indicacao", "email", "outro"]
+        },
+        {
+          "name": "whatsapp_remetente",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "whatsapp_mensagem",
+          "type": "text",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
@@ -3246,6 +3265,77 @@
         "CREATE UNIQUE INDEX idx_balancetes_referencia ON balancetes_mensais (referencia)",
         "CREATE INDEX idx_balancetes_ano_mes ON balancetes_mensais (ano, mes DESC)"
       ]
+    },
+    {
+      "name": "whatsapp_config",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && (@request.auth.role = 'admin' || @request.auth.role = 'comercial' || @request.auth.role = 'tecnico' || @request.auth.role = 'financeiro')",
+        "view": "@request.auth.id != '' && (@request.auth.role = 'admin' || @request.auth.role = 'comercial' || @request.auth.role = 'tecnico' || @request.auth.role = 'financeiro')",
+        "create": "@request.auth.role = 'admin'",
+        "update": "@request.auth.role = 'admin'",
+        "delete": "@request.auth.role = 'admin'"
+      },
+      "fields": [
+        {
+          "name": "chave",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "provider",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["meta", "zapi", "outro"]
+        },
+        {
+          "name": "webhook_secret",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "auto_resposta_ativa",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "mensagem_auto_resposta",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "numero_empresa",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "observacoes",
+          "type": "editor",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": ["CREATE UNIQUE INDEX idx_whatsapp_config_chave ON whatsapp_config (chave)"]
     }
   ]
 }

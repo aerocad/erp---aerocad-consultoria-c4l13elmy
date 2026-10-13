@@ -1,6 +1,15 @@
 import { useEffect, useMemo, useState, type DragEvent } from 'react'
-import { CalendarDays, Filter, GripVertical, Plus, Search } from 'lucide-react'
+import {
+  CalendarDays,
+  Filter,
+  GripVertical,
+  Plus,
+  Search,
+  MessageSquare,
+  ExternalLink,
+} from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { buildWhatsAppChatUrl } from '@/services/whatsappService'
 import { toast } from 'sonner'
 
 import { CrmBadge } from '@/components/common/CrmBadge'
@@ -223,10 +232,17 @@ export default function FunnelPage() {
                     >
                       <div className="flex items-start gap-2">
                         <GripVertical className="mt-0.5 h-4 w-4 shrink-0 text-[#C2C2C2]" />
-                        <div className="min-w-0">
-                          <p className="truncate text-xs font-bold uppercase tracking-wide text-[#8A8A8A]">
-                            {item.expand?.cliente?.razao_social || 'Cliente'}
-                          </p>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-1">
+                            <p className="truncate text-xs font-bold uppercase tracking-wide text-[#8A8A8A]">
+                              {item.expand?.cliente?.razao_social || 'Cliente'}
+                            </p>
+                            {item.origem_canal === 'whatsapp' && (
+                              <CrmBadge tone="green" className="px-1.5 py-0 text-[9px] font-bold">
+                                WhatsApp
+                              </CrmBadge>
+                            )}
+                          </div>
                           <h3 className="mt-1 text-sm font-semibold leading-snug text-[#4B4B4B]">
                             {item.titulo}
                           </h3>
@@ -318,11 +334,60 @@ export default function FunnelPage() {
                   </SelectContent>
                 </Select>
               </div>
+              {/* Box de Informações de WhatsApp se aplicável */}
+              {(selected.origem_canal === 'whatsapp' ||
+                selected.whatsapp_remetente ||
+                selected.expand?.cliente?.telefone) && (
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50/70 p-3.5 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-900">
+                      <MessageSquare className="h-4 w-4 text-emerald-600" />
+                      <span>Contato via WhatsApp</span>
+                    </div>
+                    {selected.origem_canal === 'whatsapp' && (
+                      <CrmBadge tone="green" className="text-[10px]">
+                        Origem WhatsApp
+                      </CrmBadge>
+                    )}
+                  </div>
+                  {selected.whatsapp_remetente && (
+                    <p className="text-xs text-emerald-800">
+                      <strong>Remetente:</strong> {selected.whatsapp_remetente}
+                    </p>
+                  )}
+                  {selected.whatsapp_mensagem && (
+                    <div className="rounded border border-emerald-200/80 bg-white p-2.5 text-xs text-zinc-700 italic">
+                      "{selected.whatsapp_mensagem}"
+                    </div>
+                  )}
+                  {/* Botão de retormada manual wa.me */}
+                  {Boolean(selected.whatsapp_remetente || selected.expand?.cliente?.telefone) && (
+                    <div className="pt-1">
+                      <a
+                        href={buildWhatsAppChatUrl(
+                          selected.whatsapp_remetente || selected.expand?.cliente?.telefone,
+                          `Olá! Sou da AEROCAD Consultoria Aeronáutica, referente à sua solicitação de orçamento (${selected.titulo}).`,
+                        )}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex w-full items-center justify-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 transition"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                        Retomar conversa no WhatsApp (wa.me)
+                      </a>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div>
                 <p className="technical-label">OBSERVAÇÕES</p>
-                <p className="mt-2 whitespace-pre-line text-sm text-[#595959]">
-                  {selected.observacoes || 'Nenhuma observação registrada.'}
-                </p>
+                <div
+                  className="mt-2 text-sm text-[#595959] prose prose-sm max-w-none"
+                  dangerouslySetInnerHTML={{
+                    __html: selected.observacoes || '<p>Nenhuma observação registrada.</p>',
+                  }}
+                />
               </div>
               <Button
                 onClick={convertToProject}
