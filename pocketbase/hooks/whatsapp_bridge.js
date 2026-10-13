@@ -340,11 +340,37 @@ routerAdd('POST', '/backend/v1/whatsapp/webhook', (e) => {
     if (!expectedToken) return true
 
     const query = e.requestInfo().query || {}
-    const headerToken =
-      e.request.header.get('X-Webhook-Secret') ||
-      e.request.header.get('X-Api-Key') ||
-      e.request.header.get('Authorization')?.replace(/^Bearer\s+/i, '') ||
-      ''
+    let headerToken = ''
+    try {
+      if (e.request && e.request.header) {
+        if (typeof e.request.header.get === 'function') {
+          headerToken =
+            e.request.header.get('X-Webhook-Secret') ||
+            e.request.header.get('X-Api-Key') ||
+            e.request.header.get('Authorization')?.replace(/^Bearer\s+/i, '') ||
+            ''
+        } else if (e.request.header['x-webhook-secret'] || e.request.header['X-Webhook-Secret']) {
+          headerToken =
+            e.request.header['x-webhook-secret'] ||
+            e.request.header['X-Webhook-Secret'] ||
+            e.request.header['x-api-key'] ||
+            e.request.header['X-Api-Key'] ||
+            ''
+        }
+      }
+    } catch (_) {}
+
+    try {
+      const headersMap = e.requestInfo().headers || {}
+      if (!headerToken) {
+        headerToken =
+          headersMap['x-webhook-secret'] ||
+          headersMap['x_webhook_secret'] ||
+          headersMap['x-api-key'] ||
+          headersMap['authorization']?.replace(/^Bearer\s+/i, '') ||
+          ''
+      }
+    } catch (_) {}
 
     const paramToken = query['token'] || query['secret'] || query['hub.verify_token'] || ''
 
@@ -415,6 +441,16 @@ routerAdd('POST', '/backend/v1/whatsapp/webhook', (e) => {
       } catch (clientCreateErr) {
         console.log('Falha ao criar cliente automático:', clientCreateErr.message)
       }
+    } else if (senderName) {
+      // Se cliente já existia mas tinha nome provisório "Lead WhatsApp...", atualiza para o nome real recebido
+      try {
+        const existingClient = $app.findRecordById('clientes', clienteId)
+        const currentName = existingClient.getString('razao_social')
+        if (currentName.startsWith('Lead WhatsApp') && senderName) {
+          existingClient.set('razao_social', senderName + ' (WhatsApp)')
+          $app.save(existingClient)
+        }
+      } catch (_) {}
     }
 
     // 3. Localiza se já existe oportunidade aberta recente para esse cliente/telefone ou cria uma nova
@@ -591,7 +627,7 @@ routerAdd(
         if (!token || !phoneId) {
           return {
             sent: false,
-            reason: 'Segredos WHATSAPP_API_TOKEN ou WHATSAPP_PHONE_ID não configurados',
+            reason: 'Segredos WHATSAPP_API_TOKEN ou WHATSAPP_PHONE_ID não configurados no servidor',
           }
         }
 
@@ -678,13 +714,14 @@ routerAdd(
     }
 
     try {
-      const authUser = e.auth
+      const authUser = e.auth || (e.requestInfo && e.requestInfo().auth)
       if (!authUser || !authUser.id) {
-        return e.unauthorizedError('Autenticação necessária')
+        return e.json(401, { error: 'Autenticação necessária' })
       }
 
-      if (authUser.getString('role') !== 'admin') {
-        return e.forbiddenError('Apenas administradores podem testar o envio de WhatsApp')
+      const userRole = authUser.getString ? authUser.getString('role') : authUser.role
+      if (userRole !== 'admin') {
+        return e.json(403, { error: 'Apenas administradores podem testar o envio de WhatsApp' })
       }
 
       const body = e.requestInfo().body || {}
@@ -694,7 +731,7 @@ routerAdd(
         'Olá! Esta é uma mensagem de teste da integração artesanal WhatsApp da AEROCAD Consultoria.'
 
       if (!phone) {
-        return e.badRequestError('Número de telefone destinatário é obrigatório')
+        return e.json(400, { error: 'Número de telefone destinatário é obrigatório' })
       }
 
       const res = dispatchWhatsAppMessage(phone, message)
