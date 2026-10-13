@@ -566,26 +566,13 @@ export function FinancePage() {
     return months
   }, [installments.data, contasReceber.data, selectedYear])
 
-  // Opções de período filtradas por movimentação real no ano selecionado
-  const activePeriodOptions = useMemo(() => {
-    // Se nenhum ano específico estiver ativo, retorna todas as opções
-    if (selectedYear === 'todos') return PERIOD_OPTIONS
-
-    // Filtra opções que possuem pelo menos 1 mês com movimentação
-    const filtered = PERIOD_OPTIONS.filter((opt) => {
-      if (opt.value === 'ano') return true
-      const mList = (opt as any).months as readonly number[] | undefined
-      if (!mList || mList.length === 0) return true
-      return mList.some((m) => activeMonthsInSelectedYear.has(m))
-    })
-
-    // Fallback de segurança: se nenhuma opção além de "ano" tiver movimentação, exibe todas
-    if (filtered.length <= 1) {
-      return PERIOD_OPTIONS
-    }
-
-    return filtered
-  }, [selectedYear, activeMonthsInSelectedYear])
+  // Determina se uma opção de período possui movimentação real no ano selecionado
+  const isPeriodActive = (opt: (typeof PERIOD_OPTIONS)[number]) => {
+    if (selectedYear === 'todos' || opt.value === 'ano') return true
+    const mList = (opt as any).months as readonly number[] | undefined
+    if (!mList || mList.length === 0) return true
+    return mList.some((m) => activeMonthsInSelectedYear.has(m))
+  }
 
   // Helper para formatar o rótulo do período e ano conforme especificado:
   // "1º Semestre 2026", "3º Quadrimestre 2025", "Março 2026", "Exercício 2026"
@@ -1002,76 +989,154 @@ export function FinancePage() {
                   <SelectTrigger className="h-7 w-[180px] sm:w-[205px] border-none bg-transparent text-xs font-bold text-[#D65100] shadow-none focus:ring-0 focus:ring-offset-0 px-1">
                     <SelectValue placeholder="Período" />
                   </SelectTrigger>
-                  <SelectContent align="end" className="max-h-[360px]">
+                  <SelectContent align="end" className="max-h-[380px] w-[260px]">
                     <SelectItem value="ano" className="text-xs font-semibold">
                       Ano inteiro (padrão)
                     </SelectItem>
                     <SelectSeparator />
-                    {activePeriodOptions.some((o) => o.value.startsWith('mes_')) && (
-                      <>
-                        <SelectGroup>
-                          <SelectLabel className="text-[11px] font-bold text-neutral-500 uppercase tracking-wider">
-                            Meses individuais
-                          </SelectLabel>
-                          {activePeriodOptions
-                            .filter((o) => o.value.startsWith('mes_'))
-                            .map((opt) => (
-                              <SelectItem key={opt.value} value={opt.value} className="text-xs">
-                                {opt.label}
-                              </SelectItem>
-                            ))}
-                        </SelectGroup>
-                        <SelectSeparator />
-                      </>
-                    )}
-                    {activePeriodOptions.some((o) => o.value.startsWith('semestre_')) && (
-                      <>
-                        <SelectGroup>
-                          <SelectLabel className="text-[11px] font-bold text-neutral-500 uppercase tracking-wider">
-                            Semestres
-                          </SelectLabel>
-                          {activePeriodOptions
-                            .filter((o) => o.value.startsWith('semestre_'))
-                            .map((opt) => (
-                              <SelectItem key={opt.value} value={opt.value} className="text-xs">
-                                {opt.label}
-                              </SelectItem>
-                            ))}
-                        </SelectGroup>
-                        <SelectSeparator />
-                      </>
-                    )}
-                    {activePeriodOptions.some((o) => o.value.startsWith('quadrimestre_')) && (
-                      <>
-                        <SelectGroup>
-                          <SelectLabel className="text-[11px] font-bold text-neutral-500 uppercase tracking-wider">
-                            Quadrimestres
-                          </SelectLabel>
-                          {activePeriodOptions
-                            .filter((o) => o.value.startsWith('quadrimestre_'))
-                            .map((opt) => (
-                              <SelectItem key={opt.value} value={opt.value} className="text-xs">
-                                {opt.label}
-                              </SelectItem>
-                            ))}
-                        </SelectGroup>
-                        <SelectSeparator />
-                      </>
-                    )}
-                    {activePeriodOptions.some((o) => o.value.startsWith('trimestre_')) && (
-                      <SelectGroup>
-                        <SelectLabel className="text-[11px] font-bold text-neutral-500 uppercase tracking-wider">
-                          Trimestres
-                        </SelectLabel>
-                        {activePeriodOptions
-                          .filter((o) => o.value.startsWith('trimestre_'))
-                          .map((opt) => (
-                            <SelectItem key={opt.value} value={opt.value} className="text-xs">
-                              {opt.label}
+
+                    <SelectGroup>
+                      <SelectLabel className="text-[11px] font-bold text-neutral-500 uppercase tracking-wider">
+                        Meses individuais
+                      </SelectLabel>
+                      {PERIOD_OPTIONS.filter((o) => o.value.startsWith('mes_')).map((opt) => {
+                        const hasMov = isPeriodActive(opt)
+                        const isCurrentSelected = selectedPeriod === opt.value
+                        return (
+                          <SelectItem
+                            key={opt.value}
+                            value={opt.value}
+                            disabled={!hasMov && !isCurrentSelected}
+                            className={`text-xs ${
+                              !hasMov ? 'text-neutral-400 italic cursor-not-allowed' : 'font-medium'
+                            }`}
+                            title={
+                              !hasMov
+                                ? `${opt.label}: Sem movimentação no ano ${selectedYear}`
+                                : undefined
+                            }
+                          >
+                            <span className="flex items-center justify-between w-full gap-2">
+                              <span>{opt.label}</span>
+                              {!hasMov && (
+                                <span className="text-[10px] font-normal text-neutral-400 font-sans tracking-tight">
+                                  (sem movimentação)
+                                </span>
+                              )}
+                            </span>
+                          </SelectItem>
+                        )
+                      })}
+                    </SelectGroup>
+                    <SelectSeparator />
+
+                    <SelectGroup>
+                      <SelectLabel className="text-[11px] font-bold text-neutral-500 uppercase tracking-wider">
+                        Semestres
+                      </SelectLabel>
+                      {PERIOD_OPTIONS.filter((o) => o.value.startsWith('semestre_')).map((opt) => {
+                        const hasMov = isPeriodActive(opt)
+                        const isCurrentSelected = selectedPeriod === opt.value
+                        return (
+                          <SelectItem
+                            key={opt.value}
+                            value={opt.value}
+                            disabled={!hasMov && !isCurrentSelected}
+                            className={`text-xs ${
+                              !hasMov ? 'text-neutral-400 italic cursor-not-allowed' : 'font-medium'
+                            }`}
+                            title={
+                              !hasMov
+                                ? `${opt.label}: Sem movimentação no ano ${selectedYear}`
+                                : undefined
+                            }
+                          >
+                            <span className="flex items-center justify-between w-full gap-2">
+                              <span>{opt.label}</span>
+                              {!hasMov && (
+                                <span className="text-[10px] font-normal text-neutral-400 font-sans tracking-tight">
+                                  (sem movimentação)
+                                </span>
+                              )}
+                            </span>
+                          </SelectItem>
+                        )
+                      })}
+                    </SelectGroup>
+                    <SelectSeparator />
+
+                    <SelectGroup>
+                      <SelectLabel className="text-[11px] font-bold text-neutral-500 uppercase tracking-wider">
+                        Quadrimestres
+                      </SelectLabel>
+                      {PERIOD_OPTIONS.filter((o) => o.value.startsWith('quadrimestre_')).map(
+                        (opt) => {
+                          const hasMov = isPeriodActive(opt)
+                          const isCurrentSelected = selectedPeriod === opt.value
+                          return (
+                            <SelectItem
+                              key={opt.value}
+                              value={opt.value}
+                              disabled={!hasMov && !isCurrentSelected}
+                              className={`text-xs ${
+                                !hasMov
+                                  ? 'text-neutral-400 italic cursor-not-allowed'
+                                  : 'font-medium'
+                              }`}
+                              title={
+                                !hasMov
+                                  ? `${opt.label}: Sem movimentação no ano ${selectedYear}`
+                                  : undefined
+                              }
+                            >
+                              <span className="flex items-center justify-between w-full gap-2">
+                                <span>{opt.label}</span>
+                                {!hasMov && (
+                                  <span className="text-[10px] font-normal text-neutral-400 font-sans tracking-tight">
+                                    (sem movimentação)
+                                  </span>
+                                )}
+                              </span>
                             </SelectItem>
-                          ))}
-                      </SelectGroup>
-                    )}
+                          )
+                        },
+                      )}
+                    </SelectGroup>
+                    <SelectSeparator />
+
+                    <SelectGroup>
+                      <SelectLabel className="text-[11px] font-bold text-neutral-500 uppercase tracking-wider">
+                        Trimestres
+                      </SelectLabel>
+                      {PERIOD_OPTIONS.filter((o) => o.value.startsWith('trimestre_')).map((opt) => {
+                        const hasMov = isPeriodActive(opt)
+                        const isCurrentSelected = selectedPeriod === opt.value
+                        return (
+                          <SelectItem
+                            key={opt.value}
+                            value={opt.value}
+                            disabled={!hasMov && !isCurrentSelected}
+                            className={`text-xs ${
+                              !hasMov ? 'text-neutral-400 italic cursor-not-allowed' : 'font-medium'
+                            }`}
+                            title={
+                              !hasMov
+                                ? `${opt.label}: Sem movimentação no ano ${selectedYear}`
+                                : undefined
+                            }
+                          >
+                            <span className="flex items-center justify-between w-full gap-2">
+                              <span>{opt.label}</span>
+                              {!hasMov && (
+                                <span className="text-[10px] font-normal text-neutral-400 font-sans tracking-tight">
+                                  (sem movimentação)
+                                </span>
+                              )}
+                            </span>
+                          </SelectItem>
+                        )
+                      })}
+                    </SelectGroup>
                   </SelectContent>
                 </Select>
               </div>
