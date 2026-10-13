@@ -69,6 +69,7 @@ import type {
   ExtratoTransacaoRecord,
   ParcelaRecord,
   ProjetoRecord,
+  BalanceteMensalRecord,
 } from '@/types/crm'
 import { ContasPagarTab } from '@/components/financeiro/ContasPagarTab'
 import { ContasReceberTab } from '@/components/financeiro/ContasReceberTab'
@@ -76,11 +77,15 @@ import { FluxoCaixaTab } from '@/components/financeiro/FluxoCaixaTab'
 import { ExtratosComprovantesTab } from '@/components/financeiro/ExtratosComprovantesTab'
 import { BalancetesTab } from '@/components/financeiro/BalancetesTab'
 import { RelatoriosFinanceirosTab } from '@/components/financeiro/RelatoriosFinanceirosTab'
+import {
+  CentralFinanceiraHub,
+  type FinanceTabKey,
+} from '@/components/financeiro/CentralFinanceiraHub'
 
 export default FinancePage
 
 export function FinancePage() {
-  const { ocultarValores } = useFinanceiroVisibilidade()
+  const { ocultarValores, podeVerValores } = useFinanceiroVisibilidade()
   const { user } = useAuth()
   const [params] = useSearchParams()
   const installments = useCrmData<ParcelaRecord>('parcelas', {
@@ -108,6 +113,9 @@ export function FinancePage() {
   const extratosTransacoes = useCrmData<ExtratoTransacaoRecord>('extratos_transacoes', {
     sort: '-data',
     expand: 'extrato',
+  })
+  const balancetesList = useCrmData<BalanceteMensalRecord>('balancetes_mensais', {
+    sort: '-referencia',
   })
 
   const [query, setQuery] = useState('')
@@ -295,6 +303,103 @@ export function FinancePage() {
       /* intentionally ignored */
     }
   }
+
+  // Cálculos consolidados para a Central Financeira (Hub)
+  const totalPagarAberto = useMemo(() => {
+    return contasPagar.data
+      .filter((c) => c.status === 'pendente')
+      .reduce((acc, c) => acc + (c.valor || 0), 0)
+  }, [contasPagar.data])
+
+  const qtdPagarAtrasadas = useMemo(() => {
+    const hoje = new Date()
+    hoje.setHours(0, 0, 0, 0)
+    return contasPagar.data.filter((c) => {
+      if (c.status !== 'pendente' || !c.data_vencimento) return false
+      const d = new Date(c.data_vencimento.slice(0, 10))
+      d.setHours(0, 0, 0, 0)
+      return d < hoje
+    }).length
+  }, [contasPagar.data])
+
+  const totalReceberAberto = useMemo(() => {
+    const totalParcelasAberto = installments.data
+      .filter((p) => p.status !== 'paga')
+      .reduce((acc, p) => acc + (p.valor || 0), 0)
+    const totalAvulsasAberto = contasReceber.data
+      .filter((cr) => cr.status === 'pendente')
+      .reduce((acc, cr) => acc + (cr.valor || 0), 0)
+    return totalParcelasAberto + totalAvulsasAberto
+  }, [installments.data, contasReceber.data])
+
+  const qtdReceberAtrasadas = useMemo(() => {
+    const hoje = new Date()
+    hoje.setHours(0, 0, 0, 0)
+    const parcVencidas = installments.data.filter((p) => {
+      if (p.status === 'paga' || !p.vencimento) return false
+      const d = new Date(p.vencimento.slice(0, 10))
+      d.setHours(0, 0, 0, 0)
+      return d < hoje || p.status === 'vencida'
+    }).length
+    const avulsasVencidas = contasReceber.data.filter((cr) => {
+      if (cr.status !== 'pendente' || !cr.data_vencimento) return false
+      const d = new Date(cr.data_vencimento.slice(0, 10))
+      d.setHours(0, 0, 0, 0)
+      return d < hoje
+    }).length
+    return parcVencidas + avulsasVencidas
+  }, [installments.data, contasReceber.data])
+
+  // Saldo realizado do mês corrente (para o card de Fluxo de Caixa)
+  const { saldoMesCorrente, mesCorrenteNome } = useMemo(() => {
+    const agora = new Date()
+    const anoMesAtual = agora.toISOString().slice(0, 7) // YYYY-MM
+    const nomeMes = agora.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+
+    // Entradas realizadas no mês atual
+    const entradasParcelas = installments.data
+      .filter((p) => {
+        if (p.status !== 'paga') return false
+        const dt = (p.data_pagamento || p.vencimento || '').slice(0, 7)
+        return dt === anoMesAtual
+      })
+      .reduce((acc, p) => acc + (p.valor_recebido || p.valor || 0), 0)
+
+    const entradasAvulsas = contasReceber.data
+      .filter((cr) => {
+        if (cr.status !== 'recebido') return false
+        const dt = (cr.data_recebimento || cr.data_vencimento || '').slice(0, 7)
+        return dt === anoMesAtual
+      })
+      .reduce((acc, cr) => acc + (cr.valor_recebido || cr.valor || 0), 0)
+
+    // Saídas realizadas no mês atual
+    const saidas = contasPagar.data
+      .filter((cp) => {
+        if (cp.status !== 'pago') return false
+        const dt = (cp.data_pagamento || cp.data_vencimento || '').slice(0, 7)
+        return dt === anoMesAtual
+      })
+      .reduce((acc, cp) => acc + (cp.valor || 0), 0)
+
+    return {
+      saldoMesCorrente: entradasParcelas + entradasAvulsas - saidas,
+      mesCorrenteNome: nomeMes,
+    }
+  }, [installments.data, contasReceber.data, contasPagar.data])
+
+  // Extratos & Comprovantes pendentes de conciliação
+  const qtdExtratosPendentes = useMemo(() => {
+    return extratosTransacoes.data.filter(
+      (tx) => !tx.status_conciliacao || tx.status_conciliacao === 'pendente',
+    ).length
+  }, [extratosTransacoes.data])
+
+  // Balancetes: último emitido
+  const ultimoBalanceteRef = useMemo(() => {
+    if (!balancetesList.data || balancetesList.data.length === 0) return null
+    return balancetesList.data[0]?.referencia || null
+  }, [balancetesList.data])
 
   const { total, paid, open, overdue } = useMemo(() => {
     const now = new Date()
@@ -591,6 +696,15 @@ export function FinancePage() {
     { label: 'EM ATRASO', value: overdue, icon: TriangleAlert, color: 'text-rose-700 bg-rose-100' },
   ]
 
+  const handleSelectTab = (tab: FinanceTabKey) => {
+    setActiveTab(tab)
+    // Scroll suave opcional para a área de conteúdo se o usuário estiver rolando
+    const el = document.getElementById('financeiro-abas-conteudo')
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }
+
   return (
     <div>
       <SectionHeader
@@ -641,6 +755,25 @@ export function FinancePage() {
             </Button>
           </div>
         }
+      />
+
+      {/* 1. HUB VISUAL DESTACADO: Central Financeira AEROCAD */}
+      <CentralFinanceiraHub
+        activeTab={activeTab}
+        onSelectTab={handleSelectTab}
+        canWrite={canWrite}
+        podeVerValores={podeVerValores}
+        totalPagarAberto={totalPagarAberto}
+        qtdPagarAtrasadas={qtdPagarAtrasadas}
+        totalReceberAberto={totalReceberAberto}
+        qtdReceberAtrasadas={qtdReceberAtrasadas}
+        saldoMesCorrente={saldoMesCorrente}
+        mesCorrenteNome={mesCorrenteNome}
+        qtdExtratosPendentes={qtdExtratosPendentes}
+        ultimoBalanceteRef={ultimoBalanceteRef}
+        totalBalancetesEmitidos={balancetesList.data.length}
+        totalParcelasProjetos={installments.data.length}
+        totalNotasOrfas={notasOrfas.length}
       />
 
       {/* Indicador de filtro ativo no cabeçalho do resumo quando um ano específico estiver selecionado */}
@@ -711,7 +844,10 @@ export function FinancePage() {
       </div>
 
       {/* Navegação das Abas Principais do Módulo Financeiro */}
-      <div className="mt-6 flex flex-wrap items-center gap-2 border-b border-neutral-200">
+      <div
+        id="financeiro-abas-conteudo"
+        className="mt-6 flex flex-wrap items-center gap-2 border-b border-neutral-200 scroll-mt-6"
+      >
         <button
           onClick={() => setActiveTab('contas_pagar')}
           className={`pb-3 px-3 text-xs sm:text-sm font-bold border-b-2 transition flex items-center gap-1.5 ${
