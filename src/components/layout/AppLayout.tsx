@@ -38,6 +38,11 @@ import { Input } from '@/components/ui/input'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { AlertasDrawer } from '@/components/common/AlertasDrawer'
+import {
+  SimuladorDesignModal,
+  ThemeActiveBanner,
+  ThemeSimulatorTrigger,
+} from '@/components/common/SimuladorDesignModal'
 import { useAlertas } from '@/contexts/AlertasContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { useFinanceiroVisibilidade } from '@/contexts/FinanceiroVisibilidadeContext'
@@ -184,10 +189,10 @@ export default function AppLayout() {
     : undefined
 
   const SidebarContent = ({ mobile = false }: { mobile?: boolean }) => (
-    <div className="flex h-full flex-col bg-[#4B4B4B] text-white">
+    <div className="sidebar-container flex h-full flex-col bg-[var(--app-sidebar-bg,#4B4B4B)] text-white">
       <div
         className={cn(
-          'flex h-[76px] items-center border-b border-white/10 px-5',
+          'flex h-[76px] items-center border-b border-[var(--app-sidebar-border,rgba(255,255,255,0.1))] px-5',
           collapsed && !mobile ? 'justify-center px-2' : 'justify-between',
         )}
       >
@@ -197,7 +202,7 @@ export default function AppLayout() {
           title="Painel Principal · AEROCAD"
         >
           {collapsed && !mobile ? (
-            <span className="flex h-10 w-10 items-center justify-center rounded-md border-2 border-[#FF6A13] bg-[#FF6A13]/10 font-mono text-xl font-black text-[#FF6A13] transition-colors hover:bg-[#FF6A13]/20">
+            <span className="flex h-10 w-10 items-center justify-center rounded-md border-2 border-[var(--app-brand-orange,#FF6A13)] bg-[var(--app-brand-orange,#FF6A13)]/10 font-mono text-xl font-black text-[var(--app-brand-orange,#FF6A13)] transition-colors hover:bg-[var(--app-brand-orange,#FF6A13)]/20">
               A
             </span>
           ) : (
@@ -240,13 +245,16 @@ export default function AppLayout() {
                 <>
                   <span
                     className={cn(
-                      'absolute inset-y-2 left-0 w-[3px] rounded-full bg-[#FF6A13] transition-opacity',
+                      'absolute inset-y-2 left-0 w-[3px] rounded-full bg-[var(--app-brand-orange,#FF6A13)] transition-opacity',
                       isActive ? 'opacity-100' : 'opacity-0',
                     )}
                   />
                   <div className="relative flex items-center justify-center">
                     <Icon
-                      className={cn('h-[19px] w-[19px] shrink-0', isActive && 'text-[#FF6A13]')}
+                      className={cn(
+                        'h-[19px] w-[19px] shrink-0',
+                        isActive && 'text-[var(--app-brand-orange,#FF6A13)]',
+                      )}
                     />
                     {item.key === 'painel' && urgentesCount > 0 && collapsed && !mobile && (
                       <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
@@ -287,7 +295,7 @@ export default function AppLayout() {
           <div className={cn('flex items-center gap-3', collapsed && !mobile && 'justify-center')}>
             <Avatar className="h-9 w-9 border border-white/15">
               <AvatarImage src={avatarUrl} />
-              <AvatarFallback className="bg-[#FF6A13] text-xs font-bold text-white">
+              <AvatarFallback className="bg-[var(--app-brand-orange,#FF6A13)] text-xs font-bold text-white">
                 {initials(user?.name)}
               </AvatarFallback>
             </Avatar>
@@ -314,7 +322,10 @@ export default function AppLayout() {
   )
 
   return (
-    <div className="min-h-screen bg-[#F2F2F2]">
+    <div className="min-h-screen bg-[var(--app-body-bg,#F2F2F2)] text-[var(--app-text-body,#595959)]">
+      {/* Banner de Simulação Ativa de Tema / Retornar ao Padrão */}
+      <ThemeActiveBanner />
+
       <aside
         className={cn(
           'fixed inset-y-0 left-0 z-40 hidden transition-[width] duration-200 lg:block',
@@ -363,7 +374,7 @@ export default function AppLayout() {
           </div>
         )}
 
-        <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-[#DEDEDE] bg-white/95 px-4 backdrop-blur lg:px-6">
+        <header className="topbar-header sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-[var(--app-header-border,#DEDEDE)] bg-[var(--app-header-bg,rgba(255,255,255,0.95))] px-4 backdrop-blur lg:px-6">
           <Button
             variant="ghost"
             size="icon"
@@ -383,9 +394,13 @@ export default function AppLayout() {
           </Button>
           <div className="min-w-0">
             <p className="technical-label hidden sm:block">CRM · AEROCAD</p>
-            <h2 className="truncate text-base font-bold text-[#4B4B4B]">{title}</h2>
+            <h2 className="truncate text-base font-bold text-[var(--app-text-heading,#4B4B4B)]">
+              {title}
+            </h2>
           </div>
           <div className="ml-auto flex items-center gap-2">
+            {/* Simulador de Design: Botão de Acesso Rápido na Topbar para Todos os Perfis */}
+            <ThemeSimulatorTrigger />
             <Button
               variant="outline"
               className="hidden h-10 w-[260px] justify-start text-[#8A8A8A] md:flex"
@@ -526,11 +541,19 @@ export default function AppLayout() {
             <Outlet />
           </div>
         </main>
-        <footer className="border-t border-[#DEDEDE] px-5 py-4 text-center text-xs text-[#8A8A8A]">
-          CRM AEROCAD · v1 <span className="mx-2">•</span> Perfil: {roleLabels[role]}
-          {isSimulating && (
-            <span className="ml-1 text-amber-600 font-semibold">(Modo de Simulação Ativo)</span>
-          )}
+        <footer className="border-t border-[var(--app-header-border,#DEDEDE)] px-5 py-4 text-center text-xs text-[#8A8A8A]">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-2 max-w-[1440px] mx-auto">
+            <div>
+              CRM AEROCAD · v1 <span className="mx-2">•</span> Perfil: {roleLabels[role]}
+              {isSimulating && (
+                <span className="ml-1 text-amber-600 font-semibold">(Modo de Simulação Ativo)</span>
+              )}
+            </div>
+            <div>
+              {/* Gatilho discreto no rodapé */}
+              <ThemeSimulatorTrigger variant="footer" />
+            </div>
+          </div>
         </footer>
       </div>
 
@@ -542,6 +565,9 @@ export default function AppLayout() {
         dispensados={dispensados}
         onReload={reloadAlertas}
       />
+
+      {/* Modal Central do Simulador de Design */}
+      <SimuladorDesignModal />
 
       <Dialog open={searchOpen} onOpenChange={setSearchOpen}>
         <DialogContent className="top-[12%] translate-y-0 sm:max-w-xl">

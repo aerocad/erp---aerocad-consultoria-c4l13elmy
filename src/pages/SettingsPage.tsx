@@ -9,6 +9,8 @@ import {
   Save,
   Shield,
   UserCheck,
+  Palette,
+  RotateCcw,
   UserRound,
   XCircle,
 } from 'lucide-react'
@@ -40,7 +42,9 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { useAuth } from '@/contexts/AuthContext'
+import { TEMAS_DISPONIVEIS, useTheme } from '@/contexts/ThemeContext'
 import { useCrmData } from '@/hooks/use-crm-data'
+import { cn } from '@/lib/utils'
 import { roleLabels } from '@/lib/crm'
 import { formatCurrency, initials } from '@/lib/format'
 import pb from '@/lib/pocketbase/client'
@@ -57,6 +61,7 @@ export default function SettingsPage() {
     stopSimulation,
     refreshUser,
   } = useAuth()
+  const { theme, setTheme, resetToDefault, isDefaultTheme, setSimulatorOpen } = useTheme()
   const users = useCrmData<UserRecord>('users', { sort: 'name' })
   const templates = useCrmData<ModeloRecord>('modelos_documentos', { sort: 'nome' })
   const services = useCrmData<ServiceRecord>('servicos_catalogo', { sort: 'codigo' })
@@ -179,6 +184,13 @@ export default function SettingsPage() {
           <TabsTrigger value="modelos">Modelos</TabsTrigger>
           <TabsTrigger value="servicos">Serviços e preços</TabsTrigger>
           <TabsTrigger value="numeracao">Numeração</TabsTrigger>
+          <TabsTrigger
+            value="design"
+            className="flex items-center gap-1.5 font-semibold text-[#FF6A13]"
+          >
+            <Palette className="h-3.5 w-3.5" />
+            Simulador de Design
+          </TabsTrigger>
           {isAdmin && (
             <TabsTrigger
               value="importacao"
@@ -483,6 +495,130 @@ export default function SettingsPage() {
               ))}
             </div>
           </section>
+        </TabsContent>
+        <TabsContent value="design">
+          <div className="crm-card overflow-hidden">
+            <div className="border-b p-5">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="font-bold text-base">Simulador de Design & Temas Visuais</h2>
+                    <CrmBadge tone="orange" className="text-[10px]">
+                      100% Reversível
+                    </CrmBadge>
+                  </div>
+                  <p className="mt-1 text-sm text-[#737373]">
+                    Experimente novas direções visuais do CRM AEROCAD sem nenhum risco de perder o
+                    design original. A alternância é instantânea em todo o sistema.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {!isDefaultTheme && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={resetToDefault}
+                      className="text-xs"
+                    >
+                      <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+                      Voltar ao design atual
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    onClick={() => setSimulatorOpen(true)}
+                    className="bg-[#FF6A13] hover:bg-[#E85B06] text-white font-semibold text-xs"
+                  >
+                    <Palette className="mr-1.5 h-3.5 w-3.5" />
+                    Abrir Simulador Completo
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-5">
+              <p className="mb-4 text-xs font-bold uppercase tracking-wider text-[#8A8A8A]">
+                Alternativas disponíveis para simulação:
+              </p>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                {TEMAS_DISPONIVEIS.map((item) => {
+                  const isSelected = item.id === theme
+                  return (
+                    <div
+                      key={item.id}
+                      onClick={() => setTheme(item.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          setTheme(item.id)
+                        }
+                      }}
+                      tabIndex={0}
+                      role="button"
+                      aria-pressed={isSelected}
+                      className={cn(
+                        'flex flex-col justify-between rounded-xl border-2 p-4 text-left transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#FF6A13]',
+                        isSelected
+                          ? 'border-[#FF6A13] bg-orange-50/20 shadow-sm ring-1 ring-[#FF6A13]/20'
+                          : 'border-neutral-200 bg-white hover:border-neutral-300 hover:bg-neutral-50/40',
+                      )}
+                    >
+                      <div>
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-sm text-neutral-900">{item.nome}</span>
+                          {isSelected && (
+                            <span className="rounded-full bg-[#FF6A13] px-2 py-0.5 text-[10px] font-bold text-white">
+                              Ativo
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-0.5 text-xs text-neutral-500">{item.subtitulo}</p>
+                        <p className="mt-2 text-xs text-neutral-600 line-clamp-3">
+                          {item.descricao}
+                        </p>
+                      </div>
+
+                      <div className="mt-4 pt-3 border-t">
+                        <div className="flex h-3 w-full overflow-hidden rounded border">
+                          <div className="w-1/4" style={{ backgroundColor: item.paleta.sidebar }} />
+                          <div
+                            className="w-1/4"
+                            style={{ backgroundColor: item.paleta.primaria }}
+                          />
+                          <div className="w-1/2" style={{ backgroundColor: item.paleta.fundo }} />
+                        </div>
+                        <Button
+                          size="sm"
+                          variant={isSelected ? 'default' : 'outline'}
+                          className={cn(
+                            'mt-3 w-full h-7 text-xs',
+                            isSelected && 'bg-[#FF6A13] hover:bg-[#E85B06] text-white',
+                          )}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setTheme(item.id)
+                          }}
+                        >
+                          {isSelected ? 'Tema selecionado' : 'Simular este design'}
+                        </Button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              <div className="mt-6 rounded-xl border bg-neutral-50 p-4 text-xs text-neutral-600">
+                <p className="font-semibold text-neutral-800">
+                  Importante: Nenhum dado ou relatório oficial é afetado
+                </p>
+                <p className="mt-1">
+                  Os documentos contratuais, técnicos e relatórios A4 impressos mantêm rigorosamente
+                  a identidade oficial AEROCAD (Safety Orange #FF6A13, Arial e logo oficial). Apenas
+                  o layout navegável do sistema reflete a simulação escolhida.
+                </p>
+              </div>
+            </div>
+          </div>
         </TabsContent>
         {isAdmin && (
           <TabsContent value="importacao">
