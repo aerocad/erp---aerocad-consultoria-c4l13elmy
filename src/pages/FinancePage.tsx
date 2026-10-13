@@ -436,32 +436,62 @@ export function FinancePage() {
 
   // Opções de períodos / granularidade quando um ano está selecionado
   const PERIOD_OPTIONS = [
-    { value: 'ano', label: 'Ano inteiro' },
+    { value: 'ano', label: 'Ano inteiro', shortLabel: 'Ano inteiro' },
     // Meses individuais (Janeiro a Dezembro)
-    { value: 'mes_1', label: 'Janeiro', months: [1] },
-    { value: 'mes_2', label: 'Fevereiro', months: [2] },
-    { value: 'mes_3', label: 'Março', months: [3] },
-    { value: 'mes_4', label: 'Abril', months: [4] },
-    { value: 'mes_5', label: 'Maio', months: [5] },
-    { value: 'mes_6', label: 'Junho', months: [6] },
-    { value: 'mes_7', label: 'Julho', months: [7] },
-    { value: 'mes_8', label: 'Agosto', months: [8] },
-    { value: 'mes_9', label: 'Setembro', months: [9] },
-    { value: 'mes_10', label: 'Outubro', months: [10] },
-    { value: 'mes_11', label: 'Novembro', months: [11] },
-    { value: 'mes_12', label: 'Dezembro', months: [12] },
+    { value: 'mes_1', label: 'Janeiro', shortLabel: 'Janeiro', months: [1] },
+    { value: 'mes_2', label: 'Fevereiro', shortLabel: 'Fevereiro', months: [2] },
+    { value: 'mes_3', label: 'Março', shortLabel: 'Março', months: [3] },
+    { value: 'mes_4', label: 'Abril', shortLabel: 'Abril', months: [4] },
+    { value: 'mes_5', label: 'Maio', shortLabel: 'Maio', months: [5] },
+    { value: 'mes_6', label: 'Junho', shortLabel: 'Junho', months: [6] },
+    { value: 'mes_7', label: 'Julho', shortLabel: 'Julho', months: [7] },
+    { value: 'mes_8', label: 'Agosto', shortLabel: 'Agosto', months: [8] },
+    { value: 'mes_9', label: 'Setembro', shortLabel: 'Setembro', months: [9] },
+    { value: 'mes_10', label: 'Outubro', shortLabel: 'Outubro', months: [10] },
+    { value: 'mes_11', label: 'Novembro', shortLabel: 'Novembro', months: [11] },
+    { value: 'mes_12', label: 'Dezembro', shortLabel: 'Dezembro', months: [12] },
     // Semestres
-    { value: 'semestre_1', label: '1º Semestre (Jan–Jun)', months: [1, 2, 3, 4, 5, 6] },
-    { value: 'semestre_2', label: '2º Semestre (Jul–Dez)', months: [7, 8, 9, 10, 11, 12] },
+    {
+      value: 'semestre_1',
+      label: '1º Semestre',
+      shortLabel: '1º Semestre',
+      months: [1, 2, 3, 4, 5, 6],
+    },
+    {
+      value: 'semestre_2',
+      label: '2º Semestre',
+      shortLabel: '2º Semestre',
+      months: [7, 8, 9, 10, 11, 12],
+    },
     // Quadrimestres
-    { value: 'quadrimestre_1', label: '1º Quadrimestre (Jan–Abr)', months: [1, 2, 3, 4] },
-    { value: 'quadrimestre_2', label: '2º Quadrimestre (Mai–Ago)', months: [5, 6, 7, 8] },
-    { value: 'quadrimestre_3', label: '3º Quadrimestre (Set–Dez)', months: [9, 10, 11, 12] },
+    {
+      value: 'quadrimestre_1',
+      label: '1º Quadrimestre',
+      shortLabel: '1º Quadrimestre',
+      months: [1, 2, 3, 4],
+    },
+    {
+      value: 'quadrimestre_2',
+      label: '2º Quadrimestre',
+      shortLabel: '2º Quadrimestre',
+      months: [5, 6, 7, 8],
+    },
+    {
+      value: 'quadrimestre_3',
+      label: '3º Quadrimestre',
+      shortLabel: '3º Quadrimestre',
+      months: [9, 10, 11, 12],
+    },
     // Trimestres
-    { value: 'trimestre_1', label: '1º Trimestre (Jan–Mar)', months: [1, 2, 3] },
-    { value: 'trimestre_2', label: '2º Trimestre (Abr–Jun)', months: [4, 5, 6] },
-    { value: 'trimestre_3', label: '3º Trimestre (Jul–Set)', months: [7, 8, 9] },
-    { value: 'trimestre_4', label: '4º Trimestre (Out–Dez)', months: [10, 11, 12] },
+    { value: 'trimestre_1', label: '1º Trimestre', shortLabel: '1º Trimestre', months: [1, 2, 3] },
+    { value: 'trimestre_2', label: '2º Trimestre', shortLabel: '2º Trimestre', months: [4, 5, 6] },
+    { value: 'trimestre_3', label: '3º Trimestre', shortLabel: '3º Trimestre', months: [7, 8, 9] },
+    {
+      value: 'trimestre_4',
+      label: '4º Trimestre',
+      shortLabel: '4º Trimestre',
+      months: [10, 11, 12],
+    },
   ] as const
 
   const periodMonthsMap: Record<string, number[]> = {
@@ -486,6 +516,84 @@ export function FinancePage() {
     trimestre_2: [4, 5, 6],
     trimestre_3: [7, 8, 9],
     trimestre_4: [10, 11, 12],
+  }
+
+  // Meses com movimentação real (vencimento ou recebimento) no ano selecionado
+  const activeMonthsInSelectedYear = useMemo(() => {
+    if (selectedYear === 'todos') return new Set<number>()
+    const months = new Set<number>()
+
+    for (const p of installments.data) {
+      if (p.vencimento && p.vencimento.slice(0, 4) === selectedYear) {
+        const m = parseInt(p.vencimento.slice(5, 7), 10)
+        if (m >= 1 && m <= 12) months.add(m)
+      }
+      if (p.data_pagamento && p.data_pagamento.slice(0, 4) === selectedYear) {
+        const m = parseInt(p.data_pagamento.slice(5, 7), 10)
+        if (m >= 1 && m <= 12) months.add(m)
+      }
+      if (p.data_faturamento && p.data_faturamento.slice(0, 4) === selectedYear) {
+        const m = parseInt(p.data_faturamento.slice(5, 7), 10)
+        if (m >= 1 && m <= 12) months.add(m)
+      }
+      const raw = (p as any).nfse_dados
+      if (raw) {
+        try {
+          const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
+          const dtNfse = parsed?.dataRecebimento || parsed?.dataEmissao
+          if (dtNfse && typeof dtNfse === 'string' && dtNfse.slice(0, 4) === selectedYear) {
+            const m = parseInt(dtNfse.slice(5, 7), 10)
+            if (m >= 1 && m <= 12) months.add(m)
+          }
+        } catch {
+          /* intentionally ignored */
+        }
+      }
+    }
+
+    for (const cr of contasReceber.data) {
+      if (cr.status === 'cancelado') continue
+      if (cr.data_vencimento && cr.data_vencimento.slice(0, 4) === selectedYear) {
+        const m = parseInt(cr.data_vencimento.slice(5, 7), 10)
+        if (m >= 1 && m <= 12) months.add(m)
+      }
+      if (cr.data_recebimento && cr.data_recebimento.slice(0, 4) === selectedYear) {
+        const m = parseInt(cr.data_recebimento.slice(5, 7), 10)
+        if (m >= 1 && m <= 12) months.add(m)
+      }
+    }
+
+    return months
+  }, [installments.data, contasReceber.data, selectedYear])
+
+  // Opções de período filtradas por movimentação real no ano selecionado
+  const activePeriodOptions = useMemo(() => {
+    // Se nenhum ano específico estiver ativo, retorna todas as opções
+    if (selectedYear === 'todos') return PERIOD_OPTIONS
+
+    // Filtra opções que possuem pelo menos 1 mês com movimentação
+    const filtered = PERIOD_OPTIONS.filter((opt) => {
+      if (opt.value === 'ano') return true
+      const mList = (opt as any).months as readonly number[] | undefined
+      if (!mList || mList.length === 0) return true
+      return mList.some((m) => activeMonthsInSelectedYear.has(m))
+    })
+
+    // Fallback de segurança: se nenhuma opção além de "ano" tiver movimentação, exibe todas
+    if (filtered.length <= 1) {
+      return PERIOD_OPTIONS
+    }
+
+    return filtered
+  }, [selectedYear, activeMonthsInSelectedYear])
+
+  // Helper para formatar o rótulo do período e ano conforme especificado:
+  // "1º Semestre 2026", "3º Quadrimestre 2025", "Março 2026", "Exercício 2026"
+  const getPeriodBadgeLabel = (year: string, periodVal: string) => {
+    if (periodVal === 'ano') return `Exercício ${year}`
+    const opt = PERIOD_OPTIONS.find((p) => p.value === periodVal)
+    const baseLabel = opt?.shortLabel || opt?.label || periodVal
+    return `${baseLabel} ${year}`
   }
 
   const { total, paid, open, overdue } = useMemo(() => {
@@ -899,51 +1007,71 @@ export function FinancePage() {
                       Ano inteiro (padrão)
                     </SelectItem>
                     <SelectSeparator />
-                    <SelectGroup>
-                      <SelectLabel className="text-[11px] font-bold text-neutral-500 uppercase tracking-wider">
-                        Meses individuais
-                      </SelectLabel>
-                      {PERIOD_OPTIONS.filter((o) => o.value.startsWith('mes_')).map((opt) => (
-                        <SelectItem key={opt.value} value={opt.value} className="text-xs">
-                          {opt.label}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                    <SelectSeparator />
-                    <SelectGroup>
-                      <SelectLabel className="text-[11px] font-bold text-neutral-500 uppercase tracking-wider">
-                        Semestres
-                      </SelectLabel>
-                      {PERIOD_OPTIONS.filter((o) => o.value.startsWith('semestre_')).map((opt) => (
-                        <SelectItem key={opt.value} value={opt.value} className="text-xs">
-                          {opt.label}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                    <SelectSeparator />
-                    <SelectGroup>
-                      <SelectLabel className="text-[11px] font-bold text-neutral-500 uppercase tracking-wider">
-                        Quadrimestres
-                      </SelectLabel>
-                      {PERIOD_OPTIONS.filter((o) => o.value.startsWith('quadrimestre_')).map(
-                        (opt) => (
-                          <SelectItem key={opt.value} value={opt.value} className="text-xs">
-                            {opt.label}
-                          </SelectItem>
-                        ),
-                      )}
-                    </SelectGroup>
-                    <SelectSeparator />
-                    <SelectGroup>
-                      <SelectLabel className="text-[11px] font-bold text-neutral-500 uppercase tracking-wider">
-                        Trimestres
-                      </SelectLabel>
-                      {PERIOD_OPTIONS.filter((o) => o.value.startsWith('trimestre_')).map((opt) => (
-                        <SelectItem key={opt.value} value={opt.value} className="text-xs">
-                          {opt.label}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
+                    {activePeriodOptions.some((o) => o.value.startsWith('mes_')) && (
+                      <>
+                        <SelectGroup>
+                          <SelectLabel className="text-[11px] font-bold text-neutral-500 uppercase tracking-wider">
+                            Meses individuais
+                          </SelectLabel>
+                          {activePeriodOptions
+                            .filter((o) => o.value.startsWith('mes_'))
+                            .map((opt) => (
+                              <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                                {opt.label}
+                              </SelectItem>
+                            ))}
+                        </SelectGroup>
+                        <SelectSeparator />
+                      </>
+                    )}
+                    {activePeriodOptions.some((o) => o.value.startsWith('semestre_')) && (
+                      <>
+                        <SelectGroup>
+                          <SelectLabel className="text-[11px] font-bold text-neutral-500 uppercase tracking-wider">
+                            Semestres
+                          </SelectLabel>
+                          {activePeriodOptions
+                            .filter((o) => o.value.startsWith('semestre_'))
+                            .map((opt) => (
+                              <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                                {opt.label}
+                              </SelectItem>
+                            ))}
+                        </SelectGroup>
+                        <SelectSeparator />
+                      </>
+                    )}
+                    {activePeriodOptions.some((o) => o.value.startsWith('quadrimestre_')) && (
+                      <>
+                        <SelectGroup>
+                          <SelectLabel className="text-[11px] font-bold text-neutral-500 uppercase tracking-wider">
+                            Quadrimestres
+                          </SelectLabel>
+                          {activePeriodOptions
+                            .filter((o) => o.value.startsWith('quadrimestre_'))
+                            .map((opt) => (
+                              <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                                {opt.label}
+                              </SelectItem>
+                            ))}
+                        </SelectGroup>
+                        <SelectSeparator />
+                      </>
+                    )}
+                    {activePeriodOptions.some((o) => o.value.startsWith('trimestre_')) && (
+                      <SelectGroup>
+                        <SelectLabel className="text-[11px] font-bold text-neutral-500 uppercase tracking-wider">
+                          Trimestres
+                        </SelectLabel>
+                        {activePeriodOptions
+                          .filter((o) => o.value.startsWith('trimestre_'))
+                          .map((opt) => (
+                            <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                              {opt.label}
+                            </SelectItem>
+                          ))}
+                      </SelectGroup>
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -1003,9 +1131,7 @@ export function FinancePage() {
               <span className="text-neutral-500 font-medium">Consolidado (Todos os anos)</span>
             ) : (
               <span className="inline-flex items-center gap-1 font-bold text-[#FF6A13] bg-[#FFF6EC] px-2 py-0.5 rounded border border-[#FFD2B3]">
-                {selectedPeriod === 'ano'
-                  ? `Exercício ${selectedYear}`
-                  : `${selectedYear} · ${PERIOD_OPTIONS.find((p) => p.value === selectedPeriod)?.label || selectedPeriod}`}
+                {getPeriodBadgeLabel(selectedYear, selectedPeriod)}
               </span>
             )}
           </span>
