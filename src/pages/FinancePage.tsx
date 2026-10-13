@@ -49,7 +49,10 @@ import { Label } from '@/components/ui/label'
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
@@ -251,7 +254,7 @@ export function FinancePage() {
     })
   }, [installments.data, query, status, month, projectFilter])
 
-  // Anos disponíveis para filtro no bloco de resumo (dedup e ordenado desc)
+  // Anos disponíveis para filtro no bloco de resumo (dedup e ordenado desc) - parcelas e receitas avulsas
   const availableYears = useMemo(() => {
     const yearsSet = new Set<string>()
     for (const p of installments.data) {
@@ -281,8 +284,18 @@ export function FinancePage() {
         }
       }
     }
+    for (const cr of contasReceber.data) {
+      if (cr.data_vencimento) {
+        const y = cr.data_vencimento.slice(0, 4)
+        if (/^\d{4}$/.test(y)) yearsSet.add(y)
+      }
+      if (cr.data_recebimento) {
+        const y = cr.data_recebimento.slice(0, 4)
+        if (/^\d{4}$/.test(y)) yearsSet.add(y)
+      }
+    }
     return Array.from(yearsSet).sort().reverse()
-  }, [installments.data])
+  }, [installments.data, contasReceber.data])
 
   // Ano selecionado para o bloco de resumo (persiste opcionalmente em localStorage)
   const [selectedYear, setSelectedYear] = useState<string>(() => {
@@ -424,11 +437,27 @@ export function FinancePage() {
   // Opções de períodos / granularidade quando um ano está selecionado
   const PERIOD_OPTIONS = [
     { value: 'ano', label: 'Ano inteiro' },
+    // Meses individuais (Janeiro a Dezembro)
+    { value: 'mes_1', label: 'Janeiro', months: [1] },
+    { value: 'mes_2', label: 'Fevereiro', months: [2] },
+    { value: 'mes_3', label: 'Março', months: [3] },
+    { value: 'mes_4', label: 'Abril', months: [4] },
+    { value: 'mes_5', label: 'Maio', months: [5] },
+    { value: 'mes_6', label: 'Junho', months: [6] },
+    { value: 'mes_7', label: 'Julho', months: [7] },
+    { value: 'mes_8', label: 'Agosto', months: [8] },
+    { value: 'mes_9', label: 'Setembro', months: [9] },
+    { value: 'mes_10', label: 'Outubro', months: [10] },
+    { value: 'mes_11', label: 'Novembro', months: [11] },
+    { value: 'mes_12', label: 'Dezembro', months: [12] },
+    // Semestres
     { value: 'semestre_1', label: '1º Semestre (Jan–Jun)', months: [1, 2, 3, 4, 5, 6] },
     { value: 'semestre_2', label: '2º Semestre (Jul–Dez)', months: [7, 8, 9, 10, 11, 12] },
+    // Quadrimestres
     { value: 'quadrimestre_1', label: '1º Quadrimestre (Jan–Abr)', months: [1, 2, 3, 4] },
     { value: 'quadrimestre_2', label: '2º Quadrimestre (Mai–Ago)', months: [5, 6, 7, 8] },
     { value: 'quadrimestre_3', label: '3º Quadrimestre (Set–Dez)', months: [9, 10, 11, 12] },
+    // Trimestres
     { value: 'trimestre_1', label: '1º Trimestre (Jan–Mar)', months: [1, 2, 3] },
     { value: 'trimestre_2', label: '2º Trimestre (Abr–Jun)', months: [4, 5, 6] },
     { value: 'trimestre_3', label: '3º Trimestre (Jul–Set)', months: [7, 8, 9] },
@@ -436,6 +465,18 @@ export function FinancePage() {
   ] as const
 
   const periodMonthsMap: Record<string, number[]> = {
+    mes_1: [1],
+    mes_2: [2],
+    mes_3: [3],
+    mes_4: [4],
+    mes_5: [5],
+    mes_6: [6],
+    mes_7: [7],
+    mes_8: [8],
+    mes_9: [9],
+    mes_10: [10],
+    mes_11: [11],
+    mes_12: [12],
     semestre_1: [1, 2, 3, 4, 5, 6],
     semestre_2: [7, 8, 9, 10, 11, 12],
     quadrimestre_1: [1, 2, 3, 4],
@@ -801,15 +842,57 @@ export function FinancePage() {
                 <Layers className="h-4 w-4 text-[#FF6A13]" />
                 <span className="text-xs font-semibold text-neutral-600">Período:</span>
                 <Select value={selectedPeriod} onValueChange={handlePeriodChange}>
-                  <SelectTrigger className="h-7 w-[160px] sm:w-[175px] border-none bg-transparent text-xs font-bold text-[#D65100] shadow-none focus:ring-0 focus:ring-offset-0 px-1">
+                  <SelectTrigger className="h-7 w-[180px] sm:w-[205px] border-none bg-transparent text-xs font-bold text-[#D65100] shadow-none focus:ring-0 focus:ring-offset-0 px-1">
                     <SelectValue placeholder="Período" />
                   </SelectTrigger>
-                  <SelectContent align="end">
-                    {PERIOD_OPTIONS.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value} className="text-xs">
-                        {opt.label}
-                      </SelectItem>
-                    ))}
+                  <SelectContent align="end" className="max-h-[360px]">
+                    <SelectItem value="ano" className="text-xs font-semibold">
+                      Ano inteiro (padrão)
+                    </SelectItem>
+                    <SelectSeparator />
+                    <SelectGroup>
+                      <SelectLabel className="text-[11px] font-bold text-neutral-500 uppercase tracking-wider">
+                        Meses individuais
+                      </SelectLabel>
+                      {PERIOD_OPTIONS.filter((o) => o.value.startsWith('mes_')).map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                    <SelectSeparator />
+                    <SelectGroup>
+                      <SelectLabel className="text-[11px] font-bold text-neutral-500 uppercase tracking-wider">
+                        Semestres
+                      </SelectLabel>
+                      {PERIOD_OPTIONS.filter((o) => o.value.startsWith('semestre_')).map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                    <SelectSeparator />
+                    <SelectGroup>
+                      <SelectLabel className="text-[11px] font-bold text-neutral-500 uppercase tracking-wider">
+                        Quadrimestres
+                      </SelectLabel>
+                      {PERIOD_OPTIONS.filter((o) => o.value.startsWith('quadrimestre_')).map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                    <SelectSeparator />
+                    <SelectGroup>
+                      <SelectLabel className="text-[11px] font-bold text-neutral-500 uppercase tracking-wider">
+                        Trimestres
+                      </SelectLabel>
+                      {PERIOD_OPTIONS.filter((o) => o.value.startsWith('trimestre_')).map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
                   </SelectContent>
                 </Select>
               </div>
