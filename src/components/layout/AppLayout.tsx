@@ -38,11 +38,6 @@ import { Input } from '@/components/ui/input'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { AlertasDrawer } from '@/components/common/AlertasDrawer'
-import {
-  SimuladorDesignModal,
-  ThemeActiveBanner,
-  ThemeSimulatorTrigger,
-} from '@/components/common/SimuladorDesignModal'
 import { useAlertas } from '@/contexts/AlertasContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { useFinanceiroVisibilidade } from '@/contexts/FinanceiroVisibilidadeContext'
@@ -323,9 +318,6 @@ export default function AppLayout() {
 
   return (
     <div className="min-h-screen bg-[var(--app-body-bg,#F2F2F2)] text-[var(--app-text-body,#595959)]">
-      {/* Banner de Simulação Ativa de Tema / Retornar ao Padrão */}
-      <ThemeActiveBanner />
-
       <aside
         className={cn(
           'fixed inset-y-0 left-0 z-40 hidden transition-[width] duration-200 lg:block',
@@ -399,8 +391,6 @@ export default function AppLayout() {
             </h2>
           </div>
           <div className="ml-auto flex items-center gap-2">
-            {/* Simulador de Design: Botão de Acesso Rápido na Topbar para Todos os Perfis */}
-            <ThemeSimulatorTrigger />
             <Button
               variant="outline"
               className="hidden h-10 w-[260px] justify-start text-[#8A8A8A] md:flex"
@@ -549,10 +539,7 @@ export default function AppLayout() {
                 <span className="ml-1 text-amber-600 font-semibold">(Modo de Simulação Ativo)</span>
               )}
             </div>
-            <div>
-              {/* Gatilho discreto no rodapé */}
-              <ThemeSimulatorTrigger variant="footer" />
-            </div>
+            <div className="text-neutral-400">Identidade Oficial AEROCAD · Prancheta Técnica</div>
           </div>
         </footer>
       </div>
@@ -565,9 +552,6 @@ export default function AppLayout() {
         dispensados={dispensados}
         onReload={reloadAlertas}
       />
-
-      {/* Modal Central do Simulador de Design */}
-      <SimuladorDesignModal />
 
       <Dialog open={searchOpen} onOpenChange={setSearchOpen}>
         <DialogContent className="top-[12%] translate-y-0 sm:max-w-xl">
