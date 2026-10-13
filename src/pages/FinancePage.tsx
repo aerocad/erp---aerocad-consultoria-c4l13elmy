@@ -295,10 +295,30 @@ export function FinancePage() {
     return 'todos'
   })
 
+  // Granularidade/Período do bloco de resumo (ano inteiro, semestres, quadrimestres, trimestres)
+  const [selectedPeriod, setSelectedPeriod] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('aerocad_financeiro_kpi_periodo')
+      if (saved) return saved
+    } catch {
+      /* intentionally ignored */
+    }
+    return 'ano'
+  })
+
   const handleYearChange = (year: string) => {
     setSelectedYear(year)
     try {
       localStorage.setItem('aerocad_financeiro_kpi_ano', year)
+    } catch {
+      /* intentionally ignored */
+    }
+  }
+
+  const handlePeriodChange = (period: string) => {
+    setSelectedPeriod(period)
+    try {
+      localStorage.setItem('aerocad_financeiro_kpi_periodo', period)
     } catch {
       /* intentionally ignored */
     }
@@ -401,15 +421,45 @@ export function FinancePage() {
     return balancetesList.data[0]?.referencia || null
   }, [balancetesList.data])
 
+  // Opções de períodos / granularidade quando um ano está selecionado
+  const PERIOD_OPTIONS = [
+    { value: 'ano', label: 'Ano inteiro' },
+    { value: 'semestre_1', label: '1º Semestre (Jan–Jun)', months: [1, 2, 3, 4, 5, 6] },
+    { value: 'semestre_2', label: '2º Semestre (Jul–Dez)', months: [7, 8, 9, 10, 11, 12] },
+    { value: 'quadrimestre_1', label: '1º Quadrimestre (Jan–Abr)', months: [1, 2, 3, 4] },
+    { value: 'quadrimestre_2', label: '2º Quadrimestre (Mai–Ago)', months: [5, 6, 7, 8] },
+    { value: 'quadrimestre_3', label: '3º Quadrimestre (Set–Dez)', months: [9, 10, 11, 12] },
+    { value: 'trimestre_1', label: '1º Trimestre (Jan–Mar)', months: [1, 2, 3] },
+    { value: 'trimestre_2', label: '2º Trimestre (Abr–Jun)', months: [4, 5, 6] },
+    { value: 'trimestre_3', label: '3º Trimestre (Jul–Set)', months: [7, 8, 9] },
+    { value: 'trimestre_4', label: '4º Trimestre (Out–Dez)', months: [10, 11, 12] },
+  ] as const
+
+  const periodMonthsMap: Record<string, number[]> = {
+    semestre_1: [1, 2, 3, 4, 5, 6],
+    semestre_2: [7, 8, 9, 10, 11, 12],
+    quadrimestre_1: [1, 2, 3, 4],
+    quadrimestre_2: [5, 6, 7, 8],
+    quadrimestre_3: [9, 10, 11, 12],
+    trimestre_1: [1, 2, 3],
+    trimestre_2: [4, 5, 6],
+    trimestre_3: [7, 8, 9],
+    trimestre_4: [10, 11, 12],
+  }
+
   const { total, paid, open, overdue } = useMemo(() => {
     const now = new Date()
+    const allowedMonths = selectedYear !== 'todos' ? periodMonthsMap[selectedPeriod] : undefined
+
     return installments.data.reduce(
       (acc, item) => {
-        // Extrai anos de referência da parcela
+        // Extrai anos e meses de referência da parcela
         const anoVencimento = item.vencimento ? item.vencimento.slice(0, 4) : ''
+        const mesVencimento = item.vencimento ? parseInt(item.vencimento.slice(5, 7), 10) : 0
 
         // Data de recebimento: data_pagamento || data da NFS-e (dataRecebimento ou dataEmissao) || data_faturamento
         let anoRecebimento = item.data_pagamento ? item.data_pagamento.slice(0, 4) : ''
+        let mesRecebimento = item.data_pagamento ? parseInt(item.data_pagamento.slice(5, 7), 10) : 0
         if (!anoRecebimento) {
           const raw = (item as any).nfse_dados
           if (raw) {
@@ -418,6 +468,7 @@ export function FinancePage() {
               const dt = parsed?.dataRecebimento || parsed?.dataEmissao
               if (dt && typeof dt === 'string') {
                 anoRecebimento = dt.slice(0, 4)
+                mesRecebimento = parseInt(dt.slice(5, 7), 10)
               }
             } catch {
               /* intentionally ignored */
@@ -426,32 +477,42 @@ export function FinancePage() {
         }
         if (!anoRecebimento && item.data_faturamento) {
           anoRecebimento = item.data_faturamento.slice(0, 4)
+          mesRecebimento = parseInt(item.data_faturamento.slice(5, 7), 10)
         }
         if (!anoRecebimento && anoVencimento) {
           anoRecebimento = anoVencimento
+          mesRecebimento = mesVencimento
         }
 
         const matchYearPrevisto = selectedYear === 'todos' || anoVencimento === selectedYear
-        const matchYearRecebido = selectedYear === 'todos' || anoRecebimento === selectedYear
+        const matchPeriodPrevisto =
+          !allowedMonths || (mesVencimento > 0 && allowedMonths.includes(mesVencimento))
+        const matchPrevisto = matchYearPrevisto && matchPeriodPrevisto
 
-        // Total Previsto: soma das parcelas com vencimento no ano
-        if (matchYearPrevisto) {
+        const matchYearRecebido = selectedYear === 'todos' || anoRecebimento === selectedYear
+        // O recebido segue a data de recebimento se disponível, ou o vencimento
+        const matchPeriodRecebido =
+          !allowedMonths || (mesRecebimento > 0 && allowedMonths.includes(mesRecebimento))
+        const matchRecebido = matchYearRecebido && matchPeriodRecebido
+
+        // Total Previsto: soma das parcelas com vencimento no ano/período
+        if (matchPrevisto) {
           acc.total += item.valor
         }
 
-        // Recebido: soma das parcelas quitadas com data de recebimento / NFS-e no ano
+        // Recebido: soma das parcelas quitadas com data de recebimento / NFS-e no ano/período
         if (item.status === 'paga') {
-          if (matchYearRecebido) {
+          if (matchRecebido) {
             acc.paid += item.valor_recebido || item.valor
           }
         } else if (item.status === 'vencida' || new Date(item.vencimento) < now) {
-          // Em atraso: parcelas vencidas cujo vencimento pertence ao ano filtrado
-          if (matchYearPrevisto) {
+          // Em atraso: parcelas vencidas cujo vencimento pertence ao ano/período filtrado
+          if (matchPrevisto) {
             acc.overdue += item.valor
           }
         } else {
-          // A receber (em aberto e a vencer): parcelas a vencer com vencimento no ano
-          if (matchYearPrevisto) {
+          // A receber (em aberto e a vencer): parcelas a vencer com vencimento no ano/período
+          if (matchPrevisto) {
             acc.open += item.valor
           }
         }
@@ -459,7 +520,7 @@ export function FinancePage() {
       },
       { total: 0, paid: 0, open: 0, overdue: 0 },
     )
-  }, [installments.data, selectedYear, ocultarValores])
+  }, [installments.data, selectedYear, selectedPeriod, ocultarValores])
 
   async function registerPayment() {
     if (!payment) return
@@ -734,6 +795,26 @@ export function FinancePage() {
               </Select>
             </div>
 
+            {/* Seletor de Granularidade / Período (apenas quando um ano específico estiver selecionado) */}
+            {selectedYear !== 'todos' && (
+              <div className="flex items-center gap-1.5 rounded-lg border border-[#FFD2B3] bg-[#FFFBF8] px-2 py-1 shadow-sm animate-in fade-in duration-200">
+                <Layers className="h-4 w-4 text-[#FF6A13]" />
+                <span className="text-xs font-semibold text-neutral-600">Período:</span>
+                <Select value={selectedPeriod} onValueChange={handlePeriodChange}>
+                  <SelectTrigger className="h-7 w-[160px] sm:w-[175px] border-none bg-transparent text-xs font-bold text-[#D65100] shadow-none focus:ring-0 focus:ring-offset-0 px-1">
+                    <SelectValue placeholder="Período" />
+                  </SelectTrigger>
+                  <SelectContent align="end">
+                    {PERIOD_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
             {canWrite && (
               <Button
                 variant="outline"
@@ -777,8 +858,8 @@ export function FinancePage() {
       />
 
       {/* Indicador de filtro ativo no cabeçalho do resumo quando um ano específico estiver selecionado */}
-      <div className="mb-3 flex items-center justify-between">
-        <div className="flex items-center gap-2 text-xs text-neutral-600">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2 text-xs text-neutral-600">
           <span className="font-semibold text-neutral-800 uppercase tracking-wider text-[11px]">
             Resumo Operacional
           </span>
@@ -788,19 +869,35 @@ export function FinancePage() {
               <span className="text-neutral-500 font-medium">Consolidado (Todos os anos)</span>
             ) : (
               <span className="inline-flex items-center gap-1 font-bold text-[#FF6A13] bg-[#FFF6EC] px-2 py-0.5 rounded border border-[#FFD2B3]">
-                Exercício {selectedYear}
+                {selectedPeriod === 'ano'
+                  ? `Exercício ${selectedYear}`
+                  : `${selectedYear} · ${PERIOD_OPTIONS.find((p) => p.value === selectedPeriod)?.label || selectedPeriod}`}
               </span>
             )}
           </span>
         </div>
         {selectedYear !== 'todos' && (
-          <button
-            type="button"
-            onClick={() => handleYearChange('todos')}
-            className="text-[11px] font-medium text-[#D65100] hover:underline"
-          >
-            Ver todos os anos
-          </button>
+          <div className="flex items-center gap-3">
+            {selectedPeriod !== 'ano' && (
+              <button
+                type="button"
+                onClick={() => handlePeriodChange('ano')}
+                className="text-[11px] font-medium text-neutral-600 hover:text-neutral-900 hover:underline"
+              >
+                Ano inteiro
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                handleYearChange('todos')
+                handlePeriodChange('ano')
+              }}
+              className="text-[11px] font-medium text-[#D65100] hover:underline"
+            >
+              Ver todos os anos
+            </button>
+          </div>
         )}
       </div>
 
