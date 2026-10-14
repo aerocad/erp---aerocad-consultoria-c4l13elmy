@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-14T16:40:42.425Z",
+  "generatedAt": "2026-10-14T19:29:53.658Z",
   "collections": [
     {
       "name": "users",
@@ -2584,6 +2584,13 @@
           "required": false,
           "system": false,
           "collectionRef": "contas_bancarias"
+        },
+        {
+          "name": "credor",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "credores"
         }
       ],
       "indexes": [
@@ -2591,7 +2598,8 @@
         "CREATE INDEX idx_contas_pagar_status ON contas_pagar (status)",
         "CREATE INDEX idx_contas_pagar_categoria ON contas_pagar (categoria)",
         "CREATE INDEX idx_contas_pagar_projeto ON contas_pagar (projeto)",
-        "CREATE INDEX idx_contas_pagar_created ON contas_pagar (created DESC)"
+        "CREATE INDEX idx_contas_pagar_created ON contas_pagar (created DESC)",
+        "CREATE INDEX `idx_contas_pagar_credor` ON `contas_pagar` (credor)"
       ]
     },
     {
@@ -3745,6 +3753,156 @@
         "CREATE INDEX idx_ativos_status ON ativos_patrimonio (status)",
         "CREATE INDEX idx_ativos_data_aquisicao ON ativos_patrimonio (data_aquisicao)",
         "CREATE INDEX idx_ativos_created ON ativos_patrimonio (created DESC)"
+      ]
+    },
+    {
+      "name": "credores",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.role = 'admin' || @request.auth.role = 'financeiro'",
+        "update": "@request.auth.role = 'admin' || @request.auth.role = 'financeiro'",
+        "delete": "@request.auth.role = 'admin'"
+      },
+      "fields": [
+        {
+          "name": "nome_razao_social",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "nome_fantasia",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "cnpj_cpf",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "tipo_pessoa",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["pj", "pf"]
+        },
+        {
+          "name": "categoria",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": [
+            "fornecedor_servicos",
+            "fornecedor_material",
+            "locador",
+            "condominio",
+            "utilidades",
+            "impostos_orgaos_publicos",
+            "instituicao_financeira",
+            "folha_encargos",
+            "contador",
+            "outros"
+          ]
+        },
+        {
+          "name": "email",
+          "type": "email",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "telefone",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "endereco",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "cidade_uf",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "banco_nome",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "banco_agencia",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "banco_conta",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "chave_pix",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["ativo", "inativo"]
+        },
+        {
+          "name": "observacoes",
+          "type": "editor",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "anexos",
+          "type": "file",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "criado_por",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_credores_cnpj_cpf ON credores (cnpj_cpf)",
+        "CREATE INDEX idx_credores_nome ON credores (nome_razao_social)",
+        "CREATE INDEX idx_credores_categoria ON credores (categoria)",
+        "CREATE INDEX idx_credores_status ON credores (status)"
       ]
     }
   ]

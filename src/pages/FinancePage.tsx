@@ -2,6 +2,7 @@ import { useMemo, useState, type FormEvent } from 'react'
 import {
   Banknote,
   BarChart3,
+  Building2,
   Calendar,
   CalendarClock,
   Check,
@@ -73,8 +74,10 @@ import type {
   ParcelaRecord,
   ProjetoRecord,
   BalanceteMensalRecord,
+  CredorRecord,
 } from '@/types/crm'
 import { ContasPagarTab } from '@/components/financeiro/ContasPagarTab'
+import { CredoresTab } from '@/components/financeiro/CredoresTab'
 import { ContasReceberTab } from '@/components/financeiro/ContasReceberTab'
 import { FluxoCaixaTab } from '@/components/financeiro/FluxoCaixaTab'
 import { ExtratosComprovantesTab } from '@/components/financeiro/ExtratosComprovantesTab'
@@ -102,9 +105,13 @@ export function FinancePage() {
   const clients = useCrmData<ClienteRecord>('clientes', {
     sort: 'razao_social',
   })
+  const credores = useCrmData<CredorRecord>('credores', {
+    sort: 'nome_razao_social',
+    expand: 'criado_por',
+  })
   const contasPagar = useCrmData<ContaPagarRecord>('contas_pagar', {
     sort: '-data_vencimento',
-    expand: 'cliente_fornecedor,projeto,criado_por',
+    expand: 'cliente_fornecedor,credor,projeto,criado_por',
   })
   const contasReceber = useCrmData<ContaReceberRecord>('contas_receber', {
     sort: '-data_vencimento',
@@ -132,17 +139,7 @@ export function FinancePage() {
   const [status, setStatus] = useState(params.get('status') || 'todos')
   const [month, setMonth] = useState('todos')
   const [projectFilter, setProjectFilter] = useState(params.get('projeto') || 'todos')
-  const [activeTab, setActiveTab] = useState<
-    | 'contas_pagar'
-    | 'contas_receber'
-    | 'fluxo_caixa'
-    | 'extratos'
-    | 'balancetes'
-    | 'relatorios'
-    | 'relatorios_avancados'
-    | 'parcelas'
-    | 'orfas'
-  >('contas_pagar')
+  const [activeTab, setActiveTab] = useState<FinanceTabKey>('contas_pagar')
   const [importNfseOpen, setImportNfseOpen] = useState(false)
   const [duplicadasModalOpen, setDuplicadasModalOpen] = useState(false)
   const [extrairProjetosModalOpen, setExtrairProjetosModalOpen] = useState(false)
@@ -1183,6 +1180,7 @@ export function FinancePage() {
         qtdPagarAtrasadas={qtdPagarAtrasadas}
         totalReceberAberto={totalReceberAberto}
         qtdReceberAtrasadas={qtdReceberAtrasadas}
+        totalCredoresAtivos={credores.data.filter((c) => c.status === 'ativo').length}
         saldoMesCorrente={saldoMesCorrente}
         mesCorrenteNome={mesCorrenteNome}
         qtdExtratosPendentes={qtdExtratosPendentes}
@@ -1291,6 +1289,23 @@ export function FinancePage() {
           {contasPagar.data.length > 0 && (
             <span className="ml-1 rounded-full bg-neutral-100 text-neutral-700 text-[10px] px-1.5 py-0.2">
               {contasPagar.data.length}
+            </span>
+          )}
+        </button>
+
+        <button
+          onClick={() => setActiveTab('credores')}
+          className={`pb-3 px-3 text-xs sm:text-sm font-bold border-b-2 transition flex items-center gap-1.5 ${
+            activeTab === 'credores'
+              ? 'border-[#FF6A13] text-[#FF6A13]'
+              : 'border-transparent text-[#737373] hover:text-[#333]'
+          }`}
+        >
+          <Building2 className="h-4 w-4" />
+          Credores
+          {credores.data.length > 0 && (
+            <span className="ml-1 rounded-full bg-orange-100 text-[#D65100] text-[10px] px-1.5 py-0.2 font-bold">
+              {credores.data.length}
             </span>
           )}
         </button>
@@ -1413,8 +1428,23 @@ export function FinancePage() {
             contas={contasPagar.data}
             projetos={projects.data}
             clientes={clients.data}
+            credores={credores.data}
             canWrite={canWrite}
             onReload={async () => {
+              void contasPagar.reload()
+              void credores.reload()
+            }}
+          />
+        </div>
+      ) : activeTab === 'credores' ? (
+        <div className="mt-5">
+          <CredoresTab
+            credores={credores.data}
+            contasPagar={contasPagar.data}
+            canWrite={canWrite}
+            canDelete={user?.role === 'admin'}
+            onReload={async () => {
+              void credores.reload()
               void contasPagar.reload()
             }}
           />

@@ -118,6 +118,13 @@ export const COLECOES_NEGOCIO_AEROCAD: ColecaoExportConfig[] = [
 
   // Financeiro
   {
+    id: 'credores',
+    label: 'Credores',
+    categoria: 'financeiro',
+    permiteXlsx: true,
+    descricao: 'Cadastro de credores e dados bancários para quitação',
+  },
+  {
     id: 'contas_pagar',
     label: 'Contas a Pagar',
     categoria: 'financeiro',
@@ -872,6 +879,44 @@ function obterMapeamentoColecao(colecao: string): MapeamentoXlsxColecao | null {
           telefone: item.telefone || '',
           chave_pix: item.chave_pix || '',
           data_admissao: formatarDataCelula(item.data_admissao),
+          created: formatarDataCelula(item.created),
+        }),
+      }
+
+    case 'credores':
+      return {
+        titulo: 'CADASTRO DE CREDORES',
+        subtitulo: 'Favorecidos financeiros, dados fiscais e bancários para quitação AEROCAD',
+        colunas: [
+          { header: 'Razão Social / Nome', key: 'nome_razao_social', width: 34 },
+          { header: 'Nome Fantasia', key: 'nome_fantasia', width: 24 },
+          { header: 'CNPJ / CPF', key: 'cnpj_cpf', width: 20 },
+          { header: 'Tipo', key: 'tipo_pessoa', width: 10 },
+          { header: 'Categoria Financeira', key: 'categoria', width: 26 },
+          { header: 'Status', key: 'status', width: 12 },
+          { header: 'Telefone', key: 'telefone', width: 18 },
+          { header: 'E-mail', key: 'email', width: 26 },
+          { header: 'Cidade / UF', key: 'cidade_uf', width: 20 },
+          { header: 'Chave PIX', key: 'chave_pix', width: 24 },
+          { header: 'Banco', key: 'banco_nome', width: 20 },
+          { header: 'Agência', key: 'banco_agencia', width: 12 },
+          { header: 'Conta', key: 'banco_conta', width: 14 },
+          { header: 'Data Cadastro', key: 'created', width: 14, tipo: 'data' },
+        ],
+        transformarLinha: (item) => ({
+          nome_razao_social: item.nome_razao_social || '',
+          nome_fantasia: item.nome_fantasia || '',
+          cnpj_cpf: formatarDocumento(item.cnpj_cpf),
+          tipo_pessoa: item.tipo_pessoa === 'pj' ? 'PJ' : 'PF',
+          categoria: String(item.categoria || ''),
+          status: item.status === 'ativo' ? 'Ativo' : 'Inativo',
+          telefone: item.telefone || '',
+          email: item.email || '',
+          cidade_uf: item.cidade_uf || '',
+          chave_pix: item.chave_pix || '',
+          banco_nome: item.banco_nome || '',
+          banco_agencia: item.banco_agencia || '',
+          banco_conta: item.banco_conta || '',
           created: formatarDataCelula(item.created),
         }),
       }

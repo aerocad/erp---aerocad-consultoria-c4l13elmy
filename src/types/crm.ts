@@ -494,10 +494,48 @@ export interface AtivoPatrimonioRecord extends RecordModel {
   }
 }
 
+export type TipoPessoaCredor = 'pj' | 'pf'
+
+export type CategoriaCredor =
+  | 'fornecedor_servicos'
+  | 'fornecedor_material'
+  | 'locador'
+  | 'condominio'
+  | 'utilidades'
+  | 'impostos_orgaos_publicos'
+  | 'instituicao_financeira'
+  | 'folha_encargos'
+  | 'contador'
+  | 'outros'
+
+export interface CredorRecord extends RecordModel {
+  nome_razao_social: string
+  nome_fantasia?: string
+  cnpj_cpf: string
+  tipo_pessoa: TipoPessoaCredor
+  categoria: CategoriaCredor
+  email?: string
+  telefone?: string
+  endereco?: string
+  cidade_uf?: string
+  banco_nome?: string
+  banco_agencia?: string
+  banco_conta?: string
+  chave_pix?: string
+  status: 'ativo' | 'inativo'
+  observacoes?: string
+  anexos?: string[]
+  criado_por?: string
+  expand?: {
+    criado_por?: UserRecord
+  }
+}
+
 export interface ContaPagarRecord extends RecordModel {
   descricao: string
   fornecedor: string
   cliente_fornecedor?: string
+  credor?: string
   categoria: CategoriaContaPagar
   valor: number
   data_vencimento: string
@@ -519,6 +557,7 @@ export interface ContaPagarRecord extends RecordModel {
   conta_bancaria?: string
   expand?: {
     cliente_fornecedor?: ClienteRecord
+    credor?: CredorRecord
     projeto?: ProjetoRecord
     criado_por?: UserRecord
     conta_bancaria?: ContaBancariaRecord

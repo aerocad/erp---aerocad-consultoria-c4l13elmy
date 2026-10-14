@@ -208,6 +208,7 @@ export interface SalvarContaPagarComprovanteParams {
     | 'outro'
   numero_documento?: string
   projetoId?: string | null
+  credorId?: string | null
   observacoes?: string
   arquivoComprovante: File
   userId?: string | null
@@ -260,6 +261,10 @@ export async function salvarContaPagarComComprovante(
     plano_contas_nome: params.plano_contas_nome || '',
     conta_bancaria: params.conta_bancaria || null,
     criado_por: userId || pb.authStore.record?.id || null,
+  }
+
+  if (params.credorId) {
+    payload.credor = params.credorId
   }
 
   if (projetoId) {

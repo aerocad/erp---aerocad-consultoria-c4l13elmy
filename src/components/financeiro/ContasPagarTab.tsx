@@ -18,9 +18,9 @@ import {
 } from 'lucide-react'
 import { CapturaBoletoModal } from '@/components/financeiro/CapturaBoletoModal'
 import { PLANO_CONTAS_AEROCAD, sugerirPlanoContasPorCategoria } from '@/lib/planoContas'
-import type { ContaBancariaRecord } from '@/types/crm'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
+import { Building2 } from 'lucide-react'
 
 import { CrmBadge } from '@/components/common/CrmBadge'
 import { EmptyState } from '@/components/common/States'
@@ -50,9 +50,11 @@ import type {
   CategoriaContaPagar,
   ClienteRecord,
   ContaPagarRecord,
+  CredorRecord,
   FormaPagamentoFinanceiro,
   ProjetoRecord,
   StatusContaPagar,
+  ContaBancariaRecord,
 } from '@/types/crm'
 
 export const CATEGORIA_PAGAR_LABELS: Record<CategoriaContaPagar, string> = {
@@ -78,6 +80,7 @@ interface ContasPagarTabProps {
   contas: ContaPagarRecord[]
   projetos: ProjetoRecord[]
   clientes: ClienteRecord[]
+  credores?: CredorRecord[]
   canWrite: boolean
   onReload: () => Promise<void> | void
 }
@@ -86,11 +89,13 @@ export function ContasPagarTab({
   contas,
   projetos,
   clientes,
+  credores = [],
   canWrite,
   onReload,
 }: ContasPagarTabProps) {
   const { user } = useAuth()
   const [busca, setBusca] = useState('')
+  const [filtroCredor, setFiltroCredor] = useState<string>('todos')
   const [filtroCategoria, setFiltroCategoria] = useState<string>('todos')
   const [filtroStatus, setFiltroStatus] = useState<string>('todos')
   const [filtroProjeto, setFiltroProjeto] = useState<string>('todos')
@@ -121,6 +126,7 @@ export function ContasPagarTab({
     descricao: string
     fornecedor: string
     cliente_fornecedor: string
+    credor: string
     categoria: CategoriaContaPagar
     valor: string
     data_vencimento: string
@@ -140,6 +146,7 @@ export function ContasPagarTab({
     descricao: '',
     fornecedor: '',
     cliente_fornecedor: '',
+    credor: '',
     categoria: 'despesas_operacionais',
     valor: '',
     data_vencimento: new Date().toISOString().slice(0, 10),
@@ -178,12 +185,20 @@ export function ContasPagarTab({
   // Filtros
   const contasFiltradas = useMemo(() => {
     return contasProcessadas.filter((c) => {
+      const credorNome = c.expand?.credor?.nome_razao_social || ''
+      const credorDoc = c.expand?.credor?.cnpj_cpf || ''
       const matchBusca =
         c.descricao.toLowerCase().includes(busca.toLowerCase()) ||
         c.fornecedor.toLowerCase().includes(busca.toLowerCase()) ||
+        credorNome.toLowerCase().includes(busca.toLowerCase()) ||
+        credorDoc.toLowerCase().includes(busca.toLowerCase()) ||
         (c.numero_documento && c.numero_documento.toLowerCase().includes(busca.toLowerCase())) ||
         (c.expand?.projeto?.numero &&
           c.expand.projeto.numero.toLowerCase().includes(busca.toLowerCase()))
+
+      const matchCredor =
+        filtroCredor === 'todos' ||
+        (filtroCredor === 'sem_credor' ? !c.credor : c.credor === filtroCredor)
 
       const matchCat = filtroCategoria === 'todos' || c.categoria === filtroCategoria
       const matchProj = filtroProjeto === 'todos' || c.projeto === filtroProjeto
@@ -199,9 +214,17 @@ export function ContasPagarTab({
       else if (filtroStatus === 'atrasado') matchStat = c.isAtrasado
       else if (filtroStatus === 'cancelado') matchStat = c.status === 'cancelado'
 
-      return matchBusca && matchCat && matchProj && matchStat && matchConta
+      return matchBusca && matchCredor && matchCat && matchProj && matchStat && matchConta
     })
-  }, [contasProcessadas, busca, filtroCategoria, filtroProjeto, filtroStatus, filtroContaBancaria])
+  }, [
+    contasProcessadas,
+    busca,
+    filtroCredor,
+    filtroCategoria,
+    filtroProjeto,
+    filtroStatus,
+    filtroContaBancaria,
+  ])
 
   // Totalizadores
   const totalGeral = contasFiltradas.reduce((acc, c) => acc + c.valor, 0)
@@ -222,6 +245,7 @@ export function ContasPagarTab({
       descricao: '',
       fornecedor: '',
       cliente_fornecedor: '',
+      credor: '',
       categoria: 'despesas_operacionais',
       valor: '',
       data_vencimento: new Date().toISOString().slice(0, 10),
@@ -248,6 +272,7 @@ export function ContasPagarTab({
       descricao: conta.descricao,
       fornecedor: conta.fornecedor,
       cliente_fornecedor: conta.cliente_fornecedor || '',
+      credor: conta.credor || '',
       categoria: conta.categoria,
       valor: String(conta.valor),
       data_vencimento: conta.data_vencimento ? conta.data_vencimento.slice(0, 10) : '',
@@ -301,9 +326,11 @@ export function ContasPagarTab({
       if (formData.cliente_fornecedor) payload.cliente_fornecedor = formData.cliente_fornecedor
       else payload.cliente_fornecedor = null
 
+      if (formData.credor) payload.credor = formData.credor
+      else payload.credor = null
+
       if (formData.projeto) payload.projeto = formData.projeto
       else payload.projeto = null
-
       if (formData.status === 'pago' && formData.data_pagamento) {
         payload.data_pagamento = `${formData.data_pagamento} 12:00:00.000Z`
       } else if (formData.status !== 'pago') {
@@ -456,6 +483,22 @@ export function ContasPagarTab({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <Select value={filtroCredor} onValueChange={setFiltroCredor}>
+            <SelectTrigger className="w-[180px] h-9 text-xs">
+              <Building2 className="mr-1.5 h-3.5 w-3.5 text-neutral-400" />
+              <SelectValue placeholder="Credor" />
+            </SelectTrigger>
+            <SelectContent className="max-h-56">
+              <SelectItem value="todos">Todos credores</SelectItem>
+              {credores.map((cr) => (
+                <SelectItem key={cr.id} value={cr.id}>
+                  {cr.nome_razao_social}
+                </SelectItem>
+              ))}
+              <SelectItem value="sem_credor">Sem credor vinculado</SelectItem>
+            </SelectContent>
+          </Select>
+
           <Select value={filtroCategoria} onValueChange={setFiltroCategoria}>
             <SelectTrigger className="w-[170px] h-9 text-xs">
               <Filter className="mr-1.5 h-3.5 w-3.5 text-neutral-400" />
@@ -555,6 +598,7 @@ export function ContasPagarTab({
                 <tr>
                   <th className="px-4 py-3">Vencimento</th>
                   <th className="px-4 py-3">Descrição / Fornecedor</th>
+                  <th className="px-4 py-3">Credor Oficial</th>
                   <th className="px-4 py-3">Classificação Contábil</th>
                   <th className="px-4 py-3">Conta PJ</th>
                   <th className="px-4 py-3">Projeto Vinculado</th>
@@ -608,6 +652,27 @@ export function ContasPagarTab({
                             )}
                           </p>
                         </div>
+                      </td>
+
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {conta.expand?.credor ? (
+                          <div className="space-y-0.5">
+                            <span className="inline-flex items-center gap-1 font-bold text-neutral-900 text-xs">
+                              <Building2 className="h-3 w-3 text-[#FF6A13]" />
+                              {conta.expand.credor.nome_razao_social}
+                            </span>
+                            <div className="text-[10px] text-neutral-500 font-mono">
+                              {conta.expand.credor.cnpj_cpf}
+                            </div>
+                            {conta.expand.credor.chave_pix && (
+                              <div className="text-[10px] text-[#D65100] font-mono">
+                                PIX: {conta.expand.credor.chave_pix}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-[11px] text-neutral-400 italic">Não vinculado</span>
+                        )}
                       </td>
 
                       <td className="px-4 py-3">
@@ -772,40 +837,69 @@ export function ContasPagarTab({
               />
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs">Fornecedor / Favorecido *</Label>
-                <Input
-                  required
-                  value={formData.fornecedor}
-                  onChange={(e) => setFormData({ ...formData, fornecedor: e.target.value })}
-                  placeholder="Nome da empresa ou prestador"
-                />
+            {/* Bloco de Credor Oficial e Fornecedor */}
+            <div className="p-3 rounded-lg border border-orange-200 bg-orange-50/30 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-bold text-neutral-900 flex items-center gap-1.5">
+                  <Building2 className="h-4 w-4 text-[#FF6A13]" />
+                  Credor Financeiro Oficial (Cadastro de Credores)
+                </Label>
+                <span className="text-[10px] text-[#D65100]">
+                  Garante histórico e dados de liquidação
+                </span>
               </div>
 
-              <div className="space-y-1">
-                <Label className="text-xs">Vincular a Cadastro (Opcional)</Label>
-                <Select
-                  value={formData.cliente_fornecedor || 'nenhum'}
-                  onValueChange={(val) =>
-                    setFormData({
-                      ...formData,
-                      cliente_fornecedor: val === 'nenhum' ? '' : val,
-                    })
-                  }
-                >
-                  <SelectTrigger className="h-9 text-xs">
-                    <SelectValue placeholder="Selecione um cliente/parceiro..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="nenhum">Nenhum vínculo</SelectItem>
-                    {clientes.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.razao_social}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-[11px] text-neutral-700 font-semibold">
+                    Selecionar do Cadastro de Credores
+                  </Label>
+                  <Select
+                    value={formData.credor || 'nenhum'}
+                    onValueChange={(val) => {
+                      if (val === 'nenhum') {
+                        setFormData({ ...formData, credor: '' })
+                      } else {
+                        const selecionado = credores.find((c) => c.id === val)
+                        setFormData({
+                          ...formData,
+                          credor: val,
+                          fornecedor: selecionado
+                            ? selecionado.nome_razao_social
+                            : formData.fornecedor,
+                          cnpj_cpf_beneficiario: selecionado
+                            ? selecionado.cnpj_cpf
+                            : formData.cnpj_cpf_beneficiario,
+                        })
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="h-8 text-xs bg-white">
+                      <SelectValue placeholder="Vincular a um credor cadastrado..." />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-56">
+                      <SelectItem value="nenhum">Nenhum (avulso / sem cadastro)</SelectItem>
+                      {credores.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.nome_razao_social} ({c.cnpj_cpf})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-[11px] text-neutral-700 font-semibold">
+                    Nome do Fornecedor / Favorecido na Fatura *
+                  </Label>
+                  <Input
+                    required
+                    value={formData.fornecedor}
+                    onChange={(e) => setFormData({ ...formData, fornecedor: e.target.value })}
+                    placeholder="Nome na fatura ou comprovante"
+                    className="h-8 text-xs bg-white"
+                  />
+                </div>
               </div>
             </div>
 
@@ -1150,6 +1244,10 @@ export function ContasPagarTab({
       {/* Modal de Extração de Boleto por IA */}
       <CapturaBoletoModal
         open={modalBoletoAberto}
+        credores={credores}
+        openModalNovoCredor={() => {
+          // Permite alternar se necessário
+        }}
         onOpenChange={setModalBoletoAberto}
         projetos={projetos}
         contasBancarias={contasBancarias}

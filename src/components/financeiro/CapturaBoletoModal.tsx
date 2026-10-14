@@ -30,6 +30,7 @@ import {
   Barcode,
   Calendar,
   CreditCard,
+  Plus,
 } from 'lucide-react'
 import {
   extrairDadosBoleto,
@@ -41,11 +42,16 @@ import { formatCurrencyRaw } from '@/lib/format'
 import { toast } from 'sonner'
 import type { ProjetoRecord, ContaBancariaRecord } from '@/types/crm'
 
+import type { CredorRecord } from '@/types/crm'
+import { salvarCredor, CATEGORIA_CREDOR_LABELS } from '@/services/credores'
+
 export interface CapturaBoletoModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   projetos: ProjetoRecord[]
   contasBancarias: ContaBancariaRecord[]
+  credores?: CredorRecord[]
+  openModalNovoCredor?: () => void
   onContaCriada: () => void
 }
 
@@ -56,6 +62,7 @@ export function CapturaBoletoModal({
   onOpenChange,
   projetos,
   contasBancarias,
+  credores = [],
   onContaCriada,
 }: CapturaBoletoModalProps) {
   const [etapa, setEtapa] = useState<EtapaCaptura>('upload')
@@ -64,6 +71,11 @@ export function CapturaBoletoModal({
   const [isPdf, setIsPdf] = useState(false)
   const [dadosExtraidos, setDadosExtraidos] = useState<BoletoExtraido | null>(null)
   const [erroAnalise, setErroAnalise] = useState<string | null>(null)
+
+  // Integração com Credores
+  const [credorId, setCredorId] = useState<string>('')
+  const [mostrarCadastroCredor, setMostrarCadastroCredor] = useState(false)
+  const [salvandoCredorRapido, setSalvandoCredorRapido] = useState(false)
 
   // Formulário editável de conferência lado a lado
   const [beneficiario, setBeneficiario] = useState('')
@@ -128,6 +140,8 @@ export function CapturaBoletoModal({
     setContaBancariaId(contasBancarias[0]?.id || '')
     setProjetoId('')
     setObservacoes('')
+    setCredorId('')
+    setMostrarCadastroCredor(false)
   }
 
   async function processarArquivoSelecionado(file: File) {
@@ -191,6 +205,33 @@ export function CapturaBoletoModal({
         setObservacoes(extraido.instrucoes_resumo)
       }
 
+      // Verificação automática se já existe credor cadastrado com este CNPJ/CPF ou nome
+      const docLimpo = (extraido.cnpj_cpf_beneficiario || '').replace(/\D/g, '')
+      const nomeLimpo = (extraido.beneficiario_fornecedor || '').trim().toLowerCase()
+
+      const credorEncontrado = credores.find((c) => {
+        const cDoc = (c.cnpj_cpf || '').replace(/\D/g, '')
+        if (docLimpo && cDoc && docLimpo === cDoc) return true
+        const cNome = (c.nome_razao_social || '').toLowerCase()
+        const cFantasia = (c.nome_fantasia || '').toLowerCase()
+        if (nomeLimpo && (cNome.includes(nomeLimpo) || nomeLimpo.includes(cNome))) return true
+        if (
+          nomeLimpo &&
+          cFantasia &&
+          (cFantasia.includes(nomeLimpo) || nomeLimpo.includes(cFantasia))
+        )
+          return true
+        return false
+      })
+
+      if (credorEncontrado) {
+        setCredorId(credorEncontrado.id)
+        setMostrarCadastroCredor(false)
+      } else {
+        setCredorId('')
+        setMostrarCadastroCredor(true) // Oferece o cadastro facilitado
+      }
+
       setEtapa('conferencia')
       toast.success('Boleto analisado com sucesso pela IA do CRM AEROCAD!')
     } catch (err: unknown) {
@@ -210,6 +251,50 @@ export function CapturaBoletoModal({
     if (item) {
       setPlanoContasCodigo(item.codigo)
       setPlanoContasNome(item.nome)
+    }
+  }
+
+  async function handleCadastrarCredorRapido() {
+    if (!beneficiario.trim()) {
+      toast.error('Informe a razão social ou nome do credor.')
+      return
+    }
+    if (!cnpjCpf.trim()) {
+      toast.error('Informe o CNPJ ou CPF do credor.')
+      return
+    }
+
+    setSalvandoCredorRapido(true)
+    try {
+      const docLimpo = cnpjCpf.replace(/\D/g, '')
+      const tipo_pessoa = docLimpo.length > 11 ? 'pj' : 'pf'
+
+      const novo = await salvarCredor({
+        nome_razao_social: beneficiario.trim(),
+        cnpj_cpf: cnpjCpf.trim(),
+        tipo_pessoa,
+        categoria:
+          categoria === 'impostos'
+            ? 'impostos_orgaos_publicos'
+            : categoria === 'folha'
+              ? 'folha_encargos'
+              : categoria === 'terceirizados'
+                ? 'fornecedor_servicos'
+                : 'outros',
+        banco_nome: '',
+        chave_pix: '',
+        status: 'ativo',
+        observacoes: `Cadastrado a partir do boleto: ${arquivo?.name || ''}`,
+      })
+
+      setCredorId(novo.id)
+      setMostrarCadastroCredor(false)
+      toast.success(`Credor "${novo.nome_razao_social}" cadastrado com sucesso e vinculado!`)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      toast.error(`Erro ao cadastrar credor: ${msg}`)
+    } finally {
+      setSalvandoCredorRapido(false)
     }
   }
 
@@ -246,6 +331,7 @@ export function CapturaBoletoModal({
         forma_pagamento: 'boleto',
         numero_documento: numeroDoc || undefined,
         projetoId: projetoId || null,
+        credorId: credorId || null,
         observacoes: [
           observacoes,
           linhaDigitavel ? `Linha Digitável: ${linhaDigitavel}` : null,
@@ -465,6 +551,85 @@ export function CapturaBoletoModal({
 
               {/* Painel Direito: Campos Editáveis */}
               <div className="lg:col-span-7 space-y-3">
+                {/* Bloco de Integração com Credores */}
+                <div className="p-3 rounded-lg border border-orange-200 bg-orange-50/40 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-neutral-900 flex items-center gap-1.5">
+                      <Building2 className="h-3.5 w-3.5 text-[#FF6A13]" />
+                      Vínculo com Cadastro de Credores
+                    </span>
+                    {credorId ? (
+                      <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 flex items-center gap-1">
+                        <CheckCircle2 className="h-3 w-3" /> Credor Vinculado
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                        Credor não vinculado
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
+                    <div className="sm:col-span-8">
+                      <Select
+                        value={credorId || 'nenhum'}
+                        onValueChange={(val) => {
+                          if (val === 'nenhum') {
+                            setCredorId('')
+                            setMostrarCadastroCredor(true)
+                          } else {
+                            setCredorId(val)
+                            setMostrarCadastroCredor(false)
+                            const selecionado = credores.find((c) => c.id === val)
+                            if (selecionado) {
+                              setBeneficiario(selecionado.nome_razao_social)
+                              setCnpjCpf(selecionado.cnpj_cpf)
+                            }
+                          }
+                        }}
+                      >
+                        <SelectTrigger className="h-8 text-xs bg-white">
+                          <SelectValue placeholder="Selecione um credor cadastrado..." />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-56">
+                          <SelectItem value="nenhum">
+                            Nenhum vínculo (Criar novo ou avulso)
+                          </SelectItem>
+                          {credores.map((c) => (
+                            <SelectItem key={c.id} value={c.id}>
+                              {c.nome_razao_social} ({c.cnpj_cpf})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="sm:col-span-4">
+                      {!credorId && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={salvandoCredorRapido}
+                          onClick={handleCadastrarCredorRapido}
+                          className="w-full h-8 text-[11px] font-semibold text-[#D65100] border-orange-300 hover:bg-orange-100"
+                        >
+                          <Plus className="h-3.5 w-3.5 mr-1" />
+                          {salvandoCredorRapido ? 'Salvando...' : 'Cadastrar Credor'}
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+
+                  {mostrarCadastroCredor && !credorId && beneficiario && (
+                    <p className="text-[11px] text-neutral-600 bg-white/70 p-1.5 rounded border border-orange-100">
+                      💡 <strong>Sugestão:</strong> O beneficiário <em>"{beneficiario}"</em> ainda
+                      não está na base de credores. Clique em <strong>Cadastrar Credor</strong> para
+                      salvar seus dados e vincular a esta conta automaticamente.
+                    </p>
+                  )}
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
                   <div className="space-y-1">
                     <Label className="text-xs font-semibold">Beneficiário / Favorecido *</Label>

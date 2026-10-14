@@ -12,6 +12,7 @@ import {
   AlertTriangle,
   Clock,
   CheckCircle2,
+  Building2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/lib/format'
@@ -19,6 +20,7 @@ import { formatCurrency } from '@/lib/format'
 export type FinanceTabKey =
   | 'contas_pagar'
   | 'contas_receber'
+  | 'credores'
   | 'fluxo_caixa'
   | 'extratos'
   | 'balancetes'
@@ -38,6 +40,8 @@ export interface CentralFinanceiraHubProps {
   // Dados resumidos de Contas a Receber
   totalReceberAberto: number
   qtdReceberAtrasadas: number
+  // Dados de Credores
+  totalCredoresAtivos?: number
   // Dados de Fluxo de Caixa
   saldoMesCorrente: number
   mesCorrenteNome: string
@@ -75,6 +79,7 @@ export function CentralFinanceiraHub({
   qtdPagarAtrasadas,
   totalReceberAberto,
   qtdReceberAtrasadas,
+  totalCredoresAtivos = 0,
   saldoMesCorrente,
   mesCorrenteNome,
   qtdExtratosPendentes,
@@ -84,6 +89,29 @@ export function CentralFinanceiraHub({
   totalNotasOrfas,
 }: CentralFinanceiraHubProps) {
   const cards: HubCardConfig[] = [
+    {
+      id: 'credores',
+      title: 'Credores',
+      subtitle: 'Cadastro e dados bancários para quitação',
+      icon: Building2,
+      accentColor: '#FF6A13',
+      iconBg: 'bg-orange-50 border-orange-200 text-[#FF6A13]',
+      iconColor: 'text-[#FF6A13]',
+      badge: (
+        <span className="inline-flex items-center gap-1 rounded-full bg-orange-50 px-2 py-0.5 text-[10px] font-bold text-[#D65100] border border-[#FFD2B3]">
+          Financeiro
+        </span>
+      ),
+      statLabel: 'Credores ativos',
+      statValue: (
+        <span className="mono-value font-bold text-neutral-900">
+          {totalCredoresAtivos}{' '}
+          <span className="text-xs font-normal text-neutral-500">cadastrados</span>
+        </span>
+      ),
+      statSubtext: 'Integração direta com Contas a Pagar',
+      visible: true,
+    },
     {
       id: 'contas_pagar',
       title: 'Contas a Pagar',
