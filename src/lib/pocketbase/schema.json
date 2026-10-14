@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-14T19:29:53.658Z",
+  "generatedAt": "2026-10-14T20:24:21.920Z",
   "collections": [
     {
       "name": "users",
@@ -552,6 +552,25 @@
         },
         {
           "name": "whatsapp_mensagem",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "responsavel_colaborador",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "colaboradores"
+        },
+        {
+          "name": "trilha_prevista_nome",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "servico_nome",
           "type": "text",
           "required": false,
           "system": false

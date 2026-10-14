@@ -56,6 +56,7 @@ export interface OportunidadeRecord extends RecordModel {
   cliente: string
   titulo: string
   tipo_servico: string
+  servico_nome?: string
   etapa: 'lead' | 'qualificacao' | 'proposta_enviada' | 'negociacao' | 'ganho' | 'perdido'
   valor_estimado: number
   probabilidade: number
@@ -63,12 +64,19 @@ export interface OportunidadeRecord extends RecordModel {
   data_fechamento: string
   motivo_perda: string
   responsavel: string
+  responsavel_colaborador?: string
   trilha_prevista: Trail
+  trilha_prevista_nome?: string
   observacoes: string
   origem_canal?: 'whatsapp' | 'site' | 'indicacao' | 'email' | 'outro'
   whatsapp_remetente?: string
   whatsapp_mensagem?: string
-  expand?: { cliente?: ClienteRecord; responsavel?: UserRecord; tipo_servico?: ServiceRecord }
+  expand?: {
+    cliente?: ClienteRecord
+    responsavel?: UserRecord
+    responsavel_colaborador?: ColaboradorRecord
+    tipo_servico?: ServiceRecord
+  }
 }
 
 export type WhatsAppProvider = 'meta' | 'zapi' | 'outro'

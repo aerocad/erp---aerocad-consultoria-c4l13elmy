@@ -60,10 +60,15 @@ export default function FunnelPage() {
   const [params, setParams] = useSearchParams()
   const { data, loading, error, reload, setData } = useCrmData<OportunidadeRecord>(
     'oportunidades',
-    { expand: 'cliente,responsavel,tipo_servico', sort: '-updated', realtime: true },
+    {
+      expand: 'cliente,responsavel,responsavel_colaborador,tipo_servico',
+      sort: '-updated',
+      realtime: true,
+    },
   )
   const [newOpen, setNewOpen] = useState(params.get('novo') === '1')
   const [selected, setSelected] = useState<OportunidadeRecord | null>(null)
+  const [editOpen, setEditOpen] = useState(false)
   const [projectOpen, setProjectOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [trail, setTrail] = useState('todos')
@@ -79,16 +84,44 @@ export default function FunnelPage() {
     if (params.get('novo') === '1') setNewOpen(true)
   }, [params])
   const canWrite = user?.role === 'admin' || user?.role === 'comercial'
+  // Trilhas dinâmicas para o filtro: padrão + qualquer trilha customizada encontrada nos dados
+  const availableTrails = useMemo(() => {
+    const list: Array<{ value: string; label: string }> = [
+      { value: 'todos', label: 'Todas as trilhas' },
+      { value: 'opea', label: 'OPEA' },
+      { value: 'registro', label: 'Registro' },
+      { value: 'demais', label: 'Demais' },
+    ]
+    const customTrails = new Set<string>()
+    for (const item of data) {
+      if (
+        item.trilha_prevista_nome &&
+        !['opea', 'registro', 'demais'].includes(item.trilha_prevista_nome.toLowerCase())
+      ) {
+        customTrails.add(item.trilha_prevista_nome)
+      }
+    }
+    for (const custom of customTrails) {
+      list.push({ value: custom, label: custom })
+    }
+    return list
+  }, [data])
+
   const filtered = useMemo(
     () =>
-      data.filter(
-        (item) =>
-          (!query ||
-            `${item.titulo} ${item.expand?.cliente?.razao_social}`
-              .toLowerCase()
-              .includes(query.toLowerCase())) &&
-          (trail === 'todos' || item.trilha_prevista === trail),
-      ),
+      data.filter((item) => {
+        const matchesQuery =
+          !query ||
+          `${item.titulo} ${item.expand?.cliente?.razao_social || ''} ${item.servico_nome || ''} ${item.expand?.tipo_servico?.nome || ''} ${item.expand?.responsavel_colaborador?.nome_completo || ''}`
+            .toLowerCase()
+            .includes(query.toLowerCase())
+
+        if (!matchesQuery) return false
+        if (trail === 'todos') return true
+        if (item.trilha_prevista === trail) return true
+        if (item.trilha_prevista_nome === trail) return true
+        return false
+      }),
     [data, query, trail, ocultarValores],
   )
 
@@ -175,14 +208,15 @@ export default function FunnelPage() {
         <div className="flex items-center gap-2">
           <Filter className="h-4 w-4 text-[#8A8A8A]" />
           <Select value={trail} onValueChange={setTrail}>
-            <SelectTrigger className="w-[180px]">
+            <SelectTrigger className="w-[200px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="todos">Todas as trilhas</SelectItem>
-              <SelectItem value="opea">OPEA</SelectItem>
-              <SelectItem value="registro">Registro</SelectItem>
-              <SelectItem value="demais">Demais</SelectItem>
+              {availableTrails.map((t) => (
+                <SelectItem key={t.value} value={t.value}>
+                  {t.label}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
@@ -252,12 +286,24 @@ export default function FunnelPage() {
                         {formatCurrency(item.valor_estimado)}
                       </p>
                       <div className="mt-3 flex items-center justify-between">
-                        <CrmBadge tone="gray">
-                          {trailLabels[item.trilha_prevista] || 'Sem trilha'}
+                        <CrmBadge tone="gray" className="max-w-[170px] truncate">
+                          {item.trilha_prevista_nome ||
+                            trailLabels[item.trilha_prevista] ||
+                            'Sem trilha'}
                         </CrmBadge>
-                        <Avatar className="h-7 w-7">
+                        <Avatar
+                          className="h-7 w-7"
+                          title={
+                            item.expand?.responsavel_colaborador?.nome_completo ||
+                            item.expand?.responsavel?.name ||
+                            'Sem responsável'
+                          }
+                        >
                           <AvatarFallback className="bg-[#FFF0E5] text-[9px] font-bold text-[#D65100]">
-                            {initials(item.expand?.responsavel?.name)}
+                            {initials(
+                              item.expand?.responsavel_colaborador?.nome_completo ||
+                                item.expand?.responsavel?.name,
+                            )}
                           </AvatarFallback>
                         </Avatar>
                       </div>
@@ -295,6 +341,15 @@ export default function FunnelPage() {
         }}
         onSaved={() => void reload()}
       />
+      <OportunidadeDialog
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        oportunidade={selected}
+        onSaved={(updated) => {
+          setSelected(updated)
+          void reload()
+        }}
+      />
       <Sheet open={Boolean(selected)} onOpenChange={(value) => !value && setSelected(null)}>
         <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
           <SheetHeader>
@@ -306,13 +361,41 @@ export default function FunnelPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div className="rounded-lg border bg-[#FFF6EC] p-3">
                   <p className="technical-label">VALOR</p>
-                  <p className="mono-value mt-1 font-bold">
+                  <p className="mono-value mt-1 font-bold text-[#D65100]">
                     {formatCurrency(selected.valor_estimado)}
                   </p>
                 </div>
                 <div className="rounded-lg border p-3">
                   <p className="technical-label">PROBABILIDADE</p>
                   <p className="mono-value mt-1 font-bold">{selected.probabilidade}%</p>
+                </div>
+              </div>
+
+              {/* Detalhes de Serviço, Trilha e Responsável */}
+              <div className="rounded-lg border bg-neutral-50/70 p-3.5 space-y-2.5 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-neutral-500 font-medium">Serviço:</span>
+                  <span className="font-semibold text-neutral-900 text-right">
+                    {selected.servico_nome ||
+                      selected.expand?.tipo_servico?.nome ||
+                      'Não especificado'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-neutral-500 font-medium">Trilha:</span>
+                  <CrmBadge tone="gray" className="font-semibold">
+                    {selected.trilha_prevista_nome ||
+                      trailLabels[selected.trilha_prevista] ||
+                      'Sem trilha'}
+                  </CrmBadge>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-neutral-500 font-medium">Responsável:</span>
+                  <span className="font-semibold text-neutral-900">
+                    {selected.expand?.responsavel_colaborador?.nome_completo ||
+                      selected.expand?.responsavel?.name ||
+                      'Não atribuído'}
+                  </span>
                 </div>
               </div>
               <div>
@@ -389,13 +472,23 @@ export default function FunnelPage() {
                   }}
                 />
               </div>
-              <Button
-                onClick={convertToProject}
-                disabled={!canWrite}
-                className="w-full bg-[#FF6A13] hover:bg-[#E85B06]"
-              >
-                Converter em projeto
-              </Button>
+              <div className="flex flex-col gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setEditOpen(true)}
+                  disabled={!canWrite}
+                  className="w-full border-neutral-300"
+                >
+                  Editar oportunidade
+                </Button>
+                <Button
+                  onClick={convertToProject}
+                  disabled={!canWrite}
+                  className="w-full bg-[#FF6A13] hover:bg-[#E85B06]"
+                >
+                  Converter em projeto
+                </Button>
+              </div>
             </div>
           )}
         </SheetContent>
