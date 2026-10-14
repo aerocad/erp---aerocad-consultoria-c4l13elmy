@@ -6,140 +6,246 @@ export const TIPO_DOCUMENTO_SEGREGADO_CONFIG: Record<
   {
     label: string
     shortLabel: string
+    natureza: 'cobranca' | 'liquidacao' | 'fiscal' | 'contratual' | 'outro'
+    naturezaLabel: string
     tone: 'blue' | 'green' | 'amber' | 'purple' | 'gray' | 'red'
     badgeBg: string
     badgeText: string
     badgeBorder: string
     icon: string
+    chipBg: string
+    chipText: string
+    chipBorder: string
+    descricaoPapel: string
   }
 > = {
   boleto: {
-    label: 'Boleto Bancário',
+    label: 'Boleto Bancário (Cobrança)',
     shortLabel: 'Boleto',
+    natureza: 'cobranca',
+    naturezaLabel: 'Cobrança a Pagar',
     tone: 'amber',
-    badgeBg: 'bg-amber-50',
-    badgeText: 'text-amber-800',
-    badgeBorder: 'border-amber-200',
+    badgeBg: 'bg-amber-100',
+    badgeText: 'text-amber-950 font-bold',
+    badgeBorder: 'border-amber-400 shadow-xs',
+    chipBg: 'bg-amber-500 text-white',
+    chipText: 'text-white font-bold',
+    chipBorder: 'border-amber-600',
     icon: 'Barcode',
+    descricaoPapel: 'Título de cobrança / linha digitável (a pagar)',
+  },
+  comprovante_pix: {
+    label: 'Comprovante PIX / TED (Liquidação)',
+    shortLabel: 'Comprovante PIX/TED',
+    natureza: 'liquidacao',
+    naturezaLabel: 'Pagamento Efetivado',
+    tone: 'green',
+    badgeBg: 'bg-emerald-100',
+    badgeText: 'text-emerald-950 font-bold',
+    badgeBorder: 'border-emerald-400 shadow-xs',
+    chipBg: 'bg-emerald-600 text-white',
+    chipText: 'text-white font-bold',
+    chipBorder: 'border-emerald-700',
+    icon: 'ArrowLeftRight',
+    descricaoPapel: 'Comprovante de pagamento bancário já liquidado',
+  },
+  recibo: {
+    label: 'Recibo de Quitação',
+    shortLabel: 'Recibo',
+    natureza: 'liquidacao',
+    naturezaLabel: 'Quitação Efetuada',
+    tone: 'purple',
+    badgeBg: 'bg-purple-100',
+    badgeText: 'text-purple-950 font-bold',
+    badgeBorder: 'border-purple-300',
+    chipBg: 'bg-purple-600 text-white',
+    chipText: 'text-white font-bold',
+    chipBorder: 'border-purple-700',
+    icon: 'Receipt',
+    descricaoPapel: 'Declaração formal de quitação assinada',
   },
   nota_fiscal: {
     label: 'Nota Fiscal (NF-e / NFS-e)',
     shortLabel: 'Nota Fiscal',
+    natureza: 'fiscal',
+    naturezaLabel: 'Documento Fiscal',
     tone: 'blue',
-    badgeBg: 'bg-blue-50',
-    badgeText: 'text-blue-800',
-    badgeBorder: 'border-blue-200',
+    badgeBg: 'bg-sky-100',
+    badgeText: 'text-sky-950 font-semibold',
+    badgeBorder: 'border-sky-300',
+    chipBg: 'bg-sky-600 text-white',
+    chipText: 'text-white font-semibold',
+    chipBorder: 'border-sky-700',
     icon: 'FileText',
-  },
-  comprovante_pix: {
-    label: 'Comprovante PIX / TED',
-    shortLabel: 'Comprovante PIX',
-    tone: 'green',
-    badgeBg: 'bg-emerald-50',
-    badgeText: 'text-emerald-800',
-    badgeBorder: 'border-emerald-200',
-    icon: 'CheckCircle2',
-  },
-  recibo: {
-    label: 'Recibo / Quitação',
-    shortLabel: 'Recibo',
-    tone: 'purple',
-    badgeBg: 'bg-purple-50',
-    badgeText: 'text-purple-800',
-    badgeBorder: 'border-purple-200',
-    icon: 'Receipt',
+    descricaoPapel: 'Nota fiscal de serviços ou mercadorias',
   },
   contrato: {
-    label: 'Contrato / Proposta',
+    label: 'Contrato / Ordem de Compra',
     shortLabel: 'Contrato',
+    natureza: 'contratual',
+    naturezaLabel: 'Instrumento Contratual',
     tone: 'gray',
-    badgeBg: 'bg-neutral-100',
-    badgeText: 'text-neutral-800',
-    badgeBorder: 'border-neutral-200',
+    badgeBg: 'bg-slate-100',
+    badgeText: 'text-slate-800 font-semibold',
+    badgeBorder: 'border-slate-300',
+    chipBg: 'bg-slate-700 text-white',
+    chipText: 'text-white font-medium',
+    chipBorder: 'border-slate-800',
     icon: 'FileSpreadsheet',
+    descricaoPapel: 'Instrumento contratual, proposta ou aditivo',
   },
   outro: {
-    label: 'Outro Documento',
-    shortLabel: 'Outro',
+    label: 'Outro / Não classificado',
+    shortLabel: 'Não classificado',
+    natureza: 'outro',
+    naturezaLabel: 'Pendente de Classificação',
     tone: 'gray',
     badgeBg: 'bg-neutral-100',
-    badgeText: 'text-neutral-600',
-    badgeBorder: 'border-neutral-200',
-    icon: 'Paperclip',
+    badgeText: 'text-neutral-700',
+    badgeBorder: 'border-neutral-300 border-dashed',
+    chipBg: 'bg-neutral-600 text-white',
+    chipText: 'text-neutral-200',
+    chipBorder: 'border-neutral-400',
+    icon: 'HelpCircle',
+    descricaoPapel: 'Arquivo sem indicação clara no nome (necessita classificação manual)',
   },
 }
 
 /**
- * Heurística rápida para detectar o tipo de documento a partir do nome do arquivo
- * e/ou campos pré-identificados (linha digitável, etc.)
+ * Heurística criteriosa para classificar o tipo de documento.
+ * Se o arquivo for scan genérico (ex: scan001.pdf, foto.jpg, img_1234, doc.pdf)
+ * sem palavra-chave específica, retorna "outro" para exigir classificação manual explícita.
  */
 export function detectarTipoDocumentoHeuristica(
   nomeArquivo: string,
   extra?: { temLinhaDigitavel?: boolean; textoExtraido?: string },
 ): TipoDocumentoSegregado {
-  const nome = (nomeArquivo || '')
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-
   if (extra?.temLinhaDigitavel) {
     return 'boleto'
   }
 
-  // 1. Boleto
-  if (
-    nome.includes('boleto') ||
-    nome.includes('bloqueto') ||
-    nome.includes('fatura') ||
-    nome.includes('cobranca') ||
-    nome.includes('linha_digitavel') ||
-    nome.includes('duplicata')
-  ) {
+  const nomeLimpo = (nomeArquivo || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    // remove extensão final
+    .replace(/\.[a-z0-9]+$/i, '')
+    // troca separadores por espaço para isolamento de tokens
+    .replace(/[._\-+/\\(),;:]/g, ' ')
+    .trim()
+
+  const tokens = nomeLimpo.split(/\s+/).filter(Boolean)
+  const textoCompleto = ` ${tokens.join(' ')} `
+
+  // Extra extra: se passou texto extraído com linha digitável
+  if (extra?.textoExtraido) {
+    const textoUpper = extra.textoExtraido.toUpperCase()
+    if (
+      textoUpper.includes('LINHA DIGITAVEL') ||
+      textoUpper.includes('CODIGO DE BARRAS') ||
+      textoUpper.includes('RECIBO DO SACADO')
+    ) {
+      return 'boleto'
+    }
+  }
+
+  // 1. BOLETO / GUIA DE COBRANÇA
+  // "boleto", "bloqueto", "guia", "fatura", "dam", "dae", "darf", "gps", "das", "cobranca", "duplicata", "linha digitavel"
+  const ehBoleto =
+    tokens.some((t) =>
+      [
+        'boleto',
+        'bloqueto',
+        'guia',
+        'guias',
+        'fatura',
+        'faturas',
+        'dam',
+        'dae',
+        'darf',
+        'gps',
+        'das',
+        'cobranca',
+        'duplicata',
+      ].includes(t),
+    ) ||
+    textoCompleto.includes(' boleto ') ||
+    textoCompleto.includes(' bloqueto ') ||
+    textoCompleto.includes(' fatura ') ||
+    textoCompleto.includes(' linha digitavel ') ||
+    textoCompleto.includes(' guia de recolhimento ') ||
+    textoCompleto.includes(' guia previdencia ') ||
+    textoCompleto.includes(' guia darf ')
+
+  if (ehBoleto) {
     return 'boleto'
   }
 
-  // 2. Nota Fiscal
-  if (
-    nome.includes('danfe') ||
-    nome.includes('nfse') ||
-    nome.includes('nfe') ||
-    nome.includes('nf-e') ||
-    nome.includes('nfs-e') ||
-    nome.includes('nota_fiscal') ||
-    nome.includes('notafiscal') ||
-    nome.includes('xml')
-  ) {
-    return 'nota_fiscal'
-  }
+  // 2. COMPROVANTE DE PAGAMENTO / LIQUIDAÇÃO BANCÁRIA
+  // "pix", "ted", "doc", "comprovante", "recibo de pagamento", "transferencia", "extrato"
+  const ehComprovante =
+    tokens.some((t) =>
+      ['pix', 'ted', 'comprovante', 'comprovantes', 'transferencia', 'transf', 'extrato'].includes(
+        t,
+      ),
+    ) ||
+    textoCompleto.includes(' pix ') ||
+    textoCompleto.includes(' ted ') ||
+    textoCompleto.includes(' doc bancario ') ||
+    textoCompleto.includes(' comprovante ') ||
+    textoCompleto.includes(' comprovante pix ') ||
+    textoCompleto.includes(' comprovante ted ') ||
+    textoCompleto.includes(' comprovante de pagamento ') ||
+    textoCompleto.includes(' comprovante de transferencia ') ||
+    textoCompleto.includes(' recibo de pagamento ') ||
+    textoCompleto.includes(' transferencia bancaria ') ||
+    textoCompleto.includes(' extrato ') ||
+    textoCompleto.includes(' pagamento efetuado ') ||
+    textoCompleto.includes(' debito realizado ')
 
-  // 3. Comprovante PIX ou TED
-  if (
-    nome.includes('pix') ||
-    nome.includes('ted') ||
-    nome.includes('doc') ||
-    nome.includes('comprovante') ||
-    nome.includes('pagamento') ||
-    nome.includes('transf') ||
-    nome.includes('extrato')
-  ) {
+  if (ehComprovante) {
     return 'comprovante_pix'
   }
 
-  // 4. Recibo
-  if (nome.includes('recibo') || nome.includes('quitacao') || nome.includes('cupom')) {
+  // 3. RECIBO / QUITAÇÃO FORMAL
+  const ehRecibo =
+    tokens.some((t) =>
+      ['recibo', 'recibos', 'quitacao', 'quitas', 'cupom', 'cupons'].includes(t),
+    ) ||
+    textoCompleto.includes(' termo de quitacao ') ||
+    textoCompleto.includes(' declaracao de quitacao ')
+
+  if (ehRecibo) {
     return 'recibo'
   }
 
-  // 5. Contrato
-  if (
-    nome.includes('contrato') ||
-    nome.includes('aditivo') ||
-    nome.includes('proposta') ||
-    nome.includes('termo')
-  ) {
+  // 4. NOTA FISCAL
+  const ehNotaFiscal =
+    tokens.some((t) => ['danfe', 'nfse', 'nfe', 'nfs', 'nf', 'notafiscal', 'xml'].includes(t)) ||
+    textoCompleto.includes(' nota fiscal ') ||
+    textoCompleto.includes(' danfe ') ||
+    textoCompleto.includes(' nfse ') ||
+    textoCompleto.includes(' nfe ') ||
+    textoCompleto.includes(' nf e ') ||
+    textoCompleto.includes(' nfs e ')
+
+  if (ehNotaFiscal) {
+    return 'nota_fiscal'
+  }
+
+  // 5. CONTRATO / PROPOSTA
+  const ehContrato =
+    tokens.some((t) => ['contrato', 'aditivo', 'proposta', 'termo', 'os', 'ordem'].includes(t)) ||
+    textoCompleto.includes(' contrato ') ||
+    textoCompleto.includes(' aditivo contratual ') ||
+    textoCompleto.includes(' ordem de compra ')
+
+  if (ehContrato) {
     return 'contrato'
   }
 
+  // 6. Se for nome genérico sem pista ("scan001", "foto", "img_1234", "documento", "arquivo", etc.)
+  // Marca explicitamente como "outro" para exigir classificação manual
   return 'outro'
 }
 

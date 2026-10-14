@@ -3,7 +3,7 @@ import {
   UploadCloud,
   FileText,
   Barcode,
-  CheckCircle2,
+  ArrowLeftRight,
   Receipt,
   FileSpreadsheet,
   Paperclip,
@@ -11,6 +11,8 @@ import {
   Eye,
   Plus,
   AlertCircle,
+  HelpCircle,
+  Info,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -137,14 +139,16 @@ export function AnexosMultiplosContasPagar({
     switch (tipo) {
       case 'boleto':
         return <Barcode className={className} />
-      case 'nota_fiscal':
-        return <FileText className={className} />
       case 'comprovante_pix':
-        return <CheckCircle2 className={className} />
+        return <ArrowLeftRight className={className} />
       case 'recibo':
         return <Receipt className={className} />
+      case 'nota_fiscal':
+        return <FileText className={className} />
       case 'contrato':
         return <FileSpreadsheet className={className} />
+      case 'outro':
+        return <HelpCircle className={className} />
       default:
         return <Paperclip className={className} />
     }
@@ -211,6 +215,27 @@ export function AnexosMultiplosContasPagar({
         </div>
       </div>
 
+      {/* Faixa explicativa de distinção Boleto vs Comprovante */}
+      <div className="p-2.5 rounded-lg border border-neutral-200 bg-neutral-50/70 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Info className="h-4 w-4 text-[#FF6A13] shrink-0" />
+          <div className="text-[11px] text-neutral-700">
+            <span className="font-semibold text-neutral-900">Distinção de Documentos:</span>{' '}
+            <span className="inline-flex items-center gap-1 font-bold text-amber-900 bg-amber-100 px-1.5 py-0.2 rounded border border-amber-300">
+              <Barcode className="h-2.5 w-2.5" /> Boleto
+            </span>{' '}
+            é documento de <em>cobrança a pagar</em>;{' '}
+            <span className="inline-flex items-center gap-1 font-bold text-emerald-900 bg-emerald-100 px-1.5 py-0.2 rounded border border-emerald-300">
+              <ArrowLeftRight className="h-2.5 w-2.5" /> Comprovante
+            </span>{' '}
+            é documento de <em>pagamento já liquidado</em>.
+          </div>
+        </div>
+        <span className="text-[10px] text-neutral-500 italic shrink-0">
+          Você pode ajustar o tipo de cada anexo a qualquer momento.
+        </span>
+      </div>
+
       {/* Lista de Documentos Segregados (Existentes + Novos a Enviar) */}
       {(arquivosExistentes.length > 0 || arquivosPendentes.length > 0) && (
         <div className="space-y-2">
@@ -226,14 +251,34 @@ export function AnexosMultiplosContasPagar({
             {arquivosExistentes.map((item) => {
               const cfg =
                 TIPO_DOCUMENTO_SEGREGADO_CONFIG[item.tipo] || TIPO_DOCUMENTO_SEGREGADO_CONFIG.outro
+              const isBoleto = item.tipo === 'boleto'
+              const isComprovante = item.tipo === 'comprovante_pix' || item.tipo === 'recibo'
+              const isNaoClassificado = item.tipo === 'outro'
+
               return (
                 <div
                   key={item.fileName}
-                  className="flex items-center justify-between gap-2 p-2 rounded-lg border border-neutral-200 bg-white hover:bg-neutral-50/70 transition text-xs"
+                  className={`flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 rounded-lg border transition text-xs ${
+                    isBoleto
+                      ? 'border-amber-300 bg-amber-50/40 hover:bg-amber-50/70'
+                      : isComprovante
+                        ? 'border-emerald-300 bg-emerald-50/40 hover:bg-emerald-50/70'
+                        : isNaoClassificado
+                          ? 'border-amber-200 bg-amber-50/20 hover:bg-amber-50/40 border-dashed'
+                          : 'border-neutral-200 bg-white hover:bg-neutral-50/70'
+                  }`}
                 >
                   <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                    {/* Miniatura ou Ícone */}
-                    <div className="w-10 h-10 rounded border border-neutral-200 bg-neutral-100 shrink-0 overflow-hidden flex items-center justify-center">
+                    {/* Miniatura ou Ícone com destaque forte */}
+                    <div
+                      className={`w-11 h-11 rounded border shrink-0 overflow-hidden flex items-center justify-center ${
+                        isBoleto
+                          ? 'bg-amber-100 border-amber-300 text-amber-900'
+                          : isComprovante
+                            ? 'bg-emerald-100 border-emerald-300 text-emerald-900'
+                            : 'bg-neutral-100 border-neutral-200 text-neutral-600'
+                      }`}
+                    >
                       {item.isImage ? (
                         <img
                           src={item.url}
@@ -248,25 +293,31 @@ export function AnexosMultiplosContasPagar({
                           }
                         />
                       ) : (
-                        <span className="text-[#FF6A13]">
-                          {renderIconeTipo(item.tipo, 'h-5 w-5')}
-                        </span>
+                        <span>{renderIconeTipo(item.tipo, 'h-5 w-5')}</span>
                       )}
                     </div>
 
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span
-                          className="font-semibold text-neutral-900 truncate max-w-[200px]"
+                          className="font-bold text-neutral-900 truncate max-w-[220px]"
                           title={item.nomeOriginal}
                         >
                           {item.nomeOriginal}
                         </span>
-                        <span className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded font-mono">
+                        <span className="text-[10px] text-emerald-800 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded font-mono">
                           Salvo
                         </span>
+                        {isNaoClassificado && (
+                          <span className="text-[10px] text-amber-900 bg-amber-100 border border-amber-300 px-1.5 py-0.2 rounded font-semibold flex items-center gap-0.5">
+                            <AlertCircle className="h-2.5 w-2.5 text-amber-700" />
+                            Classificar manualmente
+                          </span>
+                        )}
                       </div>
                       <div className="flex items-center gap-2 text-[10px] text-neutral-500 mt-0.5">
+                        <span className="font-medium text-neutral-700">{cfg.naturezaLabel}</span>
+                        <span className="text-neutral-300">•</span>
                         {item.tamanho && <span>{formatBytes(item.tamanho)}</span>}
                         <span className="text-neutral-300">•</span>
                         <a
@@ -282,7 +333,7 @@ export function AnexosMultiplosContasPagar({
                   </div>
 
                   {/* Seletor de Tipo Segregado */}
-                  <div className="flex items-center gap-1.5 shrink-0">
+                  <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
                     <Select
                       value={item.tipo}
                       disabled={disabled || !onAtualizarTipoExistente}
@@ -293,7 +344,7 @@ export function AnexosMultiplosContasPagar({
                       }}
                     >
                       <SelectTrigger
-                        className={`h-7 text-[11px] font-semibold border ${cfg.badgeBg} ${cfg.badgeText} ${cfg.badgeBorder} w-[140px]`}
+                        className={`h-7.5 text-[11px] font-bold border ${cfg.badgeBg} ${cfg.badgeText} ${cfg.badgeBorder} min-w-[170px]`}
                       >
                         <SelectValue />
                       </SelectTrigger>
@@ -302,7 +353,12 @@ export function AnexosMultiplosContasPagar({
                           <SelectItem key={chave} value={chave} className="text-xs">
                             <span className="flex items-center gap-1.5">
                               {renderIconeTipo(chave as TipoDocumentoSegregado, 'h-3.5 w-3.5')}
-                              {conf.label}
+                              <span>
+                                <strong className="font-semibold">{conf.shortLabel}</strong>
+                                <span className="text-[10px] text-neutral-400 ml-1">
+                                  ({conf.naturezaLabel})
+                                </span>
+                              </span>
                             </span>
                           </SelectItem>
                         ))}
@@ -332,15 +388,34 @@ export function AnexosMultiplosContasPagar({
                 TIPO_DOCUMENTO_SEGREGADO_CONFIG[item.tipo] || TIPO_DOCUMENTO_SEGREGADO_CONFIG.outro
               const isImage = item.file.type.startsWith('image/')
               const isPdf = item.file.type === 'application/pdf' || item.file.name.endsWith('.pdf')
+              const isBoleto = item.tipo === 'boleto'
+              const isComprovante = item.tipo === 'comprovante_pix' || item.tipo === 'recibo'
+              const isNaoClassificado = item.tipo === 'outro'
 
               return (
                 <div
                   key={item.id}
-                  className="flex items-center justify-between gap-2 p-2 rounded-lg border border-orange-200 bg-orange-50/25 hover:bg-orange-50/50 transition text-xs"
+                  className={`flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 rounded-lg border transition text-xs ${
+                    isBoleto
+                      ? 'border-amber-300 bg-amber-50/50 hover:bg-amber-50/80'
+                      : isComprovante
+                        ? 'border-emerald-300 bg-emerald-50/50 hover:bg-emerald-50/80'
+                        : isNaoClassificado
+                          ? 'border-amber-300 bg-amber-50/30 hover:bg-amber-50/50 border-dashed'
+                          : 'border-orange-200 bg-orange-50/25 hover:bg-orange-50/50'
+                  }`}
                 >
                   <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                    {/* Miniatura ou Ícone */}
-                    <div className="w-10 h-10 rounded border border-neutral-200 bg-white shrink-0 overflow-hidden flex items-center justify-center">
+                    {/* Miniatura ou Ícone com destaque */}
+                    <div
+                      className={`w-11 h-11 rounded border shrink-0 overflow-hidden flex items-center justify-center ${
+                        isBoleto
+                          ? 'bg-amber-100 border-amber-300 text-amber-900'
+                          : isComprovante
+                            ? 'bg-emerald-100 border-emerald-300 text-emerald-900'
+                            : 'bg-white border-neutral-200 text-neutral-600'
+                      }`}
+                    >
                       {isImage && item.previewUrl ? (
                         <img
                           src={item.previewUrl}
@@ -355,25 +430,31 @@ export function AnexosMultiplosContasPagar({
                           }
                         />
                       ) : (
-                        <span className="text-[#FF6A13]">
-                          {renderIconeTipo(item.tipo, 'h-5 w-5')}
-                        </span>
+                        <span>{renderIconeTipo(item.tipo, 'h-5 w-5')}</span>
                       )}
                     </div>
 
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span
-                          className="font-semibold text-neutral-900 truncate max-w-[200px]"
+                          className="font-bold text-neutral-900 truncate max-w-[220px]"
                           title={item.nomeOriginal}
                         >
                           {item.nomeOriginal}
                         </span>
-                        <span className="text-[10px] text-amber-800 bg-amber-50 border border-amber-200 px-1.5 py-0.2 rounded font-mono">
-                          Novo (não salvo)
+                        <span className="text-[10px] text-orange-800 bg-orange-100 border border-orange-200 px-1.5 py-0.2 rounded font-mono">
+                          Novo
                         </span>
+                        {isNaoClassificado && (
+                          <span className="text-[10px] text-amber-900 bg-amber-100 border border-amber-300 px-1.5 py-0.2 rounded font-semibold flex items-center gap-0.5">
+                            <AlertCircle className="h-2.5 w-2.5 text-amber-700" />
+                            Classifique: Boleto, Comprovante ou NF?
+                          </span>
+                        )}
                       </div>
                       <div className="flex items-center gap-2 text-[10px] text-neutral-500 mt-0.5">
+                        <span className="font-medium text-neutral-700">{cfg.naturezaLabel}</span>
+                        <span className="text-neutral-300">•</span>
                         <span>{formatBytes(item.tamanho)}</span>
                         {item.previewUrl && (
                           <>
@@ -398,7 +479,7 @@ export function AnexosMultiplosContasPagar({
                   </div>
 
                   {/* Seletor do Tipo Segregado */}
-                  <div className="flex items-center gap-1.5 shrink-0">
+                  <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
                     <Select
                       value={item.tipo}
                       disabled={disabled}
@@ -407,7 +488,7 @@ export function AnexosMultiplosContasPagar({
                       }
                     >
                       <SelectTrigger
-                        className={`h-7 text-[11px] font-semibold border ${cfg.badgeBg} ${cfg.badgeText} ${cfg.badgeBorder} w-[140px]`}
+                        className={`h-7.5 text-[11px] font-bold border ${cfg.badgeBg} ${cfg.badgeText} ${cfg.badgeBorder} min-w-[170px]`}
                       >
                         <SelectValue />
                       </SelectTrigger>
@@ -416,7 +497,12 @@ export function AnexosMultiplosContasPagar({
                           <SelectItem key={chave} value={chave} className="text-xs">
                             <span className="flex items-center gap-1.5">
                               {renderIconeTipo(chave as TipoDocumentoSegregado, 'h-3.5 w-3.5')}
-                              {conf.label}
+                              <span>
+                                <strong className="font-semibold">{conf.shortLabel}</strong>
+                                <span className="text-[10px] text-neutral-400 ml-1">
+                                  ({conf.naturezaLabel})
+                                </span>
+                              </span>
                             </span>
                           </SelectItem>
                         ))}

@@ -371,16 +371,19 @@ export function CapturaBoletoModal({
       <DialogContent className="max-w-4xl max-h-[92vh] overflow-y-auto">
         <DialogHeader>
           <div className="flex items-center gap-2">
-            <span className="p-2 rounded bg-amber-500/10 text-[#FF6A13]">
+            <span className="p-2 rounded bg-amber-500/10 text-amber-700">
               <Barcode className="h-5 w-5" />
             </span>
             <div>
-              <DialogTitle className="text-base font-bold text-neutral-900">
-                Extrair Dados de Boleto Bancário (PDF ou Foto)
+              <DialogTitle className="text-base font-bold text-neutral-900 flex items-center gap-2">
+                <span>Extrair Dados de Boleto Bancário</span>
+                <span className="text-[10px] uppercase font-bold tracking-wide px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
+                  Boleto (Documento de Cobrança)
+                </span>
               </DialogTitle>
               <p className="text-xs text-neutral-500">
-                Leitura inteligente de linha digitável, código de barras, valores e classificação
-                contábil via IA Skip Cloud
+                Leitura de linha digitável, código de barras e valores para emissão da conta a pagar
+                pendente
               </p>
             </div>
           </div>
@@ -498,12 +501,31 @@ export function CapturaBoletoModal({
               </Alert>
             )}
 
+            {/* Faixa explícita de distinção de natureza: Boleto de cobrança vs Comprovante de quitação */}
+            <div className="p-2.5 rounded-lg border border-amber-300 bg-amber-50/70 text-xs space-y-1">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 font-bold text-amber-950">
+                  <Barcode className="h-4 w-4 text-amber-700" />
+                  <span>Boleto Bancário (Documento de Cobrança / A Pagar)</span>
+                </div>
+                <span className="text-[10px] font-semibold uppercase px-2 py-0.5 rounded bg-amber-200/80 text-amber-900">
+                  Status: Pendente
+                </span>
+              </div>
+              <p className="text-[11px] text-amber-900/90 leading-relaxed">
+                💡 <strong>Diferença essencial:</strong> Este boleto é um{' '}
+                <em>título de cobrança</em> com linha digitável e vencimento futuro. O{' '}
+                <strong>comprovante de quitação</strong> (PIX/TED/recibo) deve ser anexado após a
+                liquidação do pagamento bancário.
+              </p>
+            </div>
+
             {dadosExtraidos && dadosExtraidos.confianca === 'alta' && (
               <div className="flex items-center gap-2 px-3 py-1.5 rounded bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs">
                 <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
                 <span>
-                  Boleto identificado com <strong>alta precisão</strong>. Confira os dados ao lado
-                  antes de criar a conta a pagar.
+                  Linha digitável e dados do boleto lidos com <strong>alta precisão</strong> pela IA
+                  AEROCAD. Confira os campos antes de gravar.
                 </span>
               </div>
             )}

@@ -286,16 +286,21 @@ export function CapturaComprovanteModal({
       <DialogContent className="max-w-4xl max-h-[92vh] overflow-y-auto p-4 sm:p-6">
         <DialogHeader>
           <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg bg-orange-100 flex items-center justify-center text-[#FF6A13]">
+            <div className="h-8 w-8 rounded-lg bg-emerald-100 flex items-center justify-center text-emerald-800">
               <Sparkles className="h-4 w-4" />
             </div>
             <div>
-              <DialogTitle className="text-base sm:text-lg font-bold text-neutral-900">
-                {isMobile ? 'Fotografar Comprovante com IA' : 'Capturar & Extrair Comprovante'}
+              <DialogTitle className="text-base sm:text-lg font-bold text-neutral-900 flex items-center gap-2">
+                <span>
+                  {isMobile ? 'Fotografar Comprovante com IA' : 'Capturar & Extrair Comprovante'}
+                </span>
+                <span className="text-[10px] uppercase font-bold tracking-wide px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300">
+                  Comprovante (Documento de Pagamento Efetivado)
+                </span>
               </DialogTitle>
               <DialogDescription className="text-xs text-neutral-500">
-                Extraia automaticamente fornecedor, CNPJ, valor e tributos de notas fiscais, cupons
-                e recibos via agente nativo AEROCAD.
+                Extraia automaticamente dados de comprovantes de pagamento liquidados (PIX, TED,
+                cupons fiscais e recibos).
               </DialogDescription>
             </div>
           </div>
@@ -441,6 +446,25 @@ export function CapturaComprovanteModal({
         {/* ETAPA 3: MODAL DE CONFERÊNCIA COM PRÉVIA AO LADO */}
         {etapa === 'conferencia' && (
           <div className="py-2 space-y-4">
+            {/* Faixa explicativa de distinção: Comprovante de quitação liquidado vs Boleto de cobrança */}
+            <div className="p-2.5 rounded-lg border border-emerald-300 bg-emerald-50/70 text-xs space-y-1">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 font-bold text-emerald-950">
+                  <Check className="h-4 w-4 text-emerald-700" />
+                  <span>Comprovante (Documento de Pagamento Efetivado / Liquidado)</span>
+                </div>
+                <span className="text-[10px] font-semibold uppercase px-2 py-0.5 rounded bg-emerald-200/80 text-emerald-900">
+                  Liquidação Bancária
+                </span>
+              </div>
+              <p className="text-[11px] text-emerald-900/90 leading-relaxed">
+                💡 <strong>Diferença essencial:</strong> Este comprovante atesta a{' '}
+                <em>saída de caixa ou quitação definitiva</em> (transferência PIX/TED ou recibo). Se
+                você estiver apenas cadastrando um boleto futuro com código de barras, utilize a
+                captura de <strong>Boleto Bancário</strong>.
+              </p>
+            </div>
+
             {avisoExtracao && (
               <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-900 flex items-start justify-between gap-2">
                 <div className="flex items-start gap-2">

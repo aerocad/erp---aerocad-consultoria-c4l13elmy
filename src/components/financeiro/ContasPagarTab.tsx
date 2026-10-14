@@ -656,7 +656,14 @@ export function ContasPagarTab({
                   <th className="px-4 py-3">Projeto Vinculado</th>
                   <th className="px-4 py-3">Valor Líquido</th>
                   <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3 text-center">Comprovante</th>
+                  <th className="px-4 py-3 text-center">
+                    <span className="flex flex-col items-center">
+                      <span>Anexos</span>
+                      <span className="text-[9px] font-normal text-neutral-400">
+                        Boleto / Comprovante
+                      </span>
+                    </span>
+                  </th>
                   <th className="px-4 py-3 text-right">Ações</th>
                 </tr>
               </thead>
