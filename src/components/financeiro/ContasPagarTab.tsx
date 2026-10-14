@@ -148,6 +148,11 @@ export function ContasPagarTab({
     forma_pagamento: 'pix',
     numero_documento: '',
     projeto: '',
+    codigo_barras_linha_digitavel: '',
+    cnpj_cpf_beneficiario: '',
+    plano_contas_codigo: '',
+    plano_contas_nome: '',
+    conta_bancaria: '',
     observacoes: '',
     arquivoComprovante: null,
   })

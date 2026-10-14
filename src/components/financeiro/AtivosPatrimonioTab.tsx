@@ -40,7 +40,7 @@ import { EmptyState } from '@/components/common/States'
 import { formatCurrency, formatDate } from '@/lib/format'
 import { createOne, updateOne, deleteOne } from '@/services/api'
 import pb from '@/lib/pocketbase/client'
-import { toast } from '@/hooks/use-toast'
+import { toast } from 'sonner'
 import type {
   AtivoPatrimonioRecord,
   CategoriaAtivoPatrimonial,
@@ -673,7 +673,7 @@ export function AtivosPatrimonioTab({ canWrite, fornecedores = [] }: AtivosPatri
                 <Label className="text-xs">Categoria Contábil *</Label>
                 <Select
                   value={formData.categoria}
-                  onValueChange={(val: any) => handleCategoriaChange(val)}
+                  onValueChange={(val: CategoriaAtivoPatrimonial) => handleCategoriaChange(val)}
                 >
                   <SelectTrigger className="h-9 text-xs">
                     <SelectValue />
@@ -692,7 +692,9 @@ export function AtivosPatrimonioTab({ canWrite, fornecedores = [] }: AtivosPatri
                 <Label className="text-xs">Status do Bem</Label>
                 <Select
                   value={formData.status}
-                  onValueChange={(val: any) => setFormData({ ...formData, status: val })}
+                  onValueChange={(val: StatusAtivoPatrimonial) =>
+                    setFormData({ ...formData, status: val })
+                  }
                 >
                   <SelectTrigger className="h-9 text-xs">
                     <SelectValue />

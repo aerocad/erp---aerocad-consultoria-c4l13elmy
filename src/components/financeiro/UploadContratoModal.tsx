@@ -31,7 +31,7 @@ import {
 import { extrairDadosContrato, type ContratoExtraido } from '@/services/comprovantesVision'
 import { createOne, updateOne } from '@/services/api'
 import pb from '@/lib/pocketbase/client'
-import { toast } from '@/hooks/use-toast'
+import { toast } from 'sonner'
 import type { ClienteRecord, ProjetoRecord, FornecedorRecord, ContratoRecord } from '@/types/crm'
 
 export interface UploadContratoModalProps {

@@ -80,6 +80,7 @@ import { FluxoCaixaTab } from '@/components/financeiro/FluxoCaixaTab'
 import { ExtratosComprovantesTab } from '@/components/financeiro/ExtratosComprovantesTab'
 import { BalancetesTab } from '@/components/financeiro/BalancetesTab'
 import { RelatoriosFinanceirosTab } from '@/components/financeiro/RelatoriosFinanceirosTab'
+import { RelatoriosContabeisAvancadosTab } from '@/components/financeiro/RelatoriosContabeisAvancadosTab'
 import {
   CentralFinanceiraHub,
   type FinanceTabKey,
@@ -120,6 +121,12 @@ export function FinancePage() {
   const balancetesList = useCrmData<BalanceteMensalRecord>('balancetes_mensais', {
     sort: '-referencia',
   })
+  const contasBancarias = useCrmData<any>('contas_bancarias', {
+    sort: 'apelido',
+  })
+  const ativosPatrimonio = useCrmData<any>('ativos_patrimonio', {
+    sort: '-data_aquisicao',
+  })
 
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState(params.get('status') || 'todos')
@@ -132,6 +139,7 @@ export function FinancePage() {
     | 'extratos'
     | 'balancetes'
     | 'relatorios'
+    | 'relatorios_avancados'
     | 'parcelas'
     | 'orfas'
   >('contas_pagar')
@@ -1344,6 +1352,18 @@ export function FinancePage() {
         </button>
 
         <button
+          onClick={() => setActiveTab('relatorios_avancados')}
+          className={`pb-3 px-3 text-xs sm:text-sm font-bold border-b-2 transition flex items-center gap-1.5 ${
+            activeTab === 'relatorios_avancados'
+              ? 'border-[#FF6A13] text-[#FF6A13]'
+              : 'border-transparent text-[#737373] hover:text-[#333]'
+          }`}
+        >
+          <BarChart3 className="h-4 w-4" />
+          Balanço & DRE Avançados
+        </button>
+
+        <button
           onClick={() => setActiveTab('relatorios')}
           className={`pb-3 px-3 text-xs sm:text-sm font-bold border-b-2 transition flex items-center gap-1.5 ${
             activeTab === 'relatorios'
@@ -1457,6 +1477,34 @@ export function FinancePage() {
             contasPagar={contasPagar.data}
             contasReceber={contasReceber.data}
             projetos={projects.data}
+          />
+        </div>
+      ) : activeTab === 'relatorios_avancados' ? (
+        <div className="mt-5">
+          <RelatoriosContabeisAvancadosTab
+            parcelas={installments.data}
+            contasPagar={contasPagar.data}
+            contasReceber={contasReceber.data}
+            projetos={projects.data}
+            clientes={clients.data}
+            contasBancarias={contasBancarias.data}
+            ativosPatrimonio={ativosPatrimonio.data}
+            userRole={user?.role}
+            usuarioNome={user?.name || user?.email || 'Usuário AEROCAD'}
+            onNavigateTab={(tab) => {
+              if (
+                tab === 'contas_pagar' ||
+                tab === 'contas_receber' ||
+                tab === 'fluxo_caixa' ||
+                tab === 'extratos' ||
+                tab === 'balancetes' ||
+                tab === 'relatorios' ||
+                tab === 'parcelas' ||
+                tab === 'orfas'
+              ) {
+                setActiveTab(tab)
+              }
+            }}
           />
         </div>
       ) : activeTab === 'relatorios' ? (

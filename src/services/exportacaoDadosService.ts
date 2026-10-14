@@ -653,6 +653,7 @@ function obterMapeamentoColecao(colecao: string): MapeamentoXlsxColecao | null {
         subtitulo: 'Despesas operacionais, fornecedores, impostos e terceirizados',
         colunas: [
           { header: 'Descrição', key: 'descricao', width: 36 },
+          { header: 'Conta Bancária', key: 'conta_bancaria_nome', width: 28 },
           { header: 'Fornecedor', key: 'fornecedor', width: 26 },
           { header: 'Categoria', key: 'categoria', width: 24 },
           { header: 'Valor (R$)', key: 'valor', width: 18, tipo: 'moeda' },
@@ -664,34 +665,49 @@ function obterMapeamentoColecao(colecao: string): MapeamentoXlsxColecao | null {
           { header: 'Observações', key: 'observacoes', width: 32 },
           { header: 'Data Cadastro', key: 'created', width: 14, tipo: 'data' },
         ],
-        transformarLinha: (item) => ({
-          descricao: item.descricao || '',
-          fornecedor: item.fornecedor || '',
-          categoria:
-            CATEGORIA_PAGAR_LABELS[item.categoria as keyof typeof CATEGORIA_PAGAR_LABELS] ||
-            item.categoria ||
-            '',
-          valor: typeof item.valor === 'number' ? item.valor : Number(item.valor) || 0,
-          status:
-            item.status === 'pago'
-              ? 'Pago'
-              : item.status === 'cancelado'
-                ? 'Cancelado'
-                : 'Pendente',
-          data_vencimento: formatarDataCelula(item.data_vencimento),
-          data_pagamento: formatarDataCelula(item.data_pagamento),
-          forma_pagamento:
-            FORMA_PAGTO_LABELS[item.forma_pagamento as keyof typeof FORMA_PAGTO_LABELS] ||
-            item.forma_pagamento ||
-            '',
-          numero_documento: item.numero_documento || '',
-          observacoes: item.observacoes
-            ? String(item.observacoes)
-                .replace(/<[^>]*>/g, '')
-                .trim()
-            : '',
-          created: formatarDataCelula(item.created),
-        }),
+        transformarLinha: (item) => {
+          const expandConta = (item.expand as Record<string, unknown> | undefined)
+            ?.conta_bancaria as Record<string, unknown> | undefined
+          const contaNome =
+            (expandConta?.apelido as string) ||
+            (expandConta?.banco_nome as string) ||
+            (item.conta_bancaria === '865d10p9cbxbf9i'
+              ? 'BB PJ Principal'
+              : item.conta_bancaria === 'biid0elu3tyhm7r'
+                ? 'Itaú-Inter PJ Operacional'
+                : item.conta_bancaria
+                  ? 'Conta PJ'
+                  : 'Não classificada')
+          return {
+            descricao: item.descricao || '',
+            conta_bancaria_nome: contaNome,
+            fornecedor: item.fornecedor || '',
+            categoria:
+              CATEGORIA_PAGAR_LABELS[item.categoria as keyof typeof CATEGORIA_PAGAR_LABELS] ||
+              item.categoria ||
+              '',
+            valor: typeof item.valor === 'number' ? item.valor : Number(item.valor) || 0,
+            status:
+              item.status === 'pago'
+                ? 'Pago'
+                : item.status === 'cancelado'
+                  ? 'Cancelado'
+                  : 'Pendente',
+            data_vencimento: formatarDataCelula(item.data_vencimento),
+            data_pagamento: formatarDataCelula(item.data_pagamento),
+            forma_pagamento:
+              FORMA_PAGTO_LABELS[item.forma_pagamento as keyof typeof FORMA_PAGTO_LABELS] ||
+              item.forma_pagamento ||
+              '',
+            numero_documento: item.numero_documento || '',
+            observacoes: item.observacoes
+              ? String(item.observacoes)
+                  .replace(/<[^>]*>/g, '')
+                  .trim()
+              : '',
+            created: formatarDataCelula(item.created),
+          }
+        },
       }
 
     case 'contas_receber':
@@ -700,6 +716,7 @@ function obterMapeamentoColecao(colecao: string): MapeamentoXlsxColecao | null {
         subtitulo: 'Receitas avulsas e serviços faturados',
         colunas: [
           { header: 'Descrição', key: 'descricao', width: 36 },
+          { header: 'Conta Bancária', key: 'conta_bancaria_nome', width: 28 },
           { header: 'Cliente / Tomador', key: 'cliente_nome', width: 26 },
           { header: 'Categoria', key: 'categoria', width: 24 },
           { header: 'Valor (R$)', key: 'valor', width: 18, tipo: 'moeda' },
@@ -711,33 +728,48 @@ function obterMapeamentoColecao(colecao: string): MapeamentoXlsxColecao | null {
           { header: 'Nº Documento', key: 'numero_documento', width: 18 },
           { header: 'Data Cadastro', key: 'created', width: 14, tipo: 'data' },
         ],
-        transformarLinha: (item) => ({
-          descricao: item.descricao || '',
-          cliente_nome: item.cliente_nome || '',
-          categoria:
-            CATEGORIA_RECEBER_LABELS[item.categoria as keyof typeof CATEGORIA_RECEBER_LABELS] ||
-            item.categoria ||
-            '',
-          valor: typeof item.valor === 'number' ? item.valor : Number(item.valor) || 0,
-          valor_recebido:
-            typeof item.valor_recebido === 'number'
-              ? item.valor_recebido
-              : Number(item.valor_recebido) || 0,
-          status:
-            item.status === 'recebido'
-              ? 'Recebido'
-              : item.status === 'cancelado'
-                ? 'Cancelado'
-                : 'Pendente',
-          data_vencimento: formatarDataCelula(item.data_vencimento),
-          data_recebimento: formatarDataCelula(item.data_recebimento),
-          forma_recebimento:
-            FORMA_PAGTO_LABELS[item.forma_recebimento as keyof typeof FORMA_PAGTO_LABELS] ||
-            item.forma_recebimento ||
-            '',
-          numero_documento: item.numero_documento || '',
-          created: formatarDataCelula(item.created),
-        }),
+        transformarLinha: (item) => {
+          const expandConta = (item.expand as Record<string, unknown> | undefined)
+            ?.conta_bancaria as Record<string, unknown> | undefined
+          const contaNome =
+            (expandConta?.apelido as string) ||
+            (expandConta?.banco_nome as string) ||
+            (item.conta_bancaria === '865d10p9cbxbf9i'
+              ? 'BB PJ Principal'
+              : item.conta_bancaria === 'biid0elu3tyhm7r'
+                ? 'Itaú-Inter PJ Operacional'
+                : item.conta_bancaria
+                  ? 'Conta PJ'
+                  : 'Não classificada')
+          return {
+            descricao: item.descricao || '',
+            conta_bancaria_nome: contaNome,
+            cliente_nome: item.cliente_nome || '',
+            categoria:
+              CATEGORIA_RECEBER_LABELS[item.categoria as keyof typeof CATEGORIA_RECEBER_LABELS] ||
+              item.categoria ||
+              '',
+            valor: typeof item.valor === 'number' ? item.valor : Number(item.valor) || 0,
+            valor_recebido:
+              typeof item.valor_recebido === 'number'
+                ? item.valor_recebido
+                : Number(item.valor_recebido) || 0,
+            status:
+              item.status === 'recebido'
+                ? 'Recebido'
+                : item.status === 'cancelado'
+                  ? 'Cancelado'
+                  : 'Pendente',
+            data_vencimento: formatarDataCelula(item.data_vencimento),
+            data_recebimento: formatarDataCelula(item.data_recebimento),
+            forma_recebimento:
+              FORMA_PAGTO_LABELS[item.forma_recebimento as keyof typeof FORMA_PAGTO_LABELS] ||
+              item.forma_recebimento ||
+              '',
+            numero_documento: item.numero_documento || '',
+            created: formatarDataCelula(item.created),
+          }
+        },
       }
 
     case 'parcelas':
@@ -746,6 +778,7 @@ function obterMapeamentoColecao(colecao: string): MapeamentoXlsxColecao | null {
         subtitulo: 'Marcos de faturamento contratual e vínculos com NFS-e',
         colunas: [
           { header: 'Descrição do Marco', key: 'descricao', width: 36 },
+          { header: 'Conta Bancária', key: 'conta_bancaria_nome', width: 28 },
           { header: 'Nº Parcela / Marco', key: 'numero_parcela_marco', width: 18 },
           { header: 'Valor (R$)', key: 'valor', width: 18, tipo: 'moeda' },
           { header: 'Valor Recebido (R$)', key: 'valor_recebido', width: 18, tipo: 'moeda' },
@@ -760,27 +793,42 @@ function obterMapeamentoColecao(colecao: string): MapeamentoXlsxColecao | null {
           { header: '% Contrato', key: 'percentual_contrato', width: 14, tipo: 'percentual' },
           { header: 'Data Cadastro', key: 'created', width: 14, tipo: 'data' },
         ],
-        transformarLinha: (item) => ({
-          descricao: item.descricao || '',
-          numero_parcela_marco: item.numero_parcela_marco || '',
-          valor: typeof item.valor === 'number' ? item.valor : Number(item.valor) || 0,
-          valor_recebido:
-            typeof item.valor_recebido === 'number'
-              ? item.valor_recebido
-              : Number(item.valor_recebido) || 0,
-          status:
-            item.status === 'paga' ? 'Paga' : item.status === 'vencida' ? 'Vencida' : 'Pendente',
-          status_pagamento: item.status_pagamento || '',
-          gatilho: item.gatilho || '',
-          nf_numero: item.nf_numero || '',
-          nfse_chave: item.nfse_chave || '',
-          vencimento: formatarDataCelula(item.vencimento),
-          data_pagamento: formatarDataCelula(item.data_pagamento),
-          data_faturamento: formatarDataCelula(item.data_faturamento),
-          percentual_contrato:
-            typeof item.percentual_contrato === 'number' ? item.percentual_contrato : 0,
-          created: formatarDataCelula(item.created),
-        }),
+        transformarLinha: (item) => {
+          const expandConta = (item.expand as Record<string, unknown> | undefined)
+            ?.conta_bancaria as Record<string, unknown> | undefined
+          const contaNome =
+            (expandConta?.apelido as string) ||
+            (expandConta?.banco_nome as string) ||
+            (item.conta_bancaria === '865d10p9cbxbf9i'
+              ? 'BB PJ Principal'
+              : item.conta_bancaria === 'biid0elu3tyhm7r'
+                ? 'Itaú-Inter PJ Operacional'
+                : item.conta_bancaria
+                  ? 'Conta PJ'
+                  : 'Não classificada')
+          return {
+            descricao: item.descricao || '',
+            conta_bancaria_nome: contaNome,
+            numero_parcela_marco: item.numero_parcela_marco || '',
+            valor: typeof item.valor === 'number' ? item.valor : Number(item.valor) || 0,
+            valor_recebido:
+              typeof item.valor_recebido === 'number'
+                ? item.valor_recebido
+                : Number(item.valor_recebido) || 0,
+            status:
+              item.status === 'paga' ? 'Paga' : item.status === 'vencida' ? 'Vencida' : 'Pendente',
+            status_pagamento: item.status_pagamento || '',
+            gatilho: item.gatilho || '',
+            nf_numero: item.nf_numero || '',
+            nfse_chave: item.nfse_chave || '',
+            vencimento: formatarDataCelula(item.vencimento),
+            data_pagamento: formatarDataCelula(item.data_pagamento),
+            data_faturamento: formatarDataCelula(item.data_faturamento),
+            percentual_contrato:
+              typeof item.percentual_contrato === 'number' ? item.percentual_contrato : 0,
+            created: formatarDataCelula(item.created),
+          }
+        },
       }
 
     case 'colaboradores':

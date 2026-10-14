@@ -38,7 +38,7 @@ import {
 } from '@/services/comprovantesVision'
 import { PLANO_CONTAS_AEROCAD, sugerirPlanoContasPorCategoria } from '@/lib/planoContas'
 import { formatCurrencyRaw } from '@/lib/format'
-import { toast } from '@/hooks/use-toast'
+import { toast } from 'sonner'
 import type { ProjetoRecord, ContaBancariaRecord } from '@/types/crm'
 
 export interface CapturaBoletoModalProps {

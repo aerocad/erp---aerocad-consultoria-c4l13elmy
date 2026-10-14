@@ -23,6 +23,7 @@ export type FinanceTabKey =
   | 'extratos'
   | 'balancetes'
   | 'relatorios'
+  | 'relatorios_avancados'
   | 'parcelas'
   | 'orfas'
 
@@ -225,16 +226,36 @@ export function CentralFinanceiraHub({
       visible: true,
     },
     {
-      id: 'relatorios',
+      id: 'relatorios_avancados',
       title: 'Relatórios & DRE',
-      subtitle: 'DRE, faturamento, margem, aging e impostos',
+      subtitle: 'Balanço (Minuta), DRE, Ponto Equilíbrio e Contas PJ',
       icon: BarChart3,
       accentColor: '#2563EB',
       iconBg: 'bg-blue-50 border-blue-200 text-blue-600',
       iconColor: 'text-blue-600',
       badge: (
         <span className="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-800 border border-blue-200">
-          6 Relatórios
+          Contábil Avançado
+        </span>
+      ),
+      statLabel: 'Balanço, DRE & Break-even',
+      statValue: (
+        <span className="font-semibold text-neutral-900 text-xs sm:text-sm">Minuta A4 & XLSX</span>
+      ),
+      statSubtext: 'DRE por período, PE, Indicadores PJ',
+      visible: true,
+    },
+    {
+      id: 'relatorios',
+      title: 'Relatórios Gerenciais',
+      subtitle: 'Faturamento, aging, clientes, projetos e impostos',
+      icon: FileSpreadsheet,
+      accentColor: '#0284C7',
+      iconBg: 'bg-sky-50 border-sky-200 text-sky-600',
+      iconColor: 'text-sky-600',
+      badge: (
+        <span className="inline-flex items-center rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-bold text-sky-800 border border-sky-200">
+          Operacional
         </span>
       ),
       statLabel: 'Visão executiva',
@@ -243,7 +264,7 @@ export function CentralFinanceiraHub({
           Exportação A4 & XLSX
         </span>
       ),
-      statSubtext: 'DRE, Projetos, Clientes, Impostos',
+      statSubtext: 'Projetos, Clientes, Aging, Impostos',
       visible: true,
     },
     {
