@@ -43,6 +43,7 @@ import {
   type ComprovanteExtraido,
   type TipoDocumentoFiscal,
 } from '@/services/comprovantesVision'
+import { PLANO_CONTAS_AEROCAD, sugerirPlanoContasPorCategoria } from '@/lib/planoContas'
 import type { ProjetoRecord } from '@/types/crm'
 
 interface CapturaComprovanteModalProps {
@@ -86,6 +87,10 @@ export function CapturaComprovanteModal({
   const [categoria, setCategoria] = useState<
     'despesas_operacionais' | 'terceirizados' | 'impostos' | 'equipamentos' | 'folha' | 'outros'
   >('despesas_operacionais')
+  const [planoContasCodigo, setPlanoContasCodigo] = useState('3.1.1')
+  const [planoContasNome, setPlanoContasNome] = useState(
+    'Despesas Administrativas Gerais & Escritório',
+  )
   const [formaPagamento, setFormaPagamento] = useState<
     'pix' | 'ted_doc' | 'boleto' | 'cartao_credito' | 'cartao_debito' | 'dinheiro' | 'outro'
   >('pix')
@@ -177,7 +182,16 @@ export function CapturaComprovanteModal({
     setDataEmissao(extraido.data_emissao || new Date().toISOString().slice(0, 10))
     setValorTotal(extraido.valor_total || '')
     setValorImpostos(extraido.valor_impostos || '')
-    setCategoria(extraido.categoria_sugerida || 'despesas_operacionais')
+    const cat = extraido.categoria_sugerida || 'despesas_operacionais'
+    setCategoria(cat)
+    if (extraido.plano_contas_codigo) {
+      setPlanoContasCodigo(extraido.plano_contas_codigo)
+      setPlanoContasNome(extraido.plano_contas_nome || 'Despesas Gerais')
+    } else {
+      const pc = sugerirPlanoContasPorCategoria(cat)
+      setPlanoContasCodigo(pc.codigo)
+      setPlanoContasNome(pc.nome)
+    }
     setFormaPagamento(extraido.forma_pagamento_sugerida || 'pix')
     setDescricaoItens(
       extraido.descricao_itens || `Despesa comprovante ${nomeArquivo.replace(/\.[^/.]+$/, '')}`,
@@ -250,6 +264,8 @@ export function CapturaComprovanteModal({
           .join('\n'),
         arquivoComprovante: arquivoSelecionado,
         userId: user?.id || null,
+        plano_contas_codigo: planoContasCodigo,
+        plano_contas_nome: planoContasNome,
       })
 
       toast.success(

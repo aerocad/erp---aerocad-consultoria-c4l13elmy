@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useMemo, useState, useEffect, type FormEvent } from 'react'
 import {
   AlertCircle,
   Calendar,
@@ -13,7 +13,12 @@ import {
   Search,
   Trash2,
   UploadCloud,
+  Barcode,
+  Landmark,
 } from 'lucide-react'
+import { CapturaBoletoModal } from '@/components/financeiro/CapturaBoletoModal'
+import { PLANO_CONTAS_AEROCAD, sugerirPlanoContasPorCategoria } from '@/lib/planoContas'
+import type { ContaBancariaRecord } from '@/types/crm'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 
@@ -101,6 +106,17 @@ export function ContasPagarTab({
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   // Form state
+  const [modalBoletoAberto, setModalBoletoAberto] = useState(false)
+  const [contasBancarias, setContasBancarias] = useState<ContaBancariaRecord[]>([])
+  const [filtroContaBancaria, setFiltroContaBancaria] = useState<string>('todos')
+
+  useEffect(() => {
+    pb.collection('contas_bancarias')
+      .getFullList<ContaBancariaRecord>({ sort: 'apelido' })
+      .then((res) => setContasBancarias(res))
+      .catch((err) => console.log('Erro ao carregar contas bancárias:', err))
+  }, [])
+
   const [formData, setFormData] = useState<{
     descricao: string
     fornecedor: string
@@ -113,6 +129,11 @@ export function ContasPagarTab({
     forma_pagamento: FormaPagamentoFinanceiro
     numero_documento: string
     projeto: string
+    codigo_barras_linha_digitavel: string
+    cnpj_cpf_beneficiario: string
+    plano_contas_codigo: string
+    plano_contas_nome: string
+    conta_bancaria: string
     observacoes: string
     arquivoComprovante: File | null
   }>({
@@ -161,6 +182,11 @@ export function ContasPagarTab({
 
       const matchCat = filtroCategoria === 'todos' || c.categoria === filtroCategoria
       const matchProj = filtroProjeto === 'todos' || c.projeto === filtroProjeto
+      const matchConta =
+        filtroContaBancaria === 'todos' ||
+        (filtroContaBancaria === 'sem_conta'
+          ? !c.conta_bancaria
+          : c.conta_bancaria === filtroContaBancaria)
 
       let matchStat = true
       if (filtroStatus === 'pago') matchStat = c.status === 'pago'
@@ -168,9 +194,9 @@ export function ContasPagarTab({
       else if (filtroStatus === 'atrasado') matchStat = c.isAtrasado
       else if (filtroStatus === 'cancelado') matchStat = c.status === 'cancelado'
 
-      return matchBusca && matchCat && matchProj && matchStat
+      return matchBusca && matchCat && matchProj && matchStat && matchConta
     })
-  }, [contasProcessadas, busca, filtroCategoria, filtroProjeto, filtroStatus])
+  }, [contasProcessadas, busca, filtroCategoria, filtroProjeto, filtroStatus, filtroContaBancaria])
 
   // Totalizadores
   const totalGeral = contasFiltradas.reduce((acc, c) => acc + c.valor, 0)
@@ -186,6 +212,7 @@ export function ContasPagarTab({
 
   function abrirModalCriacao() {
     setEditando(null)
+    const pcDefault = sugerirPlanoContasPorCategoria('despesas_operacionais')
     setFormData({
       descricao: '',
       fornecedor: '',
@@ -198,6 +225,11 @@ export function ContasPagarTab({
       forma_pagamento: 'pix',
       numero_documento: '',
       projeto: '',
+      codigo_barras_linha_digitavel: '',
+      cnpj_cpf_beneficiario: '',
+      plano_contas_codigo: pcDefault.codigo,
+      plano_contas_nome: pcDefault.nome,
+      conta_bancaria: contasBancarias[0]?.id || '',
       observacoes: '',
       arquivoComprovante: null,
     })
@@ -206,6 +238,7 @@ export function ContasPagarTab({
 
   function abrirModalEdicao(conta: ContaPagarRecord) {
     setEditando(conta)
+    const pcDefault = sugerirPlanoContasPorCategoria(conta.categoria)
     setFormData({
       descricao: conta.descricao,
       fornecedor: conta.fornecedor,
@@ -218,6 +251,11 @@ export function ContasPagarTab({
       forma_pagamento: conta.forma_pagamento || 'pix',
       numero_documento: conta.numero_documento || '',
       projeto: conta.projeto || '',
+      codigo_barras_linha_digitavel: conta.codigo_barras_linha_digitavel || '',
+      cnpj_cpf_beneficiario: conta.cnpj_cpf_beneficiario || '',
+      plano_contas_codigo: conta.plano_contas_codigo || pcDefault.codigo,
+      plano_contas_nome: conta.plano_contas_nome || pcDefault.nome,
+      conta_bancaria: conta.conta_bancaria || '',
       observacoes: conta.observacoes || '',
       arquivoComprovante: null,
     })
@@ -247,6 +285,11 @@ export function ContasPagarTab({
         status: formData.status,
         forma_pagamento: formData.forma_pagamento,
         numero_documento: formData.numero_documento,
+        codigo_barras_linha_digitavel: formData.codigo_barras_linha_digitavel || '',
+        cnpj_cpf_beneficiario: formData.cnpj_cpf_beneficiario || '',
+        plano_contas_codigo: formData.plano_contas_codigo || '',
+        plano_contas_nome: formData.plano_contas_nome || '',
+        conta_bancaria: formData.conta_bancaria || null,
         observacoes: formData.observacoes,
       }
 
@@ -450,14 +493,41 @@ export function ContasPagarTab({
             </SelectContent>
           </Select>
 
+          <Select value={filtroContaBancaria} onValueChange={setFiltroContaBancaria}>
+            <SelectTrigger className="w-[170px] h-9 text-xs">
+              <Landmark className="mr-1.5 h-3.5 w-3.5 text-neutral-400" />
+              <SelectValue placeholder="Conta Bancária" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todas contas PJ</SelectItem>
+              {contasBancarias.map((cb) => (
+                <SelectItem key={cb.id} value={cb.id}>
+                  {cb.apelido}
+                </SelectItem>
+              ))}
+              <SelectItem value="sem_conta">Não classificada</SelectItem>
+            </SelectContent>
+          </Select>
+
           {canWrite && (
-            <Button
-              onClick={abrirModalCriacao}
-              className="bg-[#FF6A13] hover:bg-[#E85B06] text-white h-9 text-xs shrink-0"
-            >
-              <Plus className="mr-1.5 h-4 w-4" />
-              Nova Conta a Pagar
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                onClick={() => setModalBoletoAberto(true)}
+                className="bg-amber-600 hover:bg-amber-700 text-white h-9 text-xs shrink-0"
+                title="Ler boleto em PDF ou foto via IA"
+              >
+                <Barcode className="mr-1.5 h-4 w-4" />
+                Extrair Boleto (IA)
+              </Button>
+              <Button
+                onClick={abrirModalCriacao}
+                className="bg-[#FF6A13] hover:bg-[#E85B06] text-white h-9 text-xs shrink-0"
+              >
+                <Plus className="mr-1.5 h-4 w-4" />
+                Nova Conta a Pagar
+              </Button>
+            </div>
           )}
         </div>
       </div>
@@ -480,9 +550,10 @@ export function ContasPagarTab({
                 <tr>
                   <th className="px-4 py-3">Vencimento</th>
                   <th className="px-4 py-3">Descrição / Fornecedor</th>
-                  <th className="px-4 py-3">Categoria</th>
+                  <th className="px-4 py-3">Classificação Contábil</th>
+                  <th className="px-4 py-3">Conta PJ</th>
                   <th className="px-4 py-3">Projeto Vinculado</th>
-                  <th className="px-4 py-3">Valor</th>
+                  <th className="px-4 py-3">Valor Líquido</th>
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3 text-center">Comprovante</th>
                   <th className="px-4 py-3 text-right">Ações</th>
@@ -534,10 +605,32 @@ export function ContasPagarTab({
                         </div>
                       </td>
 
+                      <td className="px-4 py-3">
+                        <div className="space-y-0.5 max-w-[200px]">
+                          <CrmBadge tone="gray">
+                            {CATEGORIA_PAGAR_LABELS[conta.categoria] || conta.categoria}
+                          </CrmBadge>
+                          {conta.plano_contas_codigo && (
+                            <p
+                              className="text-[10px] text-neutral-500 font-mono truncate"
+                              title={conta.plano_contas_nome || ''}
+                            >
+                              {conta.plano_contas_codigo} · {conta.plano_contas_nome || ''}
+                            </p>
+                          )}
+                        </div>
+                      </td>
+
                       <td className="px-4 py-3 whitespace-nowrap">
-                        <CrmBadge tone="gray">
-                          {CATEGORIA_PAGAR_LABELS[conta.categoria] || conta.categoria}
-                        </CrmBadge>
+                        {conta.expand?.conta_bancaria ? (
+                          <span className="text-[11px] font-medium text-neutral-800 bg-neutral-100 px-2 py-0.5 rounded border border-neutral-200">
+                            {conta.expand.conta_bancaria.apelido}
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-neutral-400 italic">
+                            Não classificada
+                          </span>
+                        )}
                       </td>
 
                       <td className="px-4 py-3 whitespace-nowrap">
@@ -810,6 +903,66 @@ export function ContasPagarTab({
               )}
             </div>
 
+            {/* Classificação Contábil e Conta Bancária PJ */}
+            <div className="p-3 rounded-lg border border-neutral-200 bg-neutral-50/70 space-y-2.5">
+              <span className="text-xs font-semibold text-neutral-800 flex items-center gap-1.5">
+                <Landmark className="h-3.5 w-3.5 text-[#FF6A13]" />
+                Classificação Contábil & Conta Bancária PJ AEROCAD
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div className="space-y-1">
+                  <Label className="text-[11px] text-neutral-600">Plano de Contas</Label>
+                  <Select
+                    value={formData.plano_contas_codigo}
+                    onValueChange={(codigo) => {
+                      const item = PLANO_CONTAS_AEROCAD.find((p) => p.codigo === codigo)
+                      setFormData({
+                        ...formData,
+                        plano_contas_codigo: codigo,
+                        plano_contas_nome: item?.nome || '',
+                      })
+                    }}
+                  >
+                    <SelectTrigger className="h-8 text-xs bg-white">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-56">
+                      {PLANO_CONTAS_AEROCAD.map((item) => (
+                        <SelectItem key={item.codigo} value={item.codigo}>
+                          {item.codigo} · {item.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-[11px] text-neutral-600">Conta Bancária PJ AEROCAD</Label>
+                  <Select
+                    value={formData.conta_bancaria || 'nenhuma'}
+                    onValueChange={(val) =>
+                      setFormData({
+                        ...formData,
+                        conta_bancaria: val === 'nenhuma' ? '' : val,
+                      })
+                    }
+                  >
+                    <SelectTrigger className="h-8 text-xs bg-white">
+                      <SelectValue placeholder="Selecione a conta..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="nenhuma">Não associada / Indefinida</SelectItem>
+                      {contasBancarias.map((cb) => (
+                        <SelectItem key={cb.id} value={cb.id}>
+                          {cb.apelido} ({cb.banco_nome})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs">Nº do Documento / Nota Fiscal / Boleto</Label>
@@ -817,6 +970,32 @@ export function ContasPagarTab({
                   value={formData.numero_documento}
                   onChange={(e) => setFormData({ ...formData, numero_documento: e.target.value })}
                   placeholder="Ex: NF 12345, Código de Barras..."
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-xs">Linha Digitável / Código de Barras</Label>
+                <Input
+                  value={formData.codigo_barras_linha_digitavel}
+                  onChange={(e) =>
+                    setFormData({ ...formData, codigo_barras_linha_digitavel: e.target.value })
+                  }
+                  placeholder="Linha digitável do boleto..."
+                  className="font-mono text-[11px]"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs">CNPJ/CPF do Beneficiário</Label>
+                <Input
+                  value={formData.cnpj_cpf_beneficiario}
+                  onChange={(e) =>
+                    setFormData({ ...formData, cnpj_cpf_beneficiario: e.target.value })
+                  }
+                  placeholder="00.000.000/0000-00"
+                  className="font-mono text-xs"
                 />
               </div>
 
@@ -962,6 +1141,17 @@ export function ContasPagarTab({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Modal de Extração de Boleto por IA */}
+      <CapturaBoletoModal
+        open={modalBoletoAberto}
+        onOpenChange={setModalBoletoAberto}
+        projetos={projetos}
+        contasBancarias={contasBancarias}
+        onContaCriada={async () => {
+          await onReload()
+        }}
+      />
     </div>
   )
 }

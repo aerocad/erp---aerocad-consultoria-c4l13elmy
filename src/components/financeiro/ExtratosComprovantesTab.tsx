@@ -49,7 +49,9 @@ import pb from '@/lib/pocketbase/client'
 import { createOne, deleteOne, updateOne } from '@/services/api'
 import {
   encontrarSugestoesConciliacao,
+  verificarDuplicidadeLancamento,
   type SugestaoConciliacao,
+  type AlertaDuplicidade,
 } from '@/services/conciliacaoMotor'
 import { parseOfxString } from '@/services/extratoOfxParser'
 import { parsePlanilhaExtrato } from '@/services/extratoPlanilhaParser'
@@ -59,6 +61,7 @@ import type {
   ExtratoRecord,
   ExtratoTransacaoRecord,
   ParcelaRecord,
+  ContaBancariaRecord,
 } from '@/types/crm'
 
 interface ExtratosComprovantesTabProps {
@@ -102,6 +105,21 @@ export function ExtratosComprovantesTab({
   const [filtroStatus, setFiltroStatus] = useState<string>('todos')
   const [filtroTipo, setFiltroTipo] = useState<string>('todos')
 
+  // Contas Bancárias PJ e Seleção no Upload do Extrato
+  const [contasBancarias, setContasBancarias] = useState<ContaBancariaRecord[]>([])
+  const [contaBancariaSelecionadaUpload, setContaBancariaSelecionadaUpload] = useState<string>('')
+  const [filtroContaBancaria, setFiltroContaBancaria] = useState<string>('todos')
+
+  useEffect(() => {
+    pb.collection('contas_bancarias')
+      .getFullList<ContaBancariaRecord>({ sort: 'apelido' })
+      .then((res) => {
+        setContasBancarias(res)
+        if (res.length > 0) setContaBancariaSelecionadaUpload(res[0].id)
+      })
+      .catch((err) => console.log('Erro ao carregar contas bancárias PJ:', err))
+  }, [])
+
   // Modais
   const [modalUploadAberto, setModalUploadAberto] = useState(false)
   const [isProcessandoUpload, setIsProcessandoUpload] = useState(false)
@@ -109,6 +127,8 @@ export function ExtratosComprovantesTab({
     useState<ExtratoTransacaoRecord | null>(null)
   const [isConciliando, setIsConciliando] = useState(false)
   const [modalExcluirExtrato, setModalExcluirExtrato] = useState<ExtratoRecord | null>(null)
+  const [alertaDuplicidadeDetectado, setAlertaDuplicidadeDetectado] =
+    useState<AlertaDuplicidade | null>(null)
 
   // Upload avulso de comprovante
   const [modalComprovanteAvulso, setModalComprovanteAvulso] = useState(false)
@@ -122,15 +142,31 @@ export function ExtratosComprovantesTab({
   // Transações filtradas
   const transacoesFiltradas = useMemo(() => {
     return transacoes.filter((tx) => {
+      const extratoPai = extratos.find((e) => e.id === tx.extrato)
       const matchExtrato = extratoSelecionadoId === 'todos' || tx.extrato === extratoSelecionadoId
       const matchBusca =
         tx.descricao.toLowerCase().includes(busca.toLowerCase()) ||
         (tx.documento_ref && tx.documento_ref.toLowerCase().includes(busca.toLowerCase()))
       const matchStatus = filtroStatus === 'todos' || tx.status_conciliacao === filtroStatus
       const matchTipo = filtroTipo === 'todos' || tx.tipo === filtroTipo
-      return matchExtrato && matchBusca && matchStatus && matchTipo
+
+      const matchConta =
+        filtroContaBancaria === 'todos' ||
+        (filtroContaBancaria === 'sem_conta'
+          ? !extratoPai?.conta_bancaria
+          : extratoPai?.conta_bancaria === filtroContaBancaria)
+
+      return matchExtrato && matchBusca && matchStatus && matchTipo && matchConta
     })
-  }, [transacoes, extratoSelecionadoId, busca, filtroStatus, filtroTipo])
+  }, [
+    transacoes,
+    extratos,
+    extratoSelecionadoId,
+    busca,
+    filtroStatus,
+    filtroTipo,
+    filtroContaBancaria,
+  ])
 
   // Sugestões para o item em conciliação
   const sugestoesAtuais = useMemo<SugestaoConciliacao[]>(() => {
@@ -180,12 +216,13 @@ export function ExtratosComprovantesTab({
         .filter((t) => t.tipo === 'saida')
         .reduce((acc, t) => acc + t.valor, 0)
 
-      // 1. Cria o registro de Extrato no PB
+      // 1. Cria o registro de Extrato no PB vinculado à conta bancária PJ escolhida
       const extratoRecord = await createOne<ExtratoRecord>('extratos', {
         nome_arquivo: file.name,
         formato,
         banco: parsed.banco || 'Banco Comercial',
         conta: parsed.conta || '',
+        conta_bancaria: contaBancariaSelecionadaUpload || null,
         data_inicio: parsed.dataInicio ? `${parsed.dataInicio} 12:00:00.000Z` : null,
         data_fim: parsed.dataFim ? `${parsed.dataFim} 12:00:00.000Z` : null,
         total_transacoes: parsed.transacoes.length,
@@ -508,8 +545,23 @@ export function ExtratosComprovantesTab({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <Select value={filtroContaBancaria} onValueChange={setFiltroContaBancaria}>
+            <SelectTrigger className="w-[170px] h-9 text-xs">
+              <SelectValue placeholder="Conta Bancária PJ" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todas contas PJ</SelectItem>
+              {contasBancarias.map((cb) => (
+                <SelectItem key={cb.id} value={cb.id}>
+                  {cb.apelido}
+                </SelectItem>
+              ))}
+              <SelectItem value="sem_conta">Não classificada</SelectItem>
+            </SelectContent>
+          </Select>
+
           <Select value={filtroTipo} onValueChange={setFiltroTipo}>
-            <SelectTrigger className="w-[140px] h-9 text-xs">
+            <SelectTrigger className="w-[130px] h-9 text-xs">
               <SelectValue placeholder="Tipo" />
             </SelectTrigger>
             <SelectContent>
@@ -612,7 +664,49 @@ export function ExtratosComprovantesTab({
                             <>
                               <Button
                                 size="sm"
-                                onClick={() => setTransacaoParaConciliar(tx)}
+                                onClick={() => {
+                                  // Verifica duplicidades antes de abrir
+                                  if (tx.tipo === 'saida') {
+                                    const alerta = verificarDuplicidadeLancamento(
+                                      'conta_pagar',
+                                      {
+                                        valor: tx.valor,
+                                        data: tx.data,
+                                        numeroDocumento: tx.documento_ref,
+                                        fornecedorOuCliente: tx.descricao,
+                                      },
+                                      contasPagar.map((c) => ({
+                                        id: c.id,
+                                        valor: c.valor,
+                                        data: c.data_pagamento || c.data_vencimento,
+                                        numero_documento: c.numero_documento,
+                                        fornecedorOuCliente: c.fornecedor,
+                                        descricao: c.descricao,
+                                      })),
+                                    )
+                                    setAlertaDuplicidadeDetectado(alerta)
+                                  } else {
+                                    const alerta = verificarDuplicidadeLancamento(
+                                      'conta_receber',
+                                      {
+                                        valor: tx.valor,
+                                        data: tx.data,
+                                        numeroDocumento: tx.documento_ref,
+                                        fornecedorOuCliente: tx.descricao,
+                                      },
+                                      contasReceber.map((c) => ({
+                                        id: c.id,
+                                        valor: c.valor,
+                                        data: c.data_recebimento || c.data_vencimento,
+                                        numero_documento: c.numero_documento,
+                                        fornecedorOuCliente: c.cliente_nome,
+                                        descricao: c.descricao,
+                                      })),
+                                    )
+                                    setAlertaDuplicidadeDetectado(alerta)
+                                  }
+                                  setTransacaoParaConciliar(tx)
+                                }}
                                 className="bg-[#FF6A13] hover:bg-[#E85B06] text-white h-7 text-xs font-semibold"
                                 title="Encontrar correspondência no CRM"
                               >
@@ -672,6 +766,25 @@ export function ExtratosComprovantesTab({
           </DialogHeader>
 
           <div className="space-y-4 text-xs">
+            <div className="space-y-1">
+              <Label className="text-xs font-semibold">Conta Bancária PJ AEROCAD *</Label>
+              <Select
+                value={contaBancariaSelecionadaUpload}
+                onValueChange={setContaBancariaSelecionadaUpload}
+              >
+                <SelectTrigger className="h-9 text-xs">
+                  <SelectValue placeholder="Selecione a conta PJ..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {contasBancarias.map((cb) => (
+                    <SelectItem key={cb.id} value={cb.id}>
+                      {cb.apelido} ({cb.banco_nome})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="p-3 bg-amber-50 rounded-lg border border-amber-200 text-amber-900 space-y-1">
               <p className="font-semibold">Formatos Suportados:</p>
               <p>
@@ -754,6 +867,17 @@ export function ExtratosComprovantesTab({
                   </span>
                 </div>
               </div>
+
+              {/* Alerta de Duplicidade se detectado */}
+              {alertaDuplicidadeDetectado?.detectada && (
+                <div className="p-3 bg-amber-50 border border-amber-300 rounded-lg text-amber-900 space-y-1">
+                  <div className="flex items-center gap-1.5 font-bold text-xs text-amber-800">
+                    <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
+                    <span>Atenção: Possível Duplicidade Detectada</span>
+                  </div>
+                  <p className="text-[11px]">{alertaDuplicidadeDetectado.motivo}</p>
+                </div>
+              )}
 
               <div>
                 <p className="font-semibold text-neutral-800 mb-2">

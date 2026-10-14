@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-13T05:09:05.458Z",
+  "generatedAt": "2026-10-14T16:21:23.216Z",
   "collections": [
     {
       "name": "users",
@@ -746,22 +746,22 @@
       "apiRules": {
         "list": "@request.auth.id != '' && (@request.auth.role = 'admin' || @request.auth.role = 'comercial' || @request.auth.role = 'tecnico' || @request.auth.role = 'financeiro')",
         "view": "@request.auth.id != '' && (@request.auth.role = 'admin' || @request.auth.role = 'comercial' || @request.auth.role = 'tecnico' || @request.auth.role = 'financeiro')",
-        "create": "@request.auth.role = 'admin' || @request.auth.role = 'comercial'",
-        "update": "@request.auth.role = 'admin' || @request.auth.role = 'comercial'",
+        "create": "@request.auth.role = 'admin' || @request.auth.role = 'comercial' || @request.auth.role = 'financeiro'",
+        "update": "@request.auth.role = 'admin' || @request.auth.role = 'comercial' || @request.auth.role = 'financeiro'",
         "delete": "@request.auth.role = 'admin'"
       },
       "fields": [
         {
           "name": "proposta",
           "type": "relation",
-          "required": true,
+          "required": false,
           "system": false,
           "collectionRef": "propostas"
         },
         {
           "name": "cliente",
           "type": "relation",
-          "required": true,
+          "required": false,
           "system": false,
           "collectionRef": "clientes"
         },
@@ -814,6 +814,93 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "tipo_contrato",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["cliente", "prestador_fornecedor", "parceria_tecnica", "outro"]
+        },
+        {
+          "name": "fornecedor",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "fornecedores"
+        },
+        {
+          "name": "projeto",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "projetos"
+        },
+        {
+          "name": "arquivo_pdf",
+          "type": "file",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "titulo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "partes_envolvidas",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "objeto",
+          "type": "editor",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "forma_pagamento_texto",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "data_inicio_vigencia",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "data_termino_vigencia",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "indice_reajuste",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "garante_fiador",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "dados_extracao_ia",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "observacoes",
+          "type": "editor",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
@@ -1639,6 +1726,13 @@
           "type": "json",
           "required": false,
           "system": false
+        },
+        {
+          "name": "conta_bancaria",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "contas_bancarias"
         }
       ],
       "indexes": [
@@ -2447,6 +2541,49 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "codigo_barras_linha_digitavel",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "cnpj_cpf_beneficiario",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "valor_desconto",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "valor_juros_multa",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "plano_contas_codigo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "plano_contas_nome",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "conta_bancaria",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "contas_bancarias"
         }
       ],
       "indexes": [
@@ -2592,6 +2729,25 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "plano_contas_codigo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "plano_contas_nome",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "conta_bancaria",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "contas_bancarias"
         }
       ],
       "indexes": [
@@ -2701,6 +2857,13 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "conta_bancaria",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "contas_bancarias"
         }
       ],
       "indexes": [
@@ -3336,6 +3499,253 @@
         }
       ],
       "indexes": ["CREATE UNIQUE INDEX idx_whatsapp_config_chave ON whatsapp_config (chave)"]
+    },
+    {
+      "name": "contas_bancarias",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.role = 'admin' || @request.auth.role = 'financeiro'",
+        "update": "@request.auth.role = 'admin' || @request.auth.role = 'financeiro'",
+        "delete": "@request.auth.role = 'admin' || @request.auth.role = 'financeiro'"
+      },
+      "fields": [
+        {
+          "name": "apelido",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "banco_codigo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "banco_nome",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "agencia",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "numero_conta",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "tipo_conta",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["corrente_pj", "poupanca_pj", "investimento_pj", "outro"]
+        },
+        {
+          "name": "chave_pix",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "saldo_inicial",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ativo",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "cor_identificacao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "observacoes",
+          "type": "editor",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_contas_bancarias_apelido ON contas_bancarias (apelido)",
+        "CREATE INDEX idx_contas_bancarias_banco ON contas_bancarias (banco_nome)",
+        "CREATE INDEX idx_contas_bancarias_ativo ON contas_bancarias (ativo)"
+      ]
+    },
+    {
+      "name": "ativos_patrimonio",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.role = 'admin' || @request.auth.role = 'financeiro'",
+        "update": "@request.auth.role = 'admin' || @request.auth.role = 'financeiro'",
+        "delete": "@request.auth.role = 'admin' || @request.auth.role = 'financeiro'"
+      },
+      "fields": [
+        {
+          "name": "identificador_codigo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "descricao",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "categoria",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": [
+            "equipamento_topografico",
+            "drone_aeronave",
+            "computador_hardware",
+            "software_licenca",
+            "veiculo",
+            "imovel",
+            "mobiliario",
+            "outro_ativo"
+          ]
+        },
+        {
+          "name": "data_aquisicao",
+          "type": "date",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "valor_aquisicao",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "vida_util_meses",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "taxa_depreciacao_anual",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "valor_residual",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "valor_contabil_atual",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["ativo", "em_manutencao", "baixado_alienado", "totalmente_depreciado"]
+        },
+        {
+          "name": "numero_nf_registro",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "fornecedor",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "fornecedores"
+        },
+        {
+          "name": "fornecedor_nome",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "documento_evidencia",
+          "type": "file",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "localizacao_responsavel",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "observacoes",
+          "type": "editor",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "criado_por",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_ativos_categoria ON ativos_patrimonio (categoria)",
+        "CREATE INDEX idx_ativos_status ON ativos_patrimonio (status)",
+        "CREATE INDEX idx_ativos_data_aquisicao ON ativos_patrimonio (data_aquisicao)",
+        "CREATE INDEX idx_ativos_created ON ativos_patrimonio (created DESC)"
+      ]
     }
   ]
 }

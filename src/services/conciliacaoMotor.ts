@@ -22,6 +22,87 @@ export interface SugestaoConciliacao {
   dataReferencia: string
   diferencaDias: number
   confianca: 'alta' | 'media' | 'baixa'
+  similaridadeTexto?: number
+}
+
+export interface AlertaDuplicidade {
+  detectada: boolean
+  motivo: string
+  lancamentoExistente?: {
+    id: string
+    tipo: 'conta_pagar' | 'conta_receber' | 'parcela'
+    descricao: string
+    valor: number
+    data: string
+    documento?: string
+  }
+}
+
+/**
+ * Verifica se já existe um lançamento com mesmo documento ou mesmo fornecedor/valor/data para evitar duplicidade
+ */
+export function verificarDuplicidadeLancamento(
+  tipo: 'conta_pagar' | 'conta_receber',
+  dados: {
+    valor: number
+    data: string
+    numeroDocumento?: string
+    fornecedorOuCliente?: string
+  },
+  contasExistentes: Array<{
+    id: string
+    valor: number
+    data: string
+    numero_documento?: string
+    fornecedorOuCliente?: string
+    descricao?: string
+  }>,
+): AlertaDuplicidade {
+  const dataAlvo = dados.data.slice(0, 10)
+  const docAlvo = dados.numeroDocumento?.trim().toLowerCase()
+
+  for (const c of contasExistentes) {
+    // 1. Mesmo número de documento não vazio
+    if (docAlvo && c.numero_documento && c.numero_documento.trim().toLowerCase() === docAlvo) {
+      return {
+        detectada: true,
+        motivo: `Já existe um lançamento com o mesmo número de documento (${c.numero_documento}) no valor de R$ ${c.valor.toFixed(2)}.`,
+        lancamentoExistente: {
+          id: c.id,
+          tipo,
+          descricao: c.descricao || c.fornecedorOuCliente || '',
+          valor: c.valor,
+          data: c.data,
+          documento: c.numero_documento,
+        },
+      }
+    }
+
+    // 2. Mesmo valor exato + mesma data (tolerância 0 dias) + mesmo favorecido
+    const diffValor = Math.abs(c.valor - dados.valor)
+    const mesmaData = c.data.slice(0, 10) === dataAlvo
+    if (diffValor < 0.01 && mesmaData) {
+      if (
+        dados.fornecedorOuCliente &&
+        c.fornecedorOuCliente &&
+        dados.fornecedorOuCliente.toLowerCase().includes(c.fornecedorOuCliente.toLowerCase())
+      ) {
+        return {
+          detectada: true,
+          motivo: `Possível lançamento duplicado: mesmo fornecedor/cliente (${c.fornecedorOuCliente}), mesmo valor (R$ ${c.valor.toFixed(2)}) e mesma data (${dataAlvo}).`,
+          lancamentoExistente: {
+            id: c.id,
+            tipo,
+            descricao: c.descricao || c.fornecedorOuCliente || '',
+            valor: c.valor,
+            data: c.data,
+          },
+        }
+      }
+    }
+  }
+
+  return { detectada: false, motivo: '' }
 }
 
 function calcularDiferencaDias(data1Str: string, data2Str: string): number {
@@ -47,7 +128,8 @@ export function encontrarSugestoesConciliacao(
   const valorTx = Number(transacao.valor)
 
   if (transacao.tipo === 'saida') {
-    // Busca em contas a pagar
+    // Busca em contas a pagar cruzando valor, proximidade de data e beneficiário
+    const descTx = transacao.descricao.toLowerCase()
     for (const cp of contexto.contasPagar) {
       if (cp.status === 'cancelado') continue
       const diffValor = Math.abs(cp.valor - valorTx)
@@ -55,12 +137,23 @@ export function encontrarSugestoesConciliacao(
         const dataRef = cp.data_pagamento || cp.data_vencimento
         const diffDias = calcularDiferencaDias(transacao.data, dataRef)
         if (diffDias <= toleranciaDias) {
-          const confianca = diffDias <= 1 ? 'alta' : diffDias <= 3 ? 'media' : 'baixa'
+          // Bônus de confiança se nome do fornecedor ou documento bater no extrato
+          const matchBeneficiario =
+            cp.fornecedor && descTx.includes(cp.fornecedor.toLowerCase().slice(0, 6))
+          const matchDoc = cp.numero_documento && descTx.includes(cp.numero_documento.toLowerCase())
+
+          let confianca: 'alta' | 'media' | 'baixa' =
+            diffDias <= 1 || matchBeneficiario || matchDoc
+              ? 'alta'
+              : diffDias <= 3
+                ? 'media'
+                : 'baixa'
+
           sugestoes.push({
             tipo: 'conta_pagar',
             id: cp.id,
             titulo: `${cp.fornecedor} — ${cp.descricao}`,
-            detalhe: `Vencimento: ${cp.data_vencimento.slice(0, 10)}${cp.status === 'pago' ? ' (Já quitado)' : ''}`,
+            detalhe: `Vencimento: ${cp.data_vencimento.slice(0, 10)}${cp.status === 'pago' ? ' (Já quitado)' : ''}${matchBeneficiario ? ' · Beneficiário coincide' : ''}`,
             valor: cp.valor,
             dataReferencia: dataRef,
             diferencaDias: diffDias,

@@ -28,9 +28,60 @@ export interface ComprovanteExtraido {
     | 'equipamentos'
     | 'folha'
     | 'outros'
+  plano_contas_codigo?: string
+  plano_contas_nome?: string
   descricao_itens: string
   observacoes?: string
   confianca?: 'alta' | 'media' | 'baixa'
+  erro?: string
+}
+
+export interface BoletoExtraido {
+  sucesso: boolean
+  beneficiario_fornecedor: string
+  cnpj_cpf_beneficiario: string
+  pagador_sacado?: string
+  linha_digitavel: string
+  codigo_barras: string
+  numero_documento: string
+  valor_documento: number
+  valor_desconto: number
+  valor_juros_multa: number
+  valor_cobrado: number
+  data_vencimento: string
+  data_documento: string
+  banco_emissor?: string
+  categoria_sugerida:
+    | 'despesas_operacionais'
+    | 'terceirizados'
+    | 'impostos'
+    | 'equipamentos'
+    | 'folha'
+    | 'outros'
+  plano_contas_codigo?: string
+  plano_contas_nome?: string
+  instrucoes_resumo?: string
+  confianca?: 'alta' | 'media' | 'baixa'
+  erro?: string
+}
+
+export interface ContratoExtraido {
+  sucesso: boolean
+  numero: string
+  titulo: string
+  tipo_contrato: 'cliente' | 'prestador_fornecedor' | 'parceria_tecnica' | 'outro'
+  partes_envolvidas: string
+  objeto: string
+  valor_global: number
+  forma_pagamento_texto: string
+  parcelas_sugeridas?: Array<{ descricao: string; valor: number; vencimento_dias?: number }>
+  data_assinatura: string
+  data_inicio_vigencia: string
+  data_termino_vigencia: string
+  indice_reajuste: string
+  garante_fiador: string
+  confianca?: 'alta' | 'media' | 'baixa'
+  aviso?: string
   erro?: string
 }
 
@@ -38,6 +89,17 @@ export interface ExtracaoComprovanteResponse {
   sucesso: boolean
   dados: ComprovanteExtraido
   raw_agent_reply?: string | null
+}
+
+export interface ExtracaoBoletoResponse {
+  sucesso: boolean
+  dados: BoletoExtraido
+}
+
+export interface ExtracaoContratoResponse {
+  sucesso: boolean
+  dados: ContratoExtraido
+  aviso?: string
 }
 
 export const TIPO_DOC_LABELS: Record<TipoDocumentoFiscal, string> = {
@@ -74,6 +136,56 @@ export async function extrairDadosComprovante(file: File): Promise<ComprovanteEx
   return json.dados
 }
 
+/**
+ * Envia arquivo de boleto bancário (PDF ou foto JPG/PNG) para o backend extrair via IA nativa
+ */
+export async function extrairDadosBoleto(file: File): Promise<BoletoExtraido> {
+  const formData = new FormData()
+  formData.append('arquivo', file)
+
+  const baseUrl = import.meta.env.VITE_POCKETBASE_URL
+  const res = await fetch(`${baseUrl}/backend/v1/boletos/extrair`, {
+    method: 'POST',
+    headers: {
+      Authorization: pb.authStore.token,
+    },
+    body: formData,
+  })
+
+  if (!res.ok) {
+    const errorBody = await res.json().catch(() => ({}))
+    throw new Error(errorBody?.error || `Falha ao processar boleto (status ${res.status})`)
+  }
+
+  const json: ExtracaoBoletoResponse = await res.json()
+  return json.dados
+}
+
+/**
+ * Envia arquivo de contrato em PDF para o backend extrair cláusulas e valores via IA nativa
+ */
+export async function extrairDadosContrato(file: File): Promise<ContratoExtraido> {
+  const formData = new FormData()
+  formData.append('arquivo', file)
+
+  const baseUrl = import.meta.env.VITE_POCKETBASE_URL
+  const res = await fetch(`${baseUrl}/backend/v1/contratos/extrair`, {
+    method: 'POST',
+    headers: {
+      Authorization: pb.authStore.token,
+    },
+    body: formData,
+  })
+
+  if (!res.ok) {
+    const errorBody = await res.json().catch(() => ({}))
+    throw new Error(errorBody?.error || `Falha ao processar contrato (status ${res.status})`)
+  }
+
+  const json: ExtracaoContratoResponse = await res.json()
+  return json.dados
+}
+
 export interface SalvarContaPagarComprovanteParams {
   descricao: string
   fornecedor: string
@@ -99,6 +211,14 @@ export interface SalvarContaPagarComprovanteParams {
   observacoes?: string
   arquivoComprovante: File
   userId?: string | null
+  // Novos campos contábeis e conta PJ
+  codigo_barras_linha_digitavel?: string
+  cnpj_cpf_beneficiario?: string
+  valor_desconto?: number
+  valor_juros_multa?: number
+  plano_contas_codigo?: string
+  plano_contas_nome?: string
+  conta_bancaria?: string
 }
 
 /**
@@ -132,6 +252,13 @@ export async function salvarContaPagarComComprovante(
     forma_pagamento,
     numero_documento: numero_documento || '',
     observacoes: observacoes || '',
+    codigo_barras_linha_digitavel: params.codigo_barras_linha_digitavel || '',
+    cnpj_cpf_beneficiario: params.cnpj_cpf_beneficiario || '',
+    valor_desconto: params.valor_desconto || 0,
+    valor_juros_multa: params.valor_juros_multa || 0,
+    plano_contas_codigo: params.plano_contas_codigo || '',
+    plano_contas_nome: params.plano_contas_nome || '',
+    conta_bancaria: params.conta_bancaria || null,
     criado_por: userId || pb.authStore.record?.id || null,
   }
 

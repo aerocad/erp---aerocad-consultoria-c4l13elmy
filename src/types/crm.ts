@@ -289,13 +289,34 @@ export interface PropostaRecord extends RecordModel {
 }
 
 export interface ContratoRecord extends RecordModel {
-  proposta: string
-  cliente: string
+  proposta?: string
+  cliente?: string
+  fornecedor?: string
+  projeto?: string
   numero: string
-  data_assinatura: string
-  valor_global: number
-  po_cliente: string
-  link_documento_assinado: string
+  titulo?: string
+  tipo_contrato?: 'cliente' | 'prestador_fornecedor' | 'parceria_tecnica' | 'outro'
+  partes_envolvidas?: string
+  objeto?: string
+  valor_global?: number
+  forma_pagamento_texto?: string
+  parcelamento?: any
+  po_cliente?: string
+  link_documento_assinado?: string
+  arquivo_pdf?: string
+  data_assinatura?: string
+  data_inicio_vigencia?: string
+  data_termino_vigencia?: string
+  indice_reajuste?: string
+  garante_fiador?: string
+  dados_extracao_ia?: any
+  observacoes?: string
+  expand?: {
+    proposta?: PropostaRecord
+    cliente?: ClienteRecord
+    fornecedor?: FornecedorRecord
+    projeto?: ProjetoRecord
+  }
 }
 
 export type AnexoCategoria =
@@ -419,6 +440,60 @@ export type FormaPagamentoFinanceiro =
   | 'dinheiro'
   | 'outro'
 
+export interface ContaBancariaRecord extends RecordModel {
+  apelido: string
+  banco_codigo?: string
+  banco_nome: string
+  agencia?: string
+  numero_conta: string
+  tipo_conta: 'corrente_pj' | 'poupanca_pj' | 'investimento_pj' | 'outro'
+  chave_pix?: string
+  saldo_inicial?: number
+  ativo?: boolean
+  cor_identificacao?: string
+  observacoes?: string
+}
+
+export type CategoriaAtivoPatrimonial =
+  | 'equipamento_topografico'
+  | 'drone_aeronave'
+  | 'computador_hardware'
+  | 'software_licenca'
+  | 'veiculo'
+  | 'imovel'
+  | 'mobiliario'
+  | 'outro_ativo'
+
+export type StatusAtivoPatrimonial =
+  | 'ativo'
+  | 'em_manutencao'
+  | 'baixado_alienado'
+  | 'totalmente_depreciado'
+
+export interface AtivoPatrimonioRecord extends RecordModel {
+  identificador_codigo?: string
+  descricao: string
+  categoria: CategoriaAtivoPatrimonial
+  data_aquisicao: string
+  valor_aquisicao: number
+  vida_util_meses?: number
+  taxa_depreciacao_anual?: number
+  valor_residual?: number
+  valor_contabil_atual?: number
+  status: StatusAtivoPatrimonial
+  numero_nf_registro?: string
+  fornecedor?: string
+  fornecedor_nome?: string
+  documento_evidencia?: string
+  localizacao_responsavel?: string
+  observacoes?: string
+  criado_por?: string
+  expand?: {
+    fornecedor?: FornecedorRecord
+    criado_por?: UserRecord
+  }
+}
+
 export interface ContaPagarRecord extends RecordModel {
   descricao: string
   fornecedor: string
@@ -434,10 +509,19 @@ export interface ContaPagarRecord extends RecordModel {
   comprovante?: string
   observacoes?: string
   criado_por?: string
+  // Campos contábeis & boleto & conta bancária PJ
+  codigo_barras_linha_digitavel?: string
+  cnpj_cpf_beneficiario?: string
+  valor_desconto?: number
+  valor_juros_multa?: number
+  plano_contas_codigo?: string
+  plano_contas_nome?: string
+  conta_bancaria?: string
   expand?: {
     cliente_fornecedor?: ClienteRecord
     projeto?: ProjetoRecord
     criado_por?: UserRecord
+    conta_bancaria?: ContaBancariaRecord
   }
 }
 
@@ -597,10 +681,14 @@ export interface ContaReceberRecord extends RecordModel {
   comprovante?: string
   observacoes?: string
   criado_por?: string
+  plano_contas_codigo?: string
+  plano_contas_nome?: string
+  conta_bancaria?: string
   expand?: {
     cliente?: ClienteRecord
     projeto?: ProjetoRecord
     criado_por?: UserRecord
+    conta_bancaria?: ContaBancariaRecord
   }
 }
 
@@ -611,6 +699,7 @@ export interface ExtratoRecord extends RecordModel {
   formato: ExtratoFormato
   banco?: string
   conta?: string
+  conta_bancaria?: string
   data_inicio?: string
   data_fim?: string
   total_transacoes: number
@@ -621,6 +710,7 @@ export interface ExtratoRecord extends RecordModel {
   usuario?: string
   expand?: {
     usuario?: UserRecord
+    conta_bancaria?: ContaBancariaRecord
   }
 }
 
