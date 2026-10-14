@@ -371,6 +371,28 @@ export function ExtratosComprovantesTab({
       data.append('comprovante', arquivoComprovanteAvulso)
 
       if (destinoComprovanteTipo === 'conta_pagar') {
+        // Encontra conta para preservar metadados anteriores e adicionar o novo segregado
+        const contaAlvo = contasPagar.find((c) => c.id === destinoComprovanteId)
+        const metaExistente = Array.isArray(contaAlvo?.comprovantes_metadados)
+          ? contaAlvo.comprovantes_metadados
+          : []
+        const tipoDet = arquivoComprovanteAvulso.name.toLowerCase().includes('boleto')
+          ? 'boleto'
+          : arquivoComprovanteAvulso.name.toLowerCase().includes('recibo')
+            ? 'recibo'
+            : 'comprovante_pix'
+
+        const novosMetas = [
+          ...metaExistente,
+          {
+            file: arquivoComprovanteAvulso.name,
+            tipo: tipoDet,
+            nome_original: arquivoComprovanteAvulso.name,
+            tamanho: arquivoComprovanteAvulso.size,
+          },
+        ]
+        data.append('comprovantes_metadados', JSON.stringify(novosMetas))
+
         await pb.collection('contas_pagar').update(destinoComprovanteId, data)
         toast.success('Comprovante anexado à conta a pagar com sucesso!')
         await onReloadContasPagar()

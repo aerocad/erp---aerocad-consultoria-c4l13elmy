@@ -186,6 +186,12 @@ export async function extrairDadosContrato(file: File): Promise<ContratoExtraido
   return json.dados
 }
 
+export interface ArquivoSegregadoUpload {
+  file: File
+  tipo?: 'boleto' | 'nota_fiscal' | 'comprovante_pix' | 'recibo' | 'contrato' | 'outro'
+  nomeOriginal?: string
+}
+
 export interface SalvarContaPagarComprovanteParams {
   descricao: string
   fornecedor: string
@@ -210,7 +216,8 @@ export interface SalvarContaPagarComprovanteParams {
   projetoId?: string | null
   credorId?: string | null
   observacoes?: string
-  arquivoComprovante: File
+  arquivoComprovante?: File | null
+  arquivosComprovantes?: Array<File | ArquivoSegregadoUpload>
   userId?: string | null
   // Novos campos contábeis e conta PJ
   codigo_barras_linha_digitavel?: string
@@ -223,7 +230,7 @@ export interface SalvarContaPagarComprovanteParams {
 }
 
 /**
- * Cria a conta a pagar pré-preenchida com o comprovante anexado e registra a atividade de auditoria
+ * Cria a conta a pagar pré-preenchida com um ou múltiplos comprovantes anexados de forma segregada
  */
 export async function salvarContaPagarComComprovante(
   params: SalvarContaPagarComprovanteParams,
@@ -239,10 +246,37 @@ export async function salvarContaPagarComComprovante(
     projetoId,
     observacoes,
     arquivoComprovante,
+    arquivosComprovantes,
     userId,
   } = params
 
-  // 1. Criar registro de conta a pagar
+  // 1. Consolidar lista de arquivos para upload
+  const listaArquivos: ArquivoSegregadoUpload[] = []
+  if (arquivosComprovantes && arquivosComprovantes.length > 0) {
+    for (const item of arquivosComprovantes) {
+      if (item instanceof File) {
+        listaArquivos.push({ file: item, nomeOriginal: item.name })
+      } else if (item && item.file) {
+        listaArquivos.push(item)
+      }
+    }
+  } else if (arquivoComprovante) {
+    listaArquivos.push({
+      file: arquivoComprovante,
+      tipo: 'boleto',
+      nomeOriginal: arquivoComprovante.name,
+    })
+  }
+
+  // 2. Montar metadados iniciais segregados
+  const metadadosIniciais = listaArquivos.map((item) => ({
+    file: item.file.name,
+    tipo: item.tipo || (item.file.name.toLowerCase().includes('boleto') ? 'boleto' : 'outro'),
+    nome_original: item.nomeOriginal || item.file.name,
+    tamanho: item.file.size,
+  }))
+
+  // 3. Criar registro de conta a pagar
   const payload: Record<string, unknown> = {
     descricao,
     fornecedor,
@@ -260,6 +294,7 @@ export async function salvarContaPagarComComprovante(
     plano_contas_codigo: params.plano_contas_codigo || '',
     plano_contas_nome: params.plano_contas_nome || '',
     conta_bancaria: params.conta_bancaria || null,
+    comprovantes_metadados: metadadosIniciais,
     criado_por: userId || pb.authStore.record?.id || null,
   }
 
@@ -273,10 +308,14 @@ export async function salvarContaPagarComComprovante(
 
   const contaCriada = await createOne<ContaPagarRecord>('contas_pagar', payload)
 
-  // 2. Anexar arquivo do comprovante ao campo file existente
-  if (arquivoComprovante && contaCriada.id) {
+  // 4. Anexar arquivos de comprovante segregados
+  if (listaArquivos.length > 0 && contaCriada.id) {
     const formData = new FormData()
-    formData.append('comprovante', arquivoComprovante)
+    for (const item of listaArquivos) {
+      formData.append('comprovante', item.file)
+    }
+    // Re-atualiza também metadados se necessário
+    formData.append('comprovantes_metadados', JSON.stringify(metadadosIniciais))
     await pb.collection('contas_pagar').update(contaCriada.id, formData)
   }
 

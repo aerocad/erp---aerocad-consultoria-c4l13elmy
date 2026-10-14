@@ -21,6 +21,14 @@ import { PLANO_CONTAS_AEROCAD, sugerirPlanoContasPorCategoria } from '@/lib/plan
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Building2 } from 'lucide-react'
+import {
+  AnexosMultiplosContasPagar,
+  type ArquivoPendenteSegregado,
+  type ArquivoExistenteSegregado,
+} from './AnexosMultiplosContasPagar'
+import { DocumentosContaPagarBadges } from './DocumentosContaPagarBadges'
+import { obterDocumentosSegregados } from '@/services/documentosContasPagar'
+import type { DocumentoMetadadoItem, TipoDocumentoSegregado } from '@/types/crm'
 
 import { CrmBadge } from '@/components/common/CrmBadge'
 import { EmptyState } from '@/components/common/States'
@@ -141,7 +149,6 @@ export function ContasPagarTab({
     plano_contas_nome: string
     conta_bancaria: string
     observacoes: string
-    arquivoComprovante: File | null
   }>({
     descricao: '',
     fornecedor: '',
@@ -161,8 +168,12 @@ export function ContasPagarTab({
     plano_contas_nome: '',
     conta_bancaria: '',
     observacoes: '',
-    arquivoComprovante: null,
   })
+
+  // Anexos múltiplos segregados para a conta em edição / criação
+  const [arquivosPendentes, setArquivosPendentes] = useState<ArquivoPendenteSegregado[]>([])
+  const [arquivosExistentes, setArquivosExistentes] = useState<ArquivoExistenteSegregado[]>([])
+  const [arquivosParaRemover, setArquivosParaRemover] = useState<string[]>([])
 
   // Cálculos de atraso e status virtual
   const hoje = new Date()
@@ -240,6 +251,9 @@ export function ContasPagarTab({
 
   function abrirModalCriacao() {
     setEditando(null)
+    setArquivosPendentes([])
+    setArquivosExistentes([])
+    setArquivosParaRemover([])
     const pcDefault = sugerirPlanoContasPorCategoria('despesas_operacionais')
     setFormData({
       descricao: '',
@@ -260,13 +274,17 @@ export function ContasPagarTab({
       plano_contas_nome: pcDefault.nome,
       conta_bancaria: contasBancarias[0]?.id || '',
       observacoes: '',
-      arquivoComprovante: null,
     })
     setModalNovoAberto(true)
   }
 
   function abrirModalEdicao(conta: ContaPagarRecord) {
     setEditando(conta)
+    setArquivosPendentes([])
+    setArquivosParaRemover([])
+    const docsExistentes = obterDocumentosSegregados(conta)
+    setArquivosExistentes(docsExistentes)
+
     const pcDefault = sugerirPlanoContasPorCategoria(conta.categoria)
     setFormData({
       descricao: conta.descricao,
@@ -287,7 +305,6 @@ export function ContasPagarTab({
       plano_contas_nome: conta.plano_contas_nome || pcDefault.nome,
       conta_bancaria: conta.conta_bancaria || '',
       observacoes: conta.observacoes || '',
-      arquivoComprovante: null,
     })
     setModalNovoAberto(true)
   }
@@ -306,6 +323,28 @@ export function ContasPagarTab({
 
     setIsSubmitting(true)
     try {
+      // 1. Preparar metadados dos documentos segregados
+      const metadadosExistentesAtualizados: DocumentoMetadadoItem[] = arquivosExistentes
+        .filter((a) => !arquivosParaRemover.includes(a.fileName))
+        .map((a) => ({
+          file: a.fileName,
+          tipo: a.tipo,
+          nome_original: a.nomeOriginal,
+          tamanho: a.tamanho,
+        }))
+
+      const metadadosNovos: DocumentoMetadadoItem[] = arquivosPendentes.map((p) => ({
+        file: p.file.name,
+        tipo: p.tipo,
+        nome_original: p.nomeOriginal,
+        tamanho: p.tamanho,
+      }))
+
+      const todosMetadados: DocumentoMetadadoItem[] = [
+        ...metadadosExistentesAtualizados,
+        ...metadadosNovos,
+      ]
+
       const payload: Record<string, unknown> = {
         descricao: formData.descricao,
         fornecedor: formData.fornecedor,
@@ -321,6 +360,7 @@ export function ContasPagarTab({
         plano_contas_nome: formData.plano_contas_nome || '',
         conta_bancaria: formData.conta_bancaria || null,
         observacoes: formData.observacoes,
+        comprovantes_metadados: todosMetadados,
       }
 
       if (formData.cliente_fornecedor) payload.cliente_fornecedor = formData.cliente_fornecedor
@@ -349,11 +389,23 @@ export function ContasPagarTab({
         toast.success('Conta a pagar cadastrada com sucesso!')
       }
 
-      // Se enviou comprovante, faz upload
-      if (formData.arquivoComprovante && contaId) {
-        const fileData = new FormData()
-        fileData.append('comprovante', formData.arquivoComprovante)
-        await pb.collection('contas_pagar').update(contaId, fileData)
+      // Se há novos arquivos pendentes para upload ou remoção de antigos
+      if (contaId && (arquivosPendentes.length > 0 || arquivosParaRemover.length > 0)) {
+        const formDataUpload = new FormData()
+
+        // PocketBase permite remover arquivos com comprovante- ou passando os remanescentes
+        for (const fileRemover of arquivosParaRemover) {
+          formDataUpload.append('comprovante-', fileRemover)
+        }
+
+        // Anexar novos arquivos simultâneos
+        for (const p of arquivosPendentes) {
+          formDataUpload.append('comprovante', p.file)
+        }
+
+        formDataUpload.append('comprovantes_metadados', JSON.stringify(todosMetadados))
+
+        await pb.collection('contas_pagar').update(contaId, formDataUpload)
       }
 
       setModalNovoAberto(false)
@@ -741,21 +793,8 @@ export function ContasPagarTab({
                         )}
                       </td>
 
-                      <td className="px-4 py-3 text-center whitespace-nowrap">
-                        {conta.comprovante ? (
-                          <a
-                            href={pb.files.getURL(conta, conta.comprovante)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-[#FF6A13] hover:underline font-medium text-[11px]"
-                            title="Ver Comprovante Anexo"
-                          >
-                            <Paperclip className="h-3.5 w-3.5" />
-                            Ver
-                          </a>
-                        ) : (
-                          <span className="text-neutral-300 text-xs">—</span>
-                        )}
+                      <td className="px-4 py-3 text-center">
+                        <DocumentosContaPagarBadges conta={conta} compacto={true} />
                       </td>
 
                       <td className="px-4 py-3 text-right whitespace-nowrap">
@@ -1121,27 +1160,25 @@ export function ContasPagarTab({
               </div>
             </div>
 
-            <div className="space-y-1">
-              <Label className="text-xs">Anexar Comprovante / Fatura (PDF ou Imagem)</Label>
-              <div className="flex items-center gap-2">
-                <Input
-                  type="file"
-                  accept=".pdf,.png,.jpg,.jpeg,.webp"
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      arquivoComprovante: e.target.files?.[0] || null,
-                    })
-                  }
-                  className="text-xs file:bg-[#FF6A13] file:text-white file:border-0 file:rounded file:px-2 file:py-1 file:mr-2"
-                />
-              </div>
-              {editando?.comprovante && !formData.arquivoComprovante && (
-                <p className="text-[11px] text-emerald-700">
-                  Já possui anexo salvo ({editando.comprovante}). Selecione outro arquivo para
-                  substituir.
-                </p>
-              )}
+            {/* Bloco de Anexos Múltiplos e Segregação de Documentos */}
+            <div className="pt-2 border-t border-neutral-200">
+              <AnexosMultiplosContasPagar
+                arquivosPendentes={arquivosPendentes}
+                onChangeArquivosPendentes={setArquivosPendentes}
+                arquivosExistentes={arquivosExistentes.filter(
+                  (a) => !arquivosParaRemover.includes(a.fileName),
+                )}
+                onRemoverExistente={(fileName) => {
+                  setArquivosParaRemover((prev) => [...prev, fileName])
+                  setArquivosExistentes((prev) => prev.filter((a) => a.fileName !== fileName))
+                }}
+                onAtualizarTipoExistente={(fileName, novoTipo) => {
+                  setArquivosExistentes((prev) =>
+                    prev.map((a) => (a.fileName === fileName ? { ...a, tipo: novoTipo } : a)),
+                  )
+                }}
+                disabled={isSubmitting}
+              />
             </div>
 
             <div className="space-y-1">

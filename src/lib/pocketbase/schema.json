@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-14T20:24:21.920Z",
+  "generatedAt": "2026-10-14T20:33:58.121Z",
   "collections": [
     {
       "name": "users",
@@ -2610,6 +2610,12 @@
           "required": false,
           "system": false,
           "collectionRef": "credores"
+        },
+        {
+          "name": "comprovantes_metadados",
+          "type": "json",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [

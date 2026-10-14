@@ -539,6 +539,22 @@ export interface CredorRecord extends RecordModel {
   }
 }
 
+export type TipoDocumentoSegregado =
+  | 'boleto'
+  | 'nota_fiscal'
+  | 'comprovante_pix'
+  | 'recibo'
+  | 'contrato'
+  | 'outro'
+
+export interface DocumentoMetadadoItem {
+  file: string // nome do arquivo salvo no PocketBase (ou id único antes do upload)
+  tipo: TipoDocumentoSegregado
+  nome_original: string
+  tamanho?: number
+  observacao?: string
+}
+
 export interface ContaPagarRecord extends RecordModel {
   descricao: string
   fornecedor: string
@@ -552,7 +568,8 @@ export interface ContaPagarRecord extends RecordModel {
   forma_pagamento?: FormaPagamentoFinanceiro
   numero_documento?: string
   projeto?: string
-  comprovante?: string
+  comprovante?: string | string[]
+  comprovantes_metadados?: DocumentoMetadadoItem[]
   observacoes?: string
   criado_por?: string
   // Campos contábeis & boleto & conta bancária PJ
