@@ -159,6 +159,10 @@ export function CapturaBoletoModal({
     const url = URL.createObjectURL(file)
     setPreviewUrl(url)
 
+    await executarExtracaoBoleto(file)
+  }
+
+  async function executarExtracaoBoleto(file: File) {
     setEtapa('analisando')
     setErroAnalise(null)
 
@@ -233,17 +237,37 @@ export function CapturaBoletoModal({
       }
 
       setEtapa('conferencia')
-      toast.success('Boleto analisado com sucesso pela IA do CRM AEROCAD!')
+      if (extraido.sucesso === false) {
+        setErroAnalise(
+          extraido.erro ||
+            'Não foi possível ler o boleto — aproxime a câmera, garanta boa iluminação ou anexe o PDF com código de barras nítido.',
+        )
+      } else {
+        toast.success('Boleto analisado com sucesso pela IA do CRM AEROCAD!')
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
-      setErroAnalise(msg)
+      setErroAnalise(
+        'Não foi possível ler o documento — aproxime a câmera, garanta boa iluminação ou anexe o PDF.',
+      )
       setEtapa('conferencia')
       // Fallback manual
       setBeneficiario(file.name.replace(/\.[^/.]+$/, ''))
       setDescricao(`Boleto (${file.name})`)
       setVencimento(new Date().toISOString().slice(0, 10))
-      toast.warning('A extração automática teve limitações. Preencha os campos manualmente.')
+      toast.warning(
+        'A extração automática teve limitações. Preencha os campos manualmente ou tente reprocessar.',
+      )
     }
+  }
+
+  async function handleReprocessarMesmoBoleto() {
+    if (!arquivo) {
+      toast.error('Nenhum boleto carregado.')
+      return
+    }
+    toast.info('Reprocessando o mesmo boleto com realce visual...')
+    await executarExtracaoBoleto(arquivo)
   }
 
   function handlePlanoContasChange(codigo: string) {
@@ -491,13 +515,29 @@ export function CapturaBoletoModal({
         {etapa === 'conferencia' && (
           <div className="space-y-4 py-2">
             {erroAnalise && (
-              <Alert variant="destructive" className="py-2 text-xs">
-                <AlertTriangle className="h-4 w-4" />
-                <AlertTitle className="text-xs font-semibold">Aviso de Leitura</AlertTitle>
-                <AlertDescription className="text-xs">
-                  {erroAnalise}. Os campos abaixo estão abertos para conferência e preenchimento
-                  manual.
-                </AlertDescription>
+              <Alert
+                variant="destructive"
+                className="py-2.5 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2"
+              >
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                  <div>
+                    <AlertTitle className="text-xs font-semibold">
+                      Aviso de Leitura do Boleto
+                    </AlertTitle>
+                    <AlertDescription className="text-xs">{erroAnalise}</AlertDescription>
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={handleReprocessarMesmoBoleto}
+                  className="h-7 text-xs bg-white text-rose-900 border-rose-300 hover:bg-rose-50 shrink-0 font-semibold"
+                >
+                  <RotateCcw className="h-3 w-3 mr-1 text-[#FF6A13]" />
+                  Reprocessar mesma foto
+                </Button>
               </Alert>
             )}
 
@@ -538,19 +578,32 @@ export function CapturaBoletoModal({
                     <FileText className="h-3.5 w-3.5 text-neutral-400" />
                     <span className="truncate">{arquivo?.name}</span>
                   </span>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 text-[10px] text-neutral-300 hover:text-white"
-                    onClick={() => {
-                      setEtapa('upload')
-                      setArquivo(null)
-                    }}
-                  >
-                    <RotateCcw className="h-3 w-3 mr-1" />
-                    Trocar
-                  </Button>
+                  <div className="flex items-center gap-1.5">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 text-[10px] text-neutral-300 hover:text-white"
+                      onClick={handleReprocessarMesmoBoleto}
+                      title="Reprocessar este mesmo boleto"
+                    >
+                      <RotateCcw className="h-3 w-3 mr-1 text-[#FF6A13]" />
+                      Reprocessar
+                    </Button>
+                    <span className="text-neutral-500">|</span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 text-[10px] text-neutral-300 hover:text-white"
+                      onClick={() => {
+                        setEtapa('upload')
+                        setArquivo(null)
+                      }}
+                    >
+                      Trocar
+                    </Button>
+                  </div>
                 </div>
 
                 <div className="flex-1 flex items-center justify-center p-2 bg-neutral-950 overflow-auto">

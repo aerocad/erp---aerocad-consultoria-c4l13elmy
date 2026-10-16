@@ -130,8 +130,13 @@ export function CapturaComprovanteModal({
       setPreviewUrl(null)
     }
 
+    await executarExtracao(file)
+  }
+
+  // Executa o pipeline de extração com tratamento de erro claro e resiliente
+  async function executarExtracao(file: File) {
     setEtapa('analise')
-    setMensagemAnalise('Analisando o comprovante com o agente nativo AEROCAD...')
+    setMensagemAnalise('Otimizando imagem e analisando cupom/comprovante com IA...')
 
     try {
       const extraido = await extrairDadosComprovante(file)
@@ -140,7 +145,7 @@ export function CapturaComprovanteModal({
       if (extraido.sucesso === false) {
         setAvisoExtracao(
           extraido.erro ||
-            'Não foi possível extrair todos os dados automaticamente. Você pode preencher ou corrigir os campos ao lado.',
+            'Não foi possível ler o documento — aproxime a câmera, garanta boa iluminação ou anexe o PDF.',
         )
       } else {
         setAvisoExtracao(null)
@@ -150,7 +155,7 @@ export function CapturaComprovanteModal({
       const msg = err instanceof Error ? err.message : String(err)
       console.warn('Falha na extração automática, permitindo preenchimento manual:', msg)
       setAvisoExtracao(
-        `A extração automática não foi conclusiva (${msg}). Prossiga com a conferência e preenchimento manual; a foto continuará anexada à conta.`,
+        'Não foi possível ler o documento — aproxime a câmera, garanta boa iluminação ou anexe o PDF. Você também pode clicar em "Reprocessar mesma foto" ou preencher manualmente.',
       )
       // Popula defaults para permitir cadastro manual
       preencherFormularioComExtraido(
@@ -167,6 +172,7 @@ export function CapturaComprovanteModal({
           categoria_sugerida: 'despesas_operacionais',
           descricao_itens: file.name.replace(/\.[^/.]+$/, ''),
           confianca: 'baixa',
+          erro: 'Não foi possível ler o documento — aproxime a câmera, garanta boa iluminação ou anexe o PDF.',
         },
         file.name,
       )
@@ -200,20 +206,14 @@ export function CapturaComprovanteModal({
     setConfianca(extraido.confianca || 'media')
   }
 
-  // Tenta reanalisar o mesmo arquivo
-  async function handleTentarNovamente() {
-    if (!arquivoSelecionado) return
-    setEtapa('analise')
-    setMensagemAnalise('Reanalisando o documento...')
-    try {
-      const extraido = await extrairDadosComprovante(arquivoSelecionado)
-      preencherFormularioComExtraido(extraido, arquivoSelecionado.name)
-      setEtapa('conferencia')
-      toast.success('Documento reanalisado com sucesso!')
-    } catch {
-      toast.error('Erro ao reanalisar. Você pode preencher os campos manualmente.')
-      setEtapa('conferencia')
+  // Reprocessa a MESMA foto/arquivo já carregado sem exigir recaptura
+  async function handleReprocessarMesmaFoto() {
+    if (!arquivoSelecionado) {
+      toast.error('Nenhum arquivo carregado para reprocessar.')
+      return
     }
+    toast.info('Reprocessando a mesma foto com realce visual...')
+    await executarExtracao(arquivoSelecionado)
   }
 
   // Confirmar e salvar como Conta a Pagar
@@ -466,19 +466,22 @@ export function CapturaComprovanteModal({
             </div>
 
             {avisoExtracao && (
-              <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-900 flex items-start justify-between gap-2">
+              <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-900 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                 <div className="flex items-start gap-2">
                   <HelpCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
-                  <span>{avisoExtracao}</span>
+                  <div>
+                    <span className="font-semibold block text-amber-950">Atenção na leitura:</span>
+                    <span>{avisoExtracao}</span>
+                  </div>
                 </div>
                 <Button
                   size="sm"
-                  variant="ghost"
-                  onClick={handleTentarNovamente}
-                  className="h-6 text-[11px] text-amber-900 hover:bg-amber-100 shrink-0"
+                  variant="outline"
+                  onClick={handleReprocessarMesmaFoto}
+                  className="h-7 text-xs text-amber-950 border-amber-300 bg-white hover:bg-amber-100 shrink-0 shadow-sm font-semibold"
                 >
-                  <RefreshCw className="mr-1 h-3 w-3" />
-                  Tentar novamente
+                  <RefreshCw className="mr-1.5 h-3.5 w-3.5 text-[#FF6A13]" />
+                  Reprocessar mesma foto
                 </Button>
               </div>
             )}
@@ -488,17 +491,29 @@ export function CapturaComprovanteModal({
               <div className="md:col-span-5 flex flex-col space-y-2">
                 <div className="flex items-center justify-between text-xs font-semibold text-neutral-700">
                   <span>Prévia do Comprovante</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (isMobile) cameraInputRef.current?.click()
-                      else fileInputRef.current?.click()
-                    }}
-                    className="text-[11px] text-[#FF6A13] hover:underline flex items-center gap-1"
-                  >
-                    <RefreshCw className="h-3 w-3" />
-                    Substituir foto
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleReprocessarMesmaFoto}
+                      className="text-[11px] text-neutral-700 hover:text-[#FF6A13] hover:underline flex items-center gap-1 font-medium"
+                      title="Reprocessar este mesmo documento com a IA"
+                    >
+                      <RefreshCw className="h-3 w-3 text-[#FF6A13]" />
+                      Reprocessar
+                    </button>
+                    <span className="text-neutral-300">|</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (isMobile) cameraInputRef.current?.click()
+                        else fileInputRef.current?.click()
+                      }}
+                      className="text-[11px] text-[#FF6A13] hover:underline flex items-center gap-1"
+                    >
+                      <Camera className="h-3 w-3" />
+                      Trocar foto
+                    </button>
+                  </div>
                 </div>
 
                 <div className="relative border rounded-xl overflow-hidden bg-neutral-950 flex items-center justify-center min-h-[260px] max-h-[380px]">

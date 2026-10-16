@@ -1,5 +1,9 @@
 import pb from '@/lib/pocketbase/client'
 import { createOne } from '@/services/api'
+import {
+  preProcessarImagemDocumento,
+  type PreprocessamentoOpcoes,
+} from '@/services/imagePreprocessor'
 import type { ContaPagarRecord } from '@/types/crm'
 
 export type TipoDocumentoFiscal = 'nfe' | 'nfse' | 'cupom_fiscal' | 'recibo' | 'fatura' | 'outro'
@@ -112,11 +116,30 @@ export const TIPO_DOC_LABELS: Record<TipoDocumentoFiscal, string> = {
 }
 
 /**
- * Envia arquivo de imagem ou PDF para o backend extrair dados via agente nativo Skip Cloud
+ * Envia arquivo de imagem ou PDF para o backend extrair dados via agente nativo Skip Cloud.
+ * Pré-processa imagens automaticamente (otimização de contraste, redimensionamento para max 2048px, JPEG 0.92)
+ * antes do upload para garantir a melhor leitura OCR/Visão possível de cupons fiscais e recibos.
  */
-export async function extrairDadosComprovante(file: File): Promise<ComprovanteExtraido> {
+export async function extrairDadosComprovante(
+  file: File,
+  opcoesPreprocessamento?: PreprocessamentoOpcoes,
+): Promise<ComprovanteExtraido> {
+  // 1. Pré-processar a imagem se for foto/documento de imagem (PDFs passam intactos)
+  const { fileOtimizado, alterado, dimensoesOriginais } = await preProcessarImagemDocumento(
+    file,
+    opcoesPreprocessamento,
+  )
+
   const formData = new FormData()
-  formData.append('arquivo', file)
+  formData.append('arquivo', fileOtimizado)
+
+  // Metadados do pré-processamento enviados como campos do FormData
+  if (alterado) {
+    formData.append('pre_processado', 'true')
+    if (dimensoesOriginais) {
+      formData.append('dimensoes_originais', JSON.stringify(dimensoesOriginais))
+    }
+  }
 
   const baseUrl = import.meta.env.VITE_POCKETBASE_URL
   const res = await fetch(`${baseUrl}/backend/v1/comprovantes/extrair`, {
@@ -137,11 +160,28 @@ export async function extrairDadosComprovante(file: File): Promise<ComprovanteEx
 }
 
 /**
- * Envia arquivo de boleto bancário (PDF ou foto JPG/PNG) para o backend extrair via IA nativa
+ * Envia arquivo de boleto bancário (PDF ou foto JPG/PNG) para o backend extrair via IA nativa.
+ * Fotos de boletos passam pelo pré-processamento de contraste e resolução para leitura nítida do código de barras.
  */
-export async function extrairDadosBoleto(file: File): Promise<BoletoExtraido> {
+export async function extrairDadosBoleto(
+  file: File,
+  opcoesPreprocessamento?: PreprocessamentoOpcoes,
+): Promise<BoletoExtraido> {
+  // 1. Pré-processar a foto se for imagem (PDFs passam intactos)
+  const { fileOtimizado, alterado, dimensoesOriginais } = await preProcessarImagemDocumento(
+    file,
+    opcoesPreprocessamento,
+  )
+
   const formData = new FormData()
-  formData.append('arquivo', file)
+  formData.append('arquivo', fileOtimizado)
+
+  if (alterado) {
+    formData.append('pre_processado', 'true')
+    if (dimensoesOriginais) {
+      formData.append('dimensoes_originais', JSON.stringify(dimensoesOriginais))
+    }
+  }
 
   const baseUrl = import.meta.env.VITE_POCKETBASE_URL
   const res = await fetch(`${baseUrl}/backend/v1/boletos/extrair`, {

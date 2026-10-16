@@ -44,6 +44,22 @@ routerAdd(
         )
       }
 
+      // Leitura de metadados de pré-processamento enviados pelo cliente
+      let preProcessado = false
+      let dimensoesInfo = ''
+      try {
+        const body = e.requestInfo().body || {}
+        if (body.pre_processado === 'true' || body.pre_processado === true) {
+          preProcessado = true
+        }
+        if (body.dimensoes_originais) {
+          dimensoesInfo =
+            typeof body.dimensoes_originais === 'string'
+              ? body.dimensoes_originais
+              : JSON.stringify(body.dimensoes_originais)
+        }
+      } catch (_) {}
+
       if (isPdf) {
         try {
           const docRes = $documents.toMarkdown({ file: file })
@@ -56,10 +72,24 @@ routerAdd(
       }
 
       let promptMessage = ''
+      const contextoOtimizacao = preProcessado
+        ? ` (Imagem pré-processada com realce de contraste +12% e redimensionamento para leitura de cupom fiscal térmico${dimensoesInfo ? ', dimensões originais: ' + dimensoesInfo : ''})`
+        : ''
+
       if (rawContent && rawContent.trim().length > 0) {
-        promptMessage = `Analise o seguinte conteúdo extraído do documento/comprovante fiscal (${fileName}) e retorne o JSON estruturado conforme as instruções do seu sistema:\n\n${rawContent.slice(0, 4000)}`
+        promptMessage = `Analise o seguinte conteúdo extraído do documento/comprovante fiscal (${fileName}${contextoOtimizacao}) e retorne o JSON estruturado conforme as instruções do seu sistema:\n\n${rawContent.slice(0, 4000)}`
       } else {
-        promptMessage = `Analise a foto/digitalização do comprovante fiscal anexado (${fileName}). Extraia fornecedor/razão social, CNPJ/CPF, data de emissão, número/série se houver, valor total, impostos destacados se houver, categoria sugerida de conta a pagar (despesas_operacionais, terceirizados, impostos, equipamentos, folha, outros), plano de contas sugerido, forma de pagamento e descrição resumida dos itens. Retorne em formato JSON conforme as diretrizes do sistema.`
+        promptMessage = `Analise a foto/digitalização do comprovante fiscal anexado (${fileName}${contextoOtimizacao}).
+Foque especialmente na identificação precisa de Cupom Fiscal Eletrônico (NFC-e / SAT-CF-e / ECF):
+1. Fornecedor / Razão Social e Nome Fantasia (ex: posto de combustível, lanchonete, loja de materiais).
+2. CNPJ do emitente (14 dígitos formatados).
+3. Data de emissão (AAAA-MM-DD).
+4. Número do documento (CCF, COO, NFC-e nº, Extrato nº) e chave de acesso de 44 dígitos se houver.
+5. Valor total pago (R$) e impostos destacados se houver.
+6. Forma de pagamento (pix, cartao_credito, cartao_debito, dinheiro, boleto, outro).
+7. Descrição sucinta dos itens (ex: "Gasolina Comum 40L", "Refeição em campo").
+8. Categoria AEROCAD (despesas_operacionais, terceirizados, impostos, equipamentos, folha, outros) e código do Plano de Contas (ex: 3.1.4 para viagens/campo, 3.1.1 para administrativo).
+Retorne EXCLUSIVAMENTE o JSON estruturado puro.`
       }
 
       let agentResult = null
@@ -76,24 +106,26 @@ routerAdd(
           'Chamada agente nativo falhou, tentando fallback com $ai.chat:',
           agentErr.message,
         )
-        const systemPrompt = `Você é um auditor contábil e fiscal do CRM AEROCAD. Analise o comprovante e retorne EXCLUSIVAMENTE um JSON puro no formato:
+        const systemPrompt = `Você é um auditor contábil e fiscal do CRM AEROCAD especializado em cupons fiscais (NFC-e, SAT), comprovantes PIX, recibos e notas fiscais.
+Analise a imagem/documento e retorne EXCLUSIVAMENTE um JSON puro:
 {
   "sucesso": true,
   "tipo_documento": "cupom_fiscal",
-  "fornecedor": "Nome do fornecedor",
-  "cnpj_cpf": "",
+  "fornecedor": "Razão Social ou Nome do Estabelecimento",
+  "cnpj_cpf": "00.000.000/0000-00",
   "data_emissao": "AAAA-MM-DD",
-  "numero_documento": "",
+  "numero_documento": "COO/CCF ou NFC-e nº",
   "valor_total": 0.0,
   "valor_impostos": null,
   "forma_pagamento_sugerida": "pix",
   "categoria_sugerida": "despesas_operacionais",
   "plano_contas_codigo": "3.1.4",
   "plano_contas_nome": "Despesas de Viagens e Campo",
-  "descricao_itens": "Resumo dos itens",
-  "observacoes": "",
+  "descricao_itens": "Resumo claro dos itens (ex: Abastecimento Gasolina Comum)",
+  "observacoes": "Chave de acesso se houver ou detalhes adicionais",
   "confianca": "alta"
-}`
+}
+Se os dados não puderem ser identificados, defina sucesso=false, fornecedor="", valor_total=0 e erro="Não foi possível ler o documento — aproxime a câmera, garanta boa iluminação ou anexe o PDF".`
 
         const fallbackReply = $ai.chat({
           model: 'fast',
@@ -136,8 +168,9 @@ routerAdd(
           plano_contas_nome: 'Despesas Administrativas Gerais',
           descricao_itens: fileName.replace(/\.[^/.]+$/, ''),
           observacoes:
-            'Dados não puderam ser extraídos automaticamente com total clareza. Preencha ou confirme manualmente.',
+            'Não foi possível ler o documento — aproxime a câmera, garanta boa iluminação ou anexe o PDF.',
           confianca: 'baixa',
+          erro: 'não foi possível ler o documento — aproxime a câmera, garanta boa iluminação ou anexe o PDF',
         }
       }
 
@@ -192,6 +225,15 @@ routerAdd(
           'Formato de arquivo não suportado. Envie boleto em PDF ou foto (JPG/PNG).',
         )
       }
+
+      // Leitura de metadados de pré-processamento
+      let preProcessadoBoleto = false
+      try {
+        const body = e.requestInfo().body || {}
+        if (body.pre_processado === 'true' || body.pre_processado === true) {
+          preProcessadoBoleto = true
+        }
+      } catch (_) {}
 
       if (isPdf) {
         try {
@@ -249,10 +291,13 @@ Responda EXCLUSIVAMENTE em formato JSON puro, sem markdown adicional:
 }`
 
       let userMsg = ''
+      const obsOtimizacao = preProcessadoBoleto
+        ? ' (Foto pré-processada com otimização de contraste)'
+        : ''
       if (rawContent && rawContent.trim().length > 0) {
-        userMsg = `Conteúdo extraído do boleto (${fileName}):\n\n${rawContent.slice(0, 4000)}`
+        userMsg = `Conteúdo extraído do boleto (${fileName}${obsOtimizacao}):\n\n${rawContent.slice(0, 4000)}`
       } else {
-        userMsg = `Analise este arquivo de boleto bancário (${fileName}). Extraia linha digitável de 47/48 dígitos, beneficiário, CNPJ, vencimento, valor e juros/multa.`
+        userMsg = `Analise este arquivo de boleto bancário (${fileName}${obsOtimizacao}). Extraia linha digitável de 47/48 dígitos, beneficiário, CNPJ, vencimento, valor e juros/multa.`
       }
 
       let agentResult = null
@@ -310,6 +355,7 @@ Responda EXCLUSIVAMENTE em formato JSON puro, sem markdown adicional:
           plano_contas_nome: 'Despesas Administrativas Gerais',
           instrucoes_resumo: '',
           confianca: 'baixa',
+          erro: 'não foi possível ler o boleto — aproxime a câmera, garanta boa iluminação ou anexe o PDF com código de barras nítido',
         }
       }
 
