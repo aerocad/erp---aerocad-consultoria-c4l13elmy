@@ -25,7 +25,7 @@ import {
   type AgentConversationItem,
 } from '@/services/assistenteIa'
 import type { DisplayMessage, AgentCitation } from '@/lib/skipAi'
-import { toast } from '@/hooks/use-toast'
+import { toast } from 'sonner'
 
 export interface AssistenteFinanceiroChatProps {
   secaoAtual: 'extratos' | 'fluxo' | 'demonstracoes' | 'balancos' | 'ativos' | 'relatorios'
@@ -141,10 +141,12 @@ export function AssistenteFinanceiroChatDrawer({
     setInputMessage('')
 
     // Mensagem do usuário na UI
+    const agora = new Date().toISOString()
     const userMsg: DisplayMessage = {
       id: `usr_${Date.now()}`,
       role: 'user',
       content: msgToSend,
+      created: agora,
     }
 
     const assistantMsgId = `ast_${Date.now()}`
@@ -152,6 +154,7 @@ export function AssistenteFinanceiroChatDrawer({
       id: assistantMsgId,
       role: 'assistant',
       content: '',
+      created: agora,
     }
 
     setMessages((prev) => [...prev, userMsg, assistantMsgPlaceholder])
