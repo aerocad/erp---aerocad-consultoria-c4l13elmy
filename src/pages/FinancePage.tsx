@@ -15,6 +15,7 @@ import {
   FileText,
   Layers,
   Link as LinkIcon,
+  Landmark,
   Plus,
   Receipt,
   RotateCcw,
