@@ -7,6 +7,342 @@
  * 3. POST /backend/v1/contratos/extrair (contratos de prestação de serviços / subcontratação em PDF)
  */
 
+// Heurística Global Compartilhada de Inferência de Categoria e Produto por Estabelecimento
+function inferirCategoriaEstabelecimento(nome, cnpj, descItens) {
+  const texto = ((nome || '') + ' ' + (descItens || '')).toLowerCase()
+  const regras = [
+    {
+      termos: [
+        'posto',
+        'combustivel',
+        'gasolina',
+        'etanol',
+        'diesel',
+        'ipiranga',
+        'petrobras',
+        'shell',
+        'vibra',
+        'raizen',
+        'auto posto',
+        'autoposto',
+        'abastecedora',
+      ],
+      segmento: 'Combustíveis & Lubrificantes',
+      produto: 'Combustíveis e abastecimento de veículos em campo',
+      categoria: 'despesas_operacionais',
+      planoCodigo: '3.1.5',
+      planoNome: 'Combustível, Pedágios e Locação de Veículos',
+    },
+    {
+      termos: [
+        'restaurante',
+        'churrascaria',
+        'pizzaria',
+        'lanchonete',
+        'refeicao',
+        'refeicoes',
+        'bife',
+        'buffet',
+        'bistro',
+        'mcdonald',
+        'burger king',
+        'subway',
+        'habib',
+        'grill',
+      ],
+      segmento: 'Alimentação & Restaurantes',
+      produto: 'Despesas com refeições e alimentação da equipe',
+      categoria: 'despesas_operacionais',
+      planoCodigo: '3.1.4',
+      planoNome: 'Viagens, Hospedagem e Diárias em Campo',
+    },
+    {
+      termos: [
+        'supermercado',
+        'mercado',
+        'mercearia',
+        'hipermercado',
+        'atacadao',
+        'assai',
+        'carrefour',
+        'pao de acucar',
+        'extra',
+        'muffato',
+        'savegnago',
+        'hortifruti',
+      ],
+      segmento: 'Alimentação / Supermercados',
+      produto: 'Gêneros alimentícios e insumos de copa/campo',
+      categoria: 'despesas_operacionais',
+      planoCodigo: '3.1.4',
+      planoNome: 'Viagens, Hospedagem e Diárias em Campo',
+    },
+    {
+      termos: [
+        'padaria',
+        'panificadora',
+        'panificacao',
+        'confeitaria',
+        'cafeteria',
+        'cafe',
+        'coffee',
+      ],
+      segmento: 'Panificação & Confeitaria',
+      produto: 'Despesas com café da manhã e panificação em trânsito',
+      categoria: 'despesas_operacionais',
+      planoCodigo: '3.1.4',
+      planoNome: 'Viagens, Hospedagem e Diárias em Campo',
+    },
+    {
+      termos: [
+        'farmacia',
+        'drogaria',
+        'drogasil',
+        'raia',
+        'pacheco',
+        'pague menos',
+        'panvel',
+        'medicamentos',
+      ],
+      segmento: 'Saúde & Farmácia',
+      produto: 'Medicamentos básicos, primeiros socorros e itens de higiene',
+      categoria: 'despesas_operacionais',
+      planoCodigo: '3.1.1',
+      planoNome: 'Despesas Administrativas Gerais & Escritório',
+    },
+    {
+      termos: ['estacionamento', 'garagem', 'park', 'parking', 'estapar', 'valet'],
+      segmento: 'Estacionamento & Garagem',
+      produto: 'Estacionamento de veículos técnicos / diárias em aeroportos',
+      categoria: 'despesas_operacionais',
+      planoCodigo: '3.1.5',
+      planoNome: 'Combustível, Pedágios e Locação de Veículos',
+    },
+    {
+      termos: [
+        'pedagio',
+        'sem parar',
+        'conectcar',
+        'veloe',
+        'concessionaria de rodovias',
+        'ccr',
+        'ecorodovias',
+        'arteris',
+      ],
+      segmento: 'Pedágio & Rodovias',
+      produto: 'Tarifas de pedágio em deslocamento técnico rodoviário',
+      categoria: 'despesas_operacionais',
+      planoCodigo: '3.1.5',
+      planoNome: 'Combustível, Pedágios e Locação de Veículos',
+    },
+    {
+      termos: [
+        'papelaria',
+        'kalunga',
+        'livraria',
+        'copiadora',
+        'suprimentos',
+        'materiais para escritorio',
+      ],
+      segmento: 'Material de Consumo & Escritório',
+      produto: 'Material de consumo, papelaria técnica e suprimentos',
+      categoria: 'despesas_operacionais',
+      planoCodigo: '3.1.1',
+      planoNome: 'Despesas Administrativas Gerais & Escritório',
+    },
+    {
+      termos: [
+        'hotel',
+        'hoteis',
+        'pousada',
+        'resort',
+        'ibis',
+        'accor',
+        'mercure',
+        'novotel',
+        'hospedagem',
+        'airbnb',
+      ],
+      segmento: 'Hospedagem & Hotelaria',
+      produto: 'Diárias de hospedagem e hotel em missões de campo',
+      categoria: 'despesas_operacionais',
+      planoCodigo: '3.1.4',
+      planoNome: 'Viagens, Hospedagem e Diárias em Campo',
+    },
+    {
+      termos: [
+        'latam',
+        'gol linhas',
+        'azul linhas',
+        'voepass',
+        'passagem aerea',
+        'aeroporto',
+        'infraero',
+        'aena',
+        'fraport',
+        'zurich airport',
+      ],
+      segmento: 'Passagens & Transporte Aéreo',
+      produto: 'Passagens aéreas, taxas aeroportuárias e despacho de bagagem técnica',
+      categoria: 'despesas_operacionais',
+      planoCodigo: '3.1.4',
+      planoNome: 'Viagens, Hospedagem e Diárias em Campo',
+    },
+    {
+      termos: [
+        'localiza',
+        'movida',
+        'unidas',
+        'locadora de veiculos',
+        'aluguel de carros',
+        'rent a car',
+      ],
+      segmento: 'Locação de Veículos',
+      produto: 'Aluguel de veículos utilitários e 4x4 para vistoria em sítios aeroportuários',
+      categoria: 'despesas_operacionais',
+      planoCodigo: '3.1.5',
+      planoNome: 'Combustível, Pedágios e Locação de Veículos',
+    },
+    {
+      termos: ['uber', '99 tecnologia', '99app', 'radiotaxi', 'taxi'],
+      segmento: 'Transporte Urbano & Aplicativos',
+      produto: 'Deslocamentos urbanos por aplicativo ou táxi',
+      categoria: 'despesas_operacionais',
+      planoCodigo: '3.1.5',
+      planoNome: 'Combustível, Pedágios e Locação de Veículos',
+    },
+    {
+      termos: ['grafica', 'plotagem', 'ploter', 'reprografia', 'plantas tecnicas'],
+      segmento: 'Gráfica & Plotagem Técnica',
+      produto: 'Plotagem de pranchas CAD A0/A1 e encadernações técnicas',
+      categoria: 'despesas_operacionais',
+      planoCodigo: '3.1.1',
+      planoNome: 'Despesas Administrativas Gerais & Escritório',
+    },
+    {
+      termos: [
+        'ferragens',
+        'ferramentas',
+        'materiais de construcao',
+        'leroy merlin',
+        'tintas',
+        'epi',
+        'equipamentos de protecao',
+      ],
+      segmento: 'Ferramentas, EPI & Materiais',
+      produto: 'Equipamentos de proteção individual (EPI), trenas e ferramentas',
+      categoria: 'despesas_operacionais',
+      planoCodigo: '3.1.1',
+      planoNome: 'Despesas Administrativas Gerais & Escritório',
+    },
+    {
+      termos: ['kabum', 'dell', 'lenovo', 'computadores', 'informatica', 'hardware'],
+      segmento: 'Equipamentos de TI & Hardware',
+      produto: 'Hardware, periféricos e peças de computador de engenharia',
+      categoria: 'equipamentos',
+      planoCodigo: '3.1.2',
+      planoNome: 'Softwares, Licenças CAD/GIS, Servidores & TI',
+    },
+    {
+      termos: [
+        'autodesk',
+        'microsoft',
+        'google cloud',
+        'aws',
+        'software',
+        'adobe',
+        'chatgpt',
+        'openai',
+        'bentley',
+        'trimble',
+      ],
+      segmento: 'Softwares & Licenças Técnicas',
+      produto: 'Assinaturas de software CAD/BIM, nuvem e ferramentas de cálculo',
+      categoria: 'equipamentos',
+      planoCodigo: '3.1.2',
+      planoNome: 'Softwares, Licenças CAD/GIS, Servidores & TI',
+    },
+    {
+      termos: ['cartorio', 'tabelionato', 'registro de imoveis', 'tabeliao'],
+      segmento: 'Cartórios & Tabelionatos',
+      produto: 'Autenticações, reconhecimento de firma e certidões imobiliárias',
+      categoria: 'despesas_operacionais',
+      planoCodigo: '3.1.1',
+      planoNome: 'Despesas Administrativas Gerais & Escritório',
+    },
+    {
+      termos: [
+        'anac',
+        'decea',
+        'aeronautica',
+        'receita federal',
+        'prefeitura',
+        'sefaz',
+        'gru',
+        'dam',
+        'taxas',
+      ],
+      segmento: 'Taxas & Órgãos Reguladores',
+      produto: 'Taxas de fiscalização ANAC, DECEA, GRU, prefeituras e órgãos ambientais',
+      categoria: 'impostos',
+      planoCodigo: '3.3.1',
+      planoNome: 'Tributos Municipais (ISS / Taxas Aeroportuárias)',
+    },
+    {
+      termos: [
+        'vivo',
+        'telefonica',
+        'claro',
+        'tim',
+        'telecomunicacoes',
+        'provedor de internet',
+        'fibra',
+      ],
+      segmento: 'Telecomunicações & Internet',
+      produto: 'Internet banda larga, telefonia móvel e links de dados',
+      categoria: 'despesas_operacionais',
+      planoCodigo: '3.1.1',
+      planoNome: 'Despesas Administrativas Gerais & Escritório',
+    },
+    {
+      termos: ['engenharia consultiva', 'geotecnia', 'sondagens', 'topografia', 'ensaios de solo'],
+      segmento: 'Subcontratação Técnica de Engenharia',
+      produto: 'Serviços terceirizados de sondagem SPT, ensaios geotécnicos e topografia',
+      categoria: 'terceirizados',
+      planoCodigo: '3.2.1',
+      planoNome: 'Honorários de Engenharia e Subcontratação Técnica (Topografia/Sondagem)',
+    },
+  ]
+
+  for (let i = 0; i < regras.length; i++) {
+    const r = regras[i]
+    for (let j = 0; j < r.termos.length; j++) {
+      const t = r.termos[j]
+      if (texto.indexOf(t) !== -1) {
+        return {
+          sucesso: true,
+          segmento: r.segmento,
+          produto: r.produto,
+          categoria: r.categoria,
+          planoCodigo: r.planoCodigo,
+          planoNome: r.planoNome,
+          termo: t,
+        }
+      }
+    }
+  }
+
+  return {
+    sucesso: false,
+    segmento: 'Outros',
+    produto: 'Despesa operacional geral',
+    categoria: 'despesas_operacionais',
+    planoCodigo: '3.1.1',
+    planoNome: 'Despesas Administrativas Gerais & Escritório',
+    termo: null,
+  }
+}
+
 // 1. EXTRAÇÃO DE COMPROVANTES GERAIS
 routerAdd(
   'POST',
@@ -44,347 +380,6 @@ routerAdd(
         )
       }
 
-      // Heurística de Inferência de Categoria e Produto por Estabelecimento
-      function inferirCategoriaEstabelecimento(nome, cnpj, descItens) {
-        const texto = ((nome || '') + ' ' + (descItens || '')).toLowerCase()
-        const regras = [
-          {
-            termos: [
-              'posto',
-              'combustivel',
-              'gasolina',
-              'etanol',
-              'diesel',
-              'ipiranga',
-              'petrobras',
-              'shell',
-              'vibra',
-              'raizen',
-              'auto posto',
-              'autoposto',
-              'abastecedora',
-            ],
-            segmento: 'Combustíveis & Lubrificantes',
-            produto: 'Combustíveis e abastecimento de veículos em campo',
-            categoria: 'despesas_operacionais',
-            planoCodigo: '3.1.5',
-            planoNome: 'Combustível, Pedágios e Locação de Veículos',
-          },
-          {
-            termos: [
-              'restaurante',
-              'churrascaria',
-              'pizzaria',
-              'lanchonete',
-              'refeicao',
-              'refeicoes',
-              'bife',
-              'buffet',
-              'bistro',
-              'mcdonald',
-              'burger king',
-              'subway',
-              'habib',
-              'grill',
-            ],
-            segmento: 'Alimentação & Restaurantes',
-            produto: 'Despesas com refeições e alimentação da equipe',
-            categoria: 'despesas_operacionais',
-            planoCodigo: '3.1.4',
-            planoNome: 'Viagens, Hospedagem e Diárias em Campo',
-          },
-          {
-            termos: [
-              'supermercado',
-              'mercado',
-              'mercearia',
-              'hipermercado',
-              'atacadao',
-              'assai',
-              'carrefour',
-              'pao de acucar',
-              'extra',
-              'muffato',
-              'savegnago',
-              'hortifruti',
-            ],
-            segmento: 'Alimentação / Supermercados',
-            produto: 'Gêneros alimentícios e insumos de copa/campo',
-            categoria: 'despesas_operacionais',
-            planoCodigo: '3.1.4',
-            planoNome: 'Viagens, Hospedagem e Diárias em Campo',
-          },
-          {
-            termos: [
-              'padaria',
-              'panificadora',
-              'panificacao',
-              'confeitaria',
-              'cafeteria',
-              'cafe',
-              'coffee',
-            ],
-            segmento: 'Panificação & Confeitaria',
-            produto: 'Despesas com café da manhã e panificação em trânsito',
-            categoria: 'despesas_operacionais',
-            planoCodigo: '3.1.4',
-            planoNome: 'Viagens, Hospedagem e Diárias em Campo',
-          },
-          {
-            termos: [
-              'farmacia',
-              'drogaria',
-              'drogasil',
-              'raia',
-              'pacheco',
-              'pague menos',
-              'panvel',
-              'medicamentos',
-            ],
-            segmento: 'Saúde & Farmácia',
-            produto: 'Medicamentos básicos, primeiros socorros e itens de higiene',
-            categoria: 'despesas_operacionais',
-            planoCodigo: '3.1.1',
-            planoNome: 'Despesas Administrativas Gerais & Escritório',
-          },
-          {
-            termos: ['estacionamento', 'garagem', 'park', 'parking', 'estapar', 'valet'],
-            segmento: 'Estacionamento & Garagem',
-            produto: 'Estacionamento de veículos técnicos / diárias em aeroportos',
-            categoria: 'despesas_operacionais',
-            planoCodigo: '3.1.5',
-            planoNome: 'Combustível, Pedágios e Locação de Veículos',
-          },
-          {
-            termos: [
-              'pedagio',
-              'sem parar',
-              'conectcar',
-              'veloe',
-              'concessionaria de rodovias',
-              'ccr',
-              'ecorodovias',
-              'arteris',
-            ],
-            segmento: 'Pedágio & Rodovias',
-            produto: 'Tarifas de pedágio em deslocamento técnico rodoviário',
-            categoria: 'despesas_operacionais',
-            planoCodigo: '3.1.5',
-            planoNome: 'Combustível, Pedágios e Locação de Veículos',
-          },
-          {
-            termos: [
-              'papelaria',
-              'kalunga',
-              'livraria',
-              'copiadora',
-              'suprimentos',
-              'materiais para escritorio',
-            ],
-            segmento: 'Material de Consumo & Escritório',
-            produto: 'Material de consumo, papelaria técnica e suprimentos',
-            categoria: 'despesas_operacionais',
-            planoCodigo: '3.1.1',
-            planoNome: 'Despesas Administrativas Gerais & Escritório',
-          },
-          {
-            termos: [
-              'hotel',
-              'hoteis',
-              'pousada',
-              'resort',
-              'ibis',
-              'accor',
-              'mercure',
-              'novotel',
-              'hospedagem',
-              'airbnb',
-            ],
-            segmento: 'Hospedagem & Hotelaria',
-            produto: 'Diárias de hospedagem e hotel em missões de campo',
-            categoria: 'despesas_operacionais',
-            planoCodigo: '3.1.4',
-            planoNome: 'Viagens, Hospedagem e Diárias em Campo',
-          },
-          {
-            termos: [
-              'latam',
-              'gol linhas',
-              'azul linhas',
-              'voepass',
-              'passagem aerea',
-              'aeroporto',
-              'infraero',
-              'aena',
-              'fraport',
-              'zurich airport',
-            ],
-            segmento: 'Passagens & Transporte Aéreo',
-            produto: 'Passagens aéreas, taxas aeroportuárias e despacho de bagagem técnica',
-            categoria: 'despesas_operacionais',
-            planoCodigo: '3.1.4',
-            planoNome: 'Viagens, Hospedagem e Diárias em Campo',
-          },
-          {
-            termos: [
-              'localiza',
-              'movida',
-              'unidas',
-              'locadora de veiculos',
-              'aluguel de carros',
-              'rent a car',
-            ],
-            segmento: 'Locação de Veículos',
-            produto: 'Aluguel de veículos utilitários e 4x4 para vistoria em sítios aeroportuários',
-            categoria: 'despesas_operacionais',
-            planoCodigo: '3.1.5',
-            planoNome: 'Combustível, Pedágios e Locação de Veículos',
-          },
-          {
-            termos: ['uber', '99 tecnologia', '99app', 'radiotaxi', 'taxi'],
-            segmento: 'Transporte Urbano & Aplicativos',
-            produto: 'Deslocamentos urbanos por aplicativo ou táxi',
-            categoria: 'despesas_operacionais',
-            planoCodigo: '3.1.5',
-            planoNome: 'Combustível, Pedágios e Locação de Veículos',
-          },
-          {
-            termos: ['grafica', 'plotagem', 'ploter', 'reprografia', 'plantas tecnicas'],
-            segmento: 'Gráfica & Plotagem Técnica',
-            produto: 'Plotagem de pranchas CAD A0/A1 e encadernações técnicas',
-            categoria: 'despesas_operacionais',
-            planoCodigo: '3.1.1',
-            planoNome: 'Despesas Administrativas Gerais & Escritório',
-          },
-          {
-            termos: [
-              'ferragens',
-              'ferramentas',
-              'materiais de construcao',
-              'leroy merlin',
-              'tintas',
-              'epi',
-              'equipamentos de protecao',
-            ],
-            segmento: 'Ferramentas, EPI & Materiais',
-            produto: 'Equipamentos de proteção individual (EPI), trenas e ferramentas',
-            categoria: 'despesas_operacionais',
-            planoCodigo: '3.1.1',
-            planoNome: 'Despesas Administrativas Gerais & Escritório',
-          },
-          {
-            termos: ['kabum', 'dell', 'lenovo', 'computadores', 'informatica', 'hardware'],
-            segmento: 'Equipamentos de TI & Hardware',
-            produto: 'Hardware, periféricos e peças de computador de engenharia',
-            categoria: 'equipamentos',
-            planoCodigo: '3.1.2',
-            planoNome: 'Softwares, Licenças CAD/GIS, Servidores & TI',
-          },
-          {
-            termos: [
-              'autodesk',
-              'microsoft',
-              'google cloud',
-              'aws',
-              'software',
-              'adobe',
-              'chatgpt',
-              'openai',
-              'bentley',
-              'trimble',
-            ],
-            segmento: 'Softwares & Licenças Técnicas',
-            produto: 'Assinaturas de software CAD/BIM, nuvem e ferramentas de cálculo',
-            categoria: 'equipamentos',
-            planoCodigo: '3.1.2',
-            planoNome: 'Softwares, Licenças CAD/GIS, Servidores & TI',
-          },
-          {
-            termos: ['cartorio', 'tabelionato', 'registro de imoveis', 'tabeliao'],
-            segmento: 'Cartórios & Tabelionatos',
-            produto: 'Autenticações, reconhecimento de firma e certidões imobiliárias',
-            categoria: 'despesas_operacionais',
-            planoCodigo: '3.1.1',
-            planoNome: 'Despesas Administrativas Gerais & Escritório',
-          },
-          {
-            termos: [
-              'anac',
-              'decea',
-              'aeronautica',
-              'receita federal',
-              'prefeitura',
-              'sefaz',
-              'gru',
-              'dam',
-              'taxas',
-            ],
-            segmento: 'Taxas & Órgãos Reguladores',
-            produto: 'Taxas de fiscalização ANAC, DECEA, GRU, prefeituras e órgãos ambientais',
-            categoria: 'impostos',
-            planoCodigo: '3.3.1',
-            planoNome: 'Tributos Municipais (ISS / Taxas Aeroportuárias)',
-          },
-          {
-            termos: [
-              'vivo',
-              'telefonica',
-              'claro',
-              'tim',
-              'telecomunicacoes',
-              'provedor de internet',
-              'fibra',
-            ],
-            segmento: 'Telecomunicações & Internet',
-            produto: 'Internet banda larga, telefonia móvel e links de dados',
-            categoria: 'despesas_operacionais',
-            planoCodigo: '3.1.1',
-            planoNome: 'Despesas Administrativas Gerais & Escritório',
-          },
-          {
-            termos: [
-              'engenharia consultiva',
-              'geotecnia',
-              'sondagens',
-              'topografia',
-              'ensaios de solo',
-            ],
-            segmento: 'Subcontratação Técnica de Engenharia',
-            produto: 'Serviços terceirizados de sondagem SPT, ensaios geotécnicos e topografia',
-            categoria: 'terceirizados',
-            planoCodigo: '3.2.1',
-            planoNome: 'Honorários de Engenharia e Subcontratação Técnica (Topografia/Sondagem)',
-          },
-        ]
-
-        for (let i = 0; i < regras.length; i++) {
-          const r = regras[i]
-          for (let j = 0; j < r.termos.length; j++) {
-            const t = r.termos[j]
-            if (texto.indexOf(t) !== -1) {
-              return {
-                sucesso: true,
-                segmento: r.segmento,
-                produto: r.produto,
-                categoria: r.categoria,
-                planoCodigo: r.planoCodigo,
-                planoNome: r.planoNome,
-                termo: t,
-              }
-            }
-          }
-        }
-
-        return {
-          sucesso: false,
-          segmento: 'Outros',
-          produto: 'Despesa operacional geral',
-          categoria: 'despesas_operacionais',
-          planoCodigo: '3.1.1',
-          planoNome: 'Despesas Administrativas Gerais & Escritório',
-          termo: null,
-        }
-      }
       // Leitura de metadados de pré-processamento enviados pelo cliente
       let preProcessado = false
       let dimensoesInfo = ''
@@ -418,38 +413,27 @@ routerAdd(
         : ''
 
       const diretrizModoEssencial = `
-REQUISITO ESSENCIAL:
-Se houver qualquer dificuldade de leitura completa de itens ou campos acessórios do cupom ou nota, ATIVE o modo essencial (modo_essencial: true) e extraia com prioridade os 5 dados vitais:
-1. data_emissao (AAAA-MM-DD)
-2. valor_total (R$)
-3. forma_pagamento_sugerida (pix, cartao_credito, cartao_debito, dinheiro, boleto, outro)
-4. fornecedor (Nome/Razão do estabelecimento)
-5. cnpj_cpf (CNPJ do emitente)
-E infira o tipo de produto e categoria contábil com base no nome do estabelecimento (se posto de combustível -> combustíveis 3.1.5; se restaurante/supermercado -> alimentação 3.1.4; se farmácia -> saúde 3.1.1; se pedágio/estacionamento -> veículo/deslocamento 3.1.5; etc.).`
+REGRAS OBRIGATÓRIAS DE EXTRAÇÃO:
+Você DEVE ler linha por linha da imagem ou texto, partindo do topo (cabeçalho) até o rodapé.
+NUNCA omita "fornecedor" (estabelecimento) e "valor_total" se estiverem minimamente visíveis na imagem.
+
+1. NOME DO ESTABELECIMENTO (fornecedor): Localize no TOPO/CABEÇALHO do documento (Razão Social ou Nome Fantasia impresso nas 3 primeiras linhas). NUNCA retorne vazio ("") se houver texto no cabeçalho.
+2. VALOR TOTAL (valor_total): Localize no RODAPÉ ou resumo de totais ("TOTAL R$", "VALOR A PAGAR", "VALOR LÍQUIDO", "TOTAL DA NOTA"). Retorne como número decimal (ex: 215.80).
+3. DATA DE EMISSÃO (data_emissao): Formato ISO AAAA-MM-DD.
+4. CNPJ/CPF DO EMITENTE (cnpj_cpf): 14 dígitos formatados (ex: "01.234.567/0001-89").
+5. FORMA DE PAGAMENTO (forma_pagamento_sugerida): pix, cartao_credito, cartao_debito, dinheiro, boleto, ted_doc ou outro.
+Se qualquer outro campo acessório (como número do cupom, chave de 44 dígitos ou lista minuciosa de itens) não estiver legível, preencha null para ele mas NUNCA deixe de preencher fornecedor, valor_total e data_emissao. Ative modo_essencial=true sempre que a leitura for parcial.`
 
       if (rawContent && rawContent.trim().length > 0) {
-        promptMessage = `Analise o seguinte conteúdo extraído do documento fiscal (${fileName}${contextoOtimizacao}).
-Pode ser um DANFE (NF-e formato A4), um Cupom Fiscal (NFC-e/SAT) ou outro comprovante fiscal:
-- Se for DANFE NF-e: extraia Emitente, CNPJ, Destinatário, Número, Série, Chave de Acesso de 44 dígitos, Data de Emissão, Valor Total, Impostos, Itens e condições de pagamento.
-- Se for Cupom Fiscal (NFC-e/SAT): extraia Estabelecimento, CNPJ, Número/Extrato, Chave de Acesso de 44 dígitos se houver, Itens, Valor Total e Forma de Pagamento.
+        promptMessage = `Analise o seguinte conteúdo textual extraído do documento fiscal (${fileName}${contextoOtimizacao}).
 ${diretrizModoEssencial}
-Classifique contabilmente no Plano de Contas AEROCAD e retorne o JSON estruturado puro conforme suas instruções:\n\n${rawContent.slice(0, 4500)}`
+
+Classifique contabilmente no Plano de Contas AEROCAD e retorne EXCLUSIVAMENTE o JSON puro estruturado:\n\n${rawContent.slice(0, 4500)}`
       } else {
-        promptMessage = `Analise a foto/digitalização do documento fiscal anexado (${fileName}${contextoOtimizacao}).
-Pode ser um DANFE (Nota Fiscal Eletrônica NF-e em folha A4), Cupom Fiscal Eletrônico (NFC-e / SAT-CF-e / ECF) ou Recibo:
-1. Identifique o tipo de documento: "nfe" (se for DANFE em papel A4), "cupom_fiscal" (se for cupom térmico NFC-e/SAT) ou outro.
-2. Fornecedor / Razão Social e Nome Fantasia do emitente.
-3. CNPJ do emitente (14 dígitos formatados).
-4. Destinatário / Tomador (razão social e CNPJ/CPF se houver).
-5. Data de emissão (AAAA-MM-DD).
-6. Número do documento (NF-e nº, Cupom nº, Extrato nº) e série se constar.
-7. Chave de acesso de 44 dígitos (leia com extrema atenção no cabeçalho ou rodapé do documento).
-8. Valor total da nota / valor pago (R$) e impostos destacados.
-9. Forma de pagamento sugerida (pix, boleto, cartao_credito, cartao_debito, dinheiro, ted_doc, outro).
-10. Descrição sucinta dos itens e lista detalhada se visível.
+        promptMessage = `Analise com extremo rigor óptico a foto/digitalização do comprovante ou documento fiscal anexado (${fileName}${contextoOtimizacao}).
 ${diretrizModoEssencial}
-11. Categoria AEROCAD (despesas_operacionais, terceirizados, impostos, equipamentos, folha, outros) e código do Plano de Contas (ex: 3.1.4 para alimentação/viagem, 3.1.5 para combustível/pedágio, 3.2.1 terceiros, 3.1.1 administrativo).
-Retorne EXCLUSIVAMENTE o JSON estruturado puro.`
+
+Retorne EXCLUSIVAMENTE o JSON estruturado puro, sem blocos de texto adicionais fora do JSON.`
       }
 
       let agentResult = null
@@ -467,8 +451,9 @@ Retorne EXCLUSIVAMENTE o JSON estruturado puro.`
           agentErr.message,
         )
         const systemPrompt = `Você é um auditor contábil e fiscal do CRM AEROCAD especializado em cupons fiscais (NFC-e, SAT), comprovantes PIX, recibos e notas fiscais.
-Priorize a extração dos 5 campos essenciais: data, valor total, forma de pagamento, estabelecimento e CNPJ. Se a leitura for parcial, ative modo_essencial=true.
-Analise a imagem/documento e retorne EXCLUSIVAMENTE um JSON puro:
+REGRA OBRIGATÓRIA: Leia linha a linha partindo do cabeçalho até o rodapé.
+NUNCA omita "fornecedor" (razão social/nome do estabelecimento no cabeçalho) e "valor_total" (no rodapé/totais).
+Retorne EXCLUSIVAMENTE um JSON puro estruturado com:
 {
   "sucesso": true,
   "modo_essencial": false,
@@ -483,11 +468,11 @@ Analise a imagem/documento e retorne EXCLUSIVAMENTE um JSON puro:
   "categoria_sugerida": "despesas_operacionais",
   "plano_contas_codigo": "3.1.5",
   "plano_contas_nome": "Combustível, Pedágios e Locação de Veículos",
-  "descricao_itens": "Resumo claro dos itens (ex: Abastecimento Gasolina Comum)",
-  "observacoes": "Chave de acesso se houver ou detalhes adicionais",
+  "descricao_itens": "Resumo dos itens principais",
+  "observacoes": "Chave de acesso se houver",
   "confianca": "alta"
 }
-Se os dados não puderem ser identificados de forma alguma, defina sucesso=false, fornecedor="", valor_total=0 e erro="Não foi possível ler o documento — aproxime a câmera, garanta boa iluminação ou anexe o PDF".`
+Se campos secundários estiverem borrados, defina-os como null ou string vazia mas NUNCA omita fornecedor, data e valor_total. Se a leitura for parcial, ative modo_essencial=true.`
 
         const fallbackReply = $ai.chat({
           model: 'fast',
@@ -511,6 +496,72 @@ Se os dados não puderem ser identificados de forma alguma, defina sucesso=false
           } catch (parseErr) {
             console.log('Falha ao parsear JSON retornado pelo agente:', parseErr.message)
           }
+        }
+      }
+
+      // Segunda passada com $ai.chat focada em Cabeçalho e Rodapé se fornecedor ou valor vierem vazios
+      if (
+        extractedData &&
+        extractedData.sucesso !== false &&
+        (!extractedData.fornecedor || !extractedData.valor_total || extractedData.valor_total === 0)
+      ) {
+        try {
+          const promptPassadaFoco = `ATENÇÃO: A leitura anterior do documento (${fileName}) deixou em branco o estabelecimento ou o valor total.
+Concentre-se com máxima atenção em DUAS partes essenciais:
+1. CABEÇALHO (primeiras linhas no topo): Nome fantasia ou Razão Social da empresa e CNPJ emitente.
+2. RODAPÉ/TOTAIS (linhas inferiores): Campo TOTAL R$, VALOR A PAGAR ou VALOR PAGO.
+3. FORMA DE PAGAMENTO: PIX, Cartão Débito/Crédito, Dinheiro.
+${rawContent ? 'Conteúdo:\n' + rawContent.slice(0, 3000) : ''}
+Retorne EXCLUSIVAMENTE o JSON estruturado puro com fornecedor, cnpj_cpf, valor_total, data_emissao e forma_pagamento_sugerida.`
+
+          const rescateReply = $ai.chat({
+            model: 'fast',
+            messages: [
+              {
+                role: 'system',
+                content:
+                  'Você é o especialista de resgate de dados essenciais em cabeçalhos e rodapés de notas e cupons. Retorne JSON puro.',
+              },
+              { role: 'user', content: promptPassadaFoco },
+            ],
+          })
+
+          if (rescateReply && rescateReply.choices && rescateReply.choices[0]) {
+            const rescateText = rescateReply.choices[0].message.content.trim()
+            const matchRescate = rescateText.match(/\{[\s\S]*\}/)
+            if (matchRescate) {
+              const dadosResgate = JSON.parse(matchRescate[0])
+              if (dadosResgate) {
+                if (!extractedData.fornecedor && dadosResgate.fornecedor) {
+                  extractedData.fornecedor = dadosResgate.fornecedor
+                }
+                if (
+                  (!extractedData.valor_total || extractedData.valor_total === 0) &&
+                  dadosResgate.valor_total
+                ) {
+                  extractedData.valor_total = Number(dadosResgate.valor_total) || 0
+                }
+                if (!extractedData.cnpj_cpf && dadosResgate.cnpj_cpf) {
+                  extractedData.cnpj_cpf = dadosResgate.cnpj_cpf
+                }
+                if (!extractedData.data_emissao && dadosResgate.data_emissao) {
+                  extractedData.data_emissao = dadosResgate.data_emissao
+                }
+                if (
+                  (!extractedData.forma_pagamento_sugerida ||
+                    extractedData.forma_pagamento_sugerida === 'outro') &&
+                  dadosResgate.forma_pagamento_sugerida
+                ) {
+                  extractedData.forma_pagamento_sugerida = dadosResgate.forma_pagamento_sugerida
+                }
+                extractedData.modo_essencial = true
+                extractedData.aviso_modo_essencial =
+                  'Leitura parcial — dados essenciais extraídos, confira e complete o restante'
+              }
+            }
+          }
+        } catch (resgateErr) {
+          console.log('Segunda passada de foco falhou:', resgateErr.message)
         }
       }
 
@@ -567,13 +618,13 @@ Se os dados não puderem ser identificados de forma alguma, defina sucesso=false
         }
       }
 
-      // Checa se caiu em Modo Essencial: quando tem os 5 campos vitais mas faltou dados acessórios
-      const temCamposEssenciais =
-        Boolean(extractedData.fornecedor || extractedData.cnpj_cpf) &&
+      // Checa se caiu em Modo Essencial: quando tem campos vitais mas faltou dados acessórios,
+      // ou se veio qualquer dado vital legível (estabelecimento, valor ou data)
+      const temPeloMenosUmVital =
+        Boolean(extractedData.fornecedor || extractedData.cnpj_cpf) ||
         (typeof extractedData.valor_total === 'number'
           ? extractedData.valor_total > 0
-          : Boolean(extractedData.valor_total)) &&
-        Boolean(extractedData.data_emissao)
+          : Boolean(extractedData.valor_total))
 
       const faltaDadosAcessorios =
         !extractedData.numero_documento ||
@@ -581,10 +632,11 @@ Se os dados não puderem ser identificados de forma alguma, defina sucesso=false
         !extractedData.itens_detalhados ||
         extractedData.itens_detalhados.length === 0
 
-      if (extractedData.sucesso !== false && temCamposEssenciais && faltaDadosAcessorios) {
-        if (extractedData.modo_essencial === undefined) {
-          extractedData.modo_essencial = true
-        }
+      if (
+        extractedData.sucesso !== false &&
+        (extractedData.modo_essencial || (temPeloMenosUmVital && faltaDadosAcessorios))
+      ) {
+        extractedData.modo_essencial = true
         extractedData.aviso_modo_essencial =
           'Leitura parcial — dados essenciais extraídos, confira e complete o restante'
       }
