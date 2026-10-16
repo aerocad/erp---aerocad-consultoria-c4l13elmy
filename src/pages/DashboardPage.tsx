@@ -33,6 +33,7 @@ import {
 } from '@/lib/format'
 import { montarSaudacao } from '@/lib/saudacao'
 import { AlertasWidget } from '@/components/common/AlertasWidget'
+import { AssistenteSecaoDrawer } from '@/components/chat/AssistenteSecaoDrawer'
 import type {
   AtividadeRecord,
   ExigenciaRecord,
@@ -41,6 +42,13 @@ import type {
   ParcelaRecord,
   ProjetoRecord,
 } from '@/types/crm'
+
+const SUGESTOES_PAINEL = [
+  'Qual o resumo geral dos KPIs e oportunidades abertas hoje?',
+  'Quantas exigências regulatórias estão vencendo nos próximos 7 dias?',
+  'Quais parcelas financeiras têm vencimento previsto para este mês?',
+  'Quantos projetos ativos temos por trilha (OPEA vs Registro)?',
+]
 
 export default function DashboardPage() {
   const { ocultarValores } = useFinanceiroVisibilidade()
@@ -583,6 +591,19 @@ export default function DashboardPage() {
           </div>
         </section>
       </div>
+
+      {/* Assistente de IA Nativo da Seção Painel */}
+      <AssistenteSecaoDrawer
+        agentSlug="assistente-painel"
+        titulo="Assistente do Painel"
+        subtitulo="Visão geral executiva, KPIs e prazos em tempo real"
+        secaoNome="Painel Executivo"
+        areaPermissao="painel"
+        sugestoes={SUGESTOES_PAINEL}
+        placeholder="Pergunte sobre KPIs, exigências, oportunidades ou projetos..."
+        descricaoModo="consulta indicadores, prazos e contagens consolidadas do CRM em tempo real."
+        floatingButtonLabel="Assistente do Painel"
+      />
     </div>
   )
 }

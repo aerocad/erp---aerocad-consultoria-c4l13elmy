@@ -6,6 +6,7 @@ import { CrmBadge } from '@/components/common/CrmBadge'
 import { EmptyState, ErrorState, PageLoading } from '@/components/common/States'
 import { SectionHeader } from '@/components/common/SectionHeader'
 import { ClienteDialog } from '@/components/forms/ClienteDialog'
+import { AssistenteSecaoDrawer } from '@/components/chat/AssistenteSecaoDrawer'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -18,6 +19,13 @@ import {
 import { useAuth } from '@/contexts/AuthContext'
 import { useCrmData } from '@/hooks/use-crm-data'
 import type { ClienteRecord, ProjetoRecord } from '@/types/crm'
+
+const SUGESTOES_CLIENTES = [
+  'Quais clientes possuem maior número de projetos ativos?',
+  'Quais clientes foram cadastrados recentemente na base?',
+  'Como buscar contatos e decisores de um cliente específico?',
+  'Quantos clientes estão categorizados como PF vs PJ?',
+]
 
 export default function ClientsPage() {
   const { user } = useAuth()
@@ -221,6 +229,19 @@ export default function ClientsPage() {
           }
         }}
         onSaved={() => void clients.reload()}
+      />
+
+      {/* Assistente de IA Nativo da Seção Clientes */}
+      <AssistenteSecaoDrawer
+        agentSlug="assistente-clientes"
+        titulo="Assistente de Clientes"
+        subtitulo="Base cadastral, contatos, empreendimentos e histórico"
+        secaoNome="Clientes"
+        areaPermissao="clientes"
+        sugestoes={SUGESTOES_CLIENTES}
+        placeholder="Pergunte sobre clientes, contatos, empreendimentos ou histórico..."
+        descricaoModo="consulta dados cadastrais, histórico e empreendimentos em tempo real."
+        floatingButtonLabel="Assistente de Clientes"
       />
     </div>
   )

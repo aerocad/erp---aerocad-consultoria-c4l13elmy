@@ -6,6 +6,7 @@ import { CrmBadge } from '@/components/common/CrmBadge'
 import { EmptyState, ErrorState, PageLoading } from '@/components/common/States'
 import { SectionHeader } from '@/components/common/SectionHeader'
 import { ProcessDialog } from '@/components/forms/ProcessDialog'
+import { AssistenteSecaoDrawer } from '@/components/chat/AssistenteSecaoDrawer'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -20,6 +21,13 @@ import { useCrmData } from '@/hooks/use-crm-data'
 import { processOrgaoList, processStatusLabels } from '@/lib/crm'
 import { formatDate } from '@/lib/format'
 import type { ProcessoRecord } from '@/types/crm'
+
+const SUGESTOES_PROCESSOS = [
+  'Quais exigências regulatórias estão pendentes ou com prazo crítico?',
+  'Quais processos estão em análise no DECEA / CINDACTA?',
+  'Quais processos tiveram parecer favorável ou deferimento recente?',
+  'Quantos processos estão pendentes de protocolo nos órgãos?',
+]
 
 export default function ProcessesPage() {
   const { user } = useAuth()
@@ -199,6 +207,19 @@ export default function ProcessesPage() {
           }
         }}
         onSaved={(record) => navigate(`/processos/${record.id}`)}
+      />
+
+      {/* Assistente de IA Nativo da Seção Processos */}
+      <AssistenteSecaoDrawer
+        agentSlug="assistente-processos"
+        titulo="Assistente de Processos"
+        subtitulo="Regulação, protocolos nos órgãos, exigências e prazos"
+        secaoNome="Processos Regulatórios"
+        areaPermissao="processos"
+        sugestoes={SUGESTOES_PROCESSOS}
+        placeholder="Pergunte sobre protocolos, DECEA, ANAC, prazos ou exigências..."
+        descricaoModo="consulta processos regulatórios e exigências em tempo real."
+        floatingButtonLabel="Assistente de Processos"
       />
     </div>
   )

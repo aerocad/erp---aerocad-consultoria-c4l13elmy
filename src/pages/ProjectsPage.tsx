@@ -27,6 +27,7 @@ import { ArquivarProjetoModal } from '@/components/projetos/ArquivarProjetoModal
 import { EditarNomeProjetoModal } from '@/components/projetos/EditarNomeProjetoModal'
 import { EditarProjetoModal } from '@/components/projetos/EditarProjetoModal'
 import { ProjetoDialog } from '@/components/forms/ProjetoDialog'
+import { AssistenteSecaoDrawer } from '@/components/chat/AssistenteSecaoDrawer'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
@@ -53,6 +54,13 @@ import {
   getStatusFinanceiroBadgeConfig,
 } from '@/services/projetoFinanceiroInferidor'
 import type { ColaboradorRecord, ParcelaRecord, ProjetoRecord } from '@/types/crm'
+
+const SUGESTOES_PROJETOS = [
+  'Quais projetos estão com entregas previstas para este mês?',
+  'Como está a distribuição de projetos entre OPEA, Registro e Demais?',
+  'Quais projetos possuem pendência com órgãos reguladores?',
+  'Quais projetos estão com status ativo sob coordenação técnica?',
+]
 
 export default function ProjectsPage() {
   const { user } = useAuth()
@@ -1152,6 +1160,19 @@ export default function ProjectsPage() {
         onConverted={() => {
           void projects.reload()
         }}
+      />
+
+      {/* Assistente de IA Nativo da Seção Projetos */}
+      <AssistenteSecaoDrawer
+        agentSlug="assistente-projetos"
+        titulo="Assistente de Projetos"
+        subtitulo="Gestão técnica de projetos, cronogramas e equipe AEROCAD"
+        secaoNome="Projetos"
+        areaPermissao="projetos"
+        sugestoes={SUGESTOES_PROJETOS}
+        placeholder="Pergunte sobre projetos AAAA-NNN, trilhas, entregas ou equipe..."
+        descricaoModo="consulta projetos, cronogramas e ordens de serviço em tempo real."
+        floatingButtonLabel="Assistente de Projetos"
       />
     </div>
   )

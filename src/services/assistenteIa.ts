@@ -15,10 +15,20 @@ export interface AgentContextRecord {
   dados?: Record<string, unknown>
 }
 
+export type CrmAgentSlug =
+  | 'assistente-aerocad'
+  | 'assistente-financeiro'
+  | 'assistente-painel'
+  | 'assistente-funil'
+  | 'assistente-clientes'
+  | 'assistente-projetos'
+  | 'assistente-processos'
+  | 'assistente-documentos'
+
 export interface SendAgentMessageOptions {
   message: string
   conversationId?: string | null
-  agentSlug?: 'assistente-aerocad' | 'assistente-financeiro'
+  agentSlug?: CrmAgentSlug
   contextRecord?: AgentContextRecord | null
   onChunk?: (delta: string, accumulated: string) => void
   onToolCallStart?: (info: { id: string; name: string }) => void
@@ -107,7 +117,7 @@ export async function sendAgentMessage(options: SendAgentMessageOptions) {
  * Carrega a lista de conversas do usuário com o assistente
  */
 export async function listAgentConversations(
-  agentSlug: 'assistente-aerocad' | 'assistente-financeiro' = 'assistente-aerocad',
+  agentSlug: CrmAgentSlug = 'assistente-aerocad',
 ): Promise<AgentConversationItem[]> {
   const baseUrl = import.meta.env.VITE_POCKETBASE_URL
   const res = await fetch(
@@ -133,7 +143,7 @@ export async function listAgentConversations(
  */
 export async function loadConversationMessages(
   conversationId: string,
-  agentSlug: 'assistente-aerocad' | 'assistente-financeiro' = 'assistente-aerocad',
+  agentSlug: CrmAgentSlug = 'assistente-aerocad',
 ): Promise<DisplayMessage[]> {
   const baseUrl = import.meta.env.VITE_POCKETBASE_URL
   const res = await fetch(

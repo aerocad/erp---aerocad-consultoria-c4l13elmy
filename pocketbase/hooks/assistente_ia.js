@@ -1,8 +1,19 @@
 /// <reference path="../pb_data/types.d.ts" />
 
 /**
- * Endpoints HTTP para o Assistente IA Nativo da AEROCAD
- * Usa a API nativa $ai.agent("assistente-aerocad") com SSE streaming, histórico e persistência.
+ * Endpoints HTTP para os Assistentes IA Nativos da AEROCAD
+ * Suporta os agentes nativos por seção de navegação e específicos:
+ * - assistente-aerocad (Assistente geral / documentos)
+ * - assistente-financeiro (Financeiro)
+ * - assistente-painel (Painel executivo)
+ * - assistente-funil (Funil comercial)
+ * - assistente-clientes (Clientes)
+ * - assistente-projetos (Projetos)
+ * - assistente-processos (Processos)
+ * - assistente-documentos (Documentos)
+ *
+ * Atenção: PocketBase JSVM executa callbacks em pools isoladas — funções auxiliares
+ * devem ser inline dentro de cada callback de rota para evitar erros de escopo.
  */
 
 // 1. Endpoint de Chat Streaming (SSE)
@@ -20,16 +31,46 @@ routerAdd(
 
       const conversationId = body.conversation_id || null
 
-      // Obter ou criar a conversa garantindo persistência e ID antes do stream
-      const agentSlug =
-        body.agent_slug === 'assistente-financeiro' ? 'assistente-financeiro' : 'assistente-aerocad'
+      const allowedAgents = [
+        'assistente-aerocad',
+        'assistente-financeiro',
+        'assistente-painel',
+        'assistente-funil',
+        'assistente-clientes',
+        'assistente-projetos',
+        'assistente-processos',
+        'assistente-documentos',
+      ]
 
-      // Se for assistente financeiro, checa permissão de role (admin ou financeiro)
-      if (agentSlug === 'assistente-financeiro') {
-        const userRole = e.auth?.getString('role')
-        if (userRole !== 'admin' && userRole !== 'financeiro') {
-          return e.forbiddenError('Acesso restrito ao assistente financeiro')
-        }
+      let agentSlug = 'assistente-aerocad'
+      if (allowedAgents.includes(body.agent_slug)) {
+        agentSlug = body.agent_slug
+      }
+
+      const userRole = e.auth?.getString('role') || 'comercial'
+      let isPermitido = true
+
+      if (userRole === 'admin') {
+        isPermitido = true
+      } else if (userRole === 'terceiro') {
+        isPermitido = false
+      } else if (agentSlug === 'assistente-financeiro') {
+        isPermitido = userRole === 'financeiro'
+      } else if (agentSlug === 'assistente-funil') {
+        isPermitido = userRole === 'comercial'
+      } else if (agentSlug === 'assistente-clientes') {
+        isPermitido = userRole === 'comercial' || userRole === 'financeiro'
+      } else if (agentSlug === 'assistente-projetos') {
+        isPermitido =
+          userRole === 'comercial' || userRole === 'tecnico' || userRole === 'financeiro'
+      } else if (agentSlug === 'assistente-processos') {
+        isPermitido = userRole === 'comercial' || userRole === 'tecnico'
+      } else if (agentSlug === 'assistente-documentos') {
+        isPermitido = userRole === 'comercial' || userRole === 'tecnico'
+      }
+
+      if (!isPermitido) {
+        return e.forbiddenError('Seu perfil não tem permissão para acessar este assistente.')
       }
 
       // Obter ou criar a conversa garantindo persistência e ID antes do stream
@@ -86,14 +127,46 @@ routerAdd(
       const message = body.message?.trim()
       if (!message) return e.badRequestError('A mensagem é obrigatória')
 
-      const agentSlug =
-        body.agent_slug === 'assistente-financeiro' ? 'assistente-financeiro' : 'assistente-aerocad'
+      const allowedAgents = [
+        'assistente-aerocad',
+        'assistente-financeiro',
+        'assistente-painel',
+        'assistente-funil',
+        'assistente-clientes',
+        'assistente-projetos',
+        'assistente-processos',
+        'assistente-documentos',
+      ]
 
-      if (agentSlug === 'assistente-financeiro') {
-        const userRole = e.auth?.getString('role')
-        if (userRole !== 'admin' && userRole !== 'financeiro') {
-          return e.forbiddenError('Acesso restrito ao assistente financeiro')
-        }
+      let agentSlug = 'assistente-aerocad'
+      if (allowedAgents.includes(body.agent_slug)) {
+        agentSlug = body.agent_slug
+      }
+
+      const userRole = e.auth?.getString('role') || 'comercial'
+      let isPermitido = true
+
+      if (userRole === 'admin') {
+        isPermitido = true
+      } else if (userRole === 'terceiro') {
+        isPermitido = false
+      } else if (agentSlug === 'assistente-financeiro') {
+        isPermitido = userRole === 'financeiro'
+      } else if (agentSlug === 'assistente-funil') {
+        isPermitido = userRole === 'comercial'
+      } else if (agentSlug === 'assistente-clientes') {
+        isPermitido = userRole === 'comercial' || userRole === 'financeiro'
+      } else if (agentSlug === 'assistente-projetos') {
+        isPermitido =
+          userRole === 'comercial' || userRole === 'tecnico' || userRole === 'financeiro'
+      } else if (agentSlug === 'assistente-processos') {
+        isPermitido = userRole === 'comercial' || userRole === 'tecnico'
+      } else if (agentSlug === 'assistente-documentos') {
+        isPermitido = userRole === 'comercial' || userRole === 'tecnico'
+      }
+
+      if (!isPermitido) {
+        return e.forbiddenError('Seu perfil não tem permissão para acessar este assistente.')
       }
 
       const result = $ai.agent(agentSlug).chat({
@@ -135,16 +208,48 @@ routerAdd(
       const userId = e.auth?.id
       if (!userId) return e.unauthorizedError('Autenticação necessária')
       const limit = parseInt(e.requestInfo().query?.limit || '30', 10) || 30
-      const agentSlug =
-        e.requestInfo().query?.agent_slug === 'assistente-financeiro'
-          ? 'assistente-financeiro'
-          : 'assistente-aerocad'
 
-      if (agentSlug === 'assistente-financeiro') {
-        const userRole = e.auth?.getString('role')
-        if (userRole !== 'admin' && userRole !== 'financeiro') {
-          return e.forbiddenError('Acesso restrito ao assistente financeiro')
-        }
+      const allowedAgents = [
+        'assistente-aerocad',
+        'assistente-financeiro',
+        'assistente-painel',
+        'assistente-funil',
+        'assistente-clientes',
+        'assistente-projetos',
+        'assistente-processos',
+        'assistente-documentos',
+      ]
+
+      const reqSlug = e.requestInfo().query?.agent_slug
+      let agentSlug = 'assistente-aerocad'
+      if (allowedAgents.includes(reqSlug)) {
+        agentSlug = reqSlug
+      }
+
+      const userRole = e.auth?.getString('role') || 'comercial'
+      let isPermitido = true
+
+      if (userRole === 'admin') {
+        isPermitido = true
+      } else if (userRole === 'terceiro') {
+        isPermitido = false
+      } else if (agentSlug === 'assistente-financeiro') {
+        isPermitido = userRole === 'financeiro'
+      } else if (agentSlug === 'assistente-funil') {
+        isPermitido = userRole === 'comercial'
+      } else if (agentSlug === 'assistente-clientes') {
+        isPermitido = userRole === 'comercial' || userRole === 'financeiro'
+      } else if (agentSlug === 'assistente-projetos') {
+        isPermitido =
+          userRole === 'comercial' || userRole === 'tecnico' || userRole === 'financeiro'
+      } else if (agentSlug === 'assistente-processos') {
+        isPermitido = userRole === 'comercial' || userRole === 'tecnico'
+      } else if (agentSlug === 'assistente-documentos') {
+        isPermitido = userRole === 'comercial' || userRole === 'tecnico'
+      }
+
+      if (!isPermitido) {
+        return e.forbiddenError('Seu perfil não tem permissão para acessar este assistente.')
       }
 
       return e.json(200, $ai.agent(agentSlug).listConversations({ user_id: userId, limit }))
@@ -167,10 +272,49 @@ routerAdd(
       const userId = e.auth?.id
       if (!userId) return e.unauthorizedError('Autenticação necessária')
       const conversationId = e.request.pathValue('id')
-      const agentSlug =
-        e.requestInfo().query?.agent_slug === 'assistente-financeiro'
-          ? 'assistente-financeiro'
-          : 'assistente-aerocad'
+
+      const allowedAgents = [
+        'assistente-aerocad',
+        'assistente-financeiro',
+        'assistente-painel',
+        'assistente-funil',
+        'assistente-clientes',
+        'assistente-projetos',
+        'assistente-processos',
+        'assistente-documentos',
+      ]
+
+      const reqSlug = e.requestInfo().query?.agent_slug
+      let agentSlug = 'assistente-aerocad'
+      if (allowedAgents.includes(reqSlug)) {
+        agentSlug = reqSlug
+      }
+
+      const userRole = e.auth?.getString('role') || 'comercial'
+      let isPermitido = true
+
+      if (userRole === 'admin') {
+        isPermitido = true
+      } else if (userRole === 'terceiro') {
+        isPermitido = false
+      } else if (agentSlug === 'assistente-financeiro') {
+        isPermitido = userRole === 'financeiro'
+      } else if (agentSlug === 'assistente-funil') {
+        isPermitido = userRole === 'comercial'
+      } else if (agentSlug === 'assistente-clientes') {
+        isPermitido = userRole === 'comercial' || userRole === 'financeiro'
+      } else if (agentSlug === 'assistente-projetos') {
+        isPermitido =
+          userRole === 'comercial' || userRole === 'tecnico' || userRole === 'financeiro'
+      } else if (agentSlug === 'assistente-processos') {
+        isPermitido = userRole === 'comercial' || userRole === 'tecnico'
+      } else if (agentSlug === 'assistente-documentos') {
+        isPermitido = userRole === 'comercial' || userRole === 'tecnico'
+      }
+
+      if (!isPermitido) {
+        return e.forbiddenError('Seu perfil não tem permissão para acessar este assistente.')
+      }
 
       return e.json(
         200,

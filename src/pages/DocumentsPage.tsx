@@ -30,6 +30,7 @@ import { CrmBadge } from '@/components/common/CrmBadge'
 import { EmptyState, ErrorState, PageLoading } from '@/components/common/States'
 import { SectionHeader } from '@/components/common/SectionHeader'
 import { AnexoDialog } from '@/components/forms/AnexoDialog'
+import { AssistenteSecaoDrawer } from '@/components/chat/AssistenteSecaoDrawer'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -60,6 +61,13 @@ import {
 import { isTecnicoAllowedExtension } from '@/lib/crm'
 import { ANEXO_CATEGORIAS } from '@/services/anexos'
 import type { AnexoRecord, DocumentoRecord, OrdemServicoRecord, ProjetoRecord } from '@/types/crm'
+
+const SUGESTOES_DOCUMENTOS = [
+  'Quais modelos de propostas comerciais (PC) e técnicas (PT) estão disponíveis?',
+  'Qual a convenção oficial de nomenclatura de arquivos da AEROCAD?',
+  'Como funcionam as cláusulas gerais padrão de contratos da consultoria?',
+  'Quais documentos gerados recentemente estão aguardando assinatura?',
+]
 
 export default function DocumentsPage() {
   const { user } = useAuth()
@@ -982,6 +990,19 @@ export default function DocumentsPage() {
         open={anexoDialogOpen}
         onOpenChange={setAnexoDialogOpen}
         onSuccess={() => void anexosData.reload()}
+      />
+
+      {/* Assistente de IA Nativo da Seção Documentos */}
+      <AssistenteSecaoDrawer
+        agentSlug="assistente-documentos"
+        titulo="Assistente de Documentos"
+        subtitulo="Modelos oficiais, minutas técnicas e convenções da AEROCAD"
+        secaoNome="Documentos & Minutas"
+        areaPermissao="documentos"
+        sugestoes={SUGESTOES_DOCUMENTOS}
+        placeholder="Pergunte sobre modelos, minutas, numeração PC/PT ou revisões..."
+        descricaoModo="consulta o catálogo de modelos e documentos gerados em tempo real."
+        floatingButtonLabel="Assistente de Documentos"
       />
     </div>
   )

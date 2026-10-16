@@ -28,6 +28,7 @@ import { CrmBadge } from '@/components/common/CrmBadge'
 import { EmptyState, ErrorState, PageLoading } from '@/components/common/States'
 import { SectionHeader } from '@/components/common/SectionHeader'
 import { OportunidadeDialog } from '@/components/forms/OportunidadeDialog'
+import { AssistenteSecaoDrawer } from '@/components/chat/AssistenteSecaoDrawer'
 import { ProjetoDialog } from '@/components/forms/ProjetoDialog'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
@@ -64,6 +65,13 @@ import { createOne, updateOne } from '@/services/api'
 import type { OportunidadeRecord, ProjetoRecord } from '@/types/crm'
 
 const stages = Object.keys(stageLabels) as Array<keyof typeof stageLabels>
+
+const SUGESTOES_FUNIL = [
+  'Quais oportunidades estão na etapa Proposta enviada?',
+  'Qual o valor total de oportunidades em negociação?',
+  'Quais oportunidades de alta probabilidade aguardam retorno?',
+  'Quais os principais motivos de perda registrados recentemente?',
+]
 
 export default function FunnelPage() {
   const { ocultarValores } = useFinanceiroVisibilidade()
@@ -760,6 +768,19 @@ export default function FunnelPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Assistente de IA Nativo da Seção Funil */}
+      <AssistenteSecaoDrawer
+        agentSlug="assistente-funil"
+        titulo="Assistente do Funil"
+        subtitulo="Pipeline comercial, kanban e propostas em tempo real"
+        secaoNome="Funil Comercial"
+        areaPermissao="funil"
+        sugestoes={SUGESTOES_FUNIL}
+        placeholder="Pergunte sobre etapas do funil, valores ou oportunidades..."
+        descricaoModo="consulta o pipeline comercial e propostas em tempo real sem alterar status."
+        floatingButtonLabel="Assistente do Funil"
+      />
     </div>
   )
 }
