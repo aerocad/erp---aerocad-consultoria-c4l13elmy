@@ -20,6 +20,9 @@ import {
 } from 'lucide-react'
 import { CapturaBoletoModal } from '@/components/financeiro/CapturaBoletoModal'
 import { CapturaComprovanteModal } from '@/components/financeiro/CapturaComprovanteModal'
+import { SalvarCredorComprovanteModal } from '@/components/financeiro/SalvarCredorComprovanteModal'
+import { VincularCredoresLoteModal } from '@/components/financeiro/VincularCredoresLoteModal'
+import { extrairDadosEstabelecimentoConta } from '@/services/credorComprovanteMatcher'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { PLANO_CONTAS_AEROCAD, sugerirPlanoContasPorCategoria } from '@/lib/planoContas'
 import { Link } from 'react-router-dom'
@@ -126,6 +129,9 @@ export function ContasPagarTab({
   const isMobile = useIsMobile()
   const [modalBoletoAberto, setModalBoletoAberto] = useState(false)
   const [modalComprovanteFiscalAberto, setModalComprovanteFiscalAberto] = useState(false)
+  const [modalSalvarCredorAberto, setModalSalvarCredorAberto] = useState(false)
+  const [modalLoteCredoresAberto, setModalLoteCredoresAberto] = useState(false)
+  const [contaParaCredor, setContaParaCredor] = useState<ContaPagarRecord | null>(null)
   const [contaParaRevisao, setContaParaRevisao] = useState<ContaPagarRecord | null>(null)
   const [contasBancarias, setContasBancarias] = useState<ContaBancariaRecord[]>([])
   const [filtroContaBancaria, setFiltroContaBancaria] = useState<string>('todos')
@@ -243,6 +249,19 @@ export function ContasPagarTab({
     filtroStatus,
     filtroContaBancaria,
   ])
+
+  // Contas com comprovante sem credor vinculado
+  const contasSemCredorComComprovante = useMemo(() => {
+    return contas.filter((c) => {
+      const semCredor = !c.credor && !c.expand?.credor
+      const temComprovante = Boolean(
+        (Array.isArray(c.comprovante) && c.comprovante.length > 0) ||
+        (typeof c.comprovante === 'string' && c.comprovante.trim().length > 0) ||
+        (Array.isArray(c.comprovantes_metadados) && c.comprovantes_metadados.length > 0),
+      )
+      return semCredor && temComprovante
+    })
+  }, [contas])
 
   // Totalizadores
   const totalGeral = contasFiltradas.reduce((acc, c) => acc + c.valor, 0)
@@ -630,15 +649,26 @@ export function ContasPagarTab({
               <Button
                 type="button"
                 onClick={() => setModalBoletoAberto(true)}
-                className="bg-amber-600 hover:bg-amber-700 text-white h-9 text-xs shrink-0"
+                className="bg-amber-600 hover:bg-amber-700 text-white h-9 text-xs shrink-0 font-semibold"
                 title="Ler boleto em PDF ou foto via IA"
               >
                 <Barcode className="mr-1.5 h-4 w-4" />
                 Extrair Boleto (IA)
               </Button>
+              {contasSemCredorComComprovante.length > 0 && (
+                <Button
+                  type="button"
+                  onClick={() => setModalLoteCredoresAberto(true)}
+                  className="bg-amber-500 hover:bg-amber-600 text-white h-9 text-xs shrink-0 font-semibold"
+                  title="Identificar e vincular/cadastrar credores a partir dos comprovantes salvos em lote"
+                >
+                  <Building2 className="mr-1.5 h-4 w-4" />
+                  Regularizar Credores ({contasSemCredorComComprovante.length})
+                </Button>
+              )}
               <Button
                 onClick={abrirModalCriacao}
-                className="bg-[#FF6A13] hover:bg-[#E85B06] text-white h-9 text-xs shrink-0"
+                className="bg-[#FF6A13] hover:bg-[#E85B06] text-white h-9 text-xs shrink-0 font-semibold"
               >
                 <Plus className="mr-1.5 h-4 w-4" />
                 Nova Conta a Pagar
@@ -746,7 +776,31 @@ export function ContasPagarTab({
                             )}
                           </div>
                         ) : (
-                          <span className="text-[11px] text-neutral-400 italic">Não vinculado</span>
+                          <div className="space-y-1">
+                            <span className="text-[11px] text-neutral-400 italic block">
+                              Não vinculado
+                            </span>
+                            {/* Ação rápida para salvar como credor direto da coluna caso tenha comprovante */}
+                            {canWrite &&
+                              Boolean(
+                                conta.comprovante ||
+                                (Array.isArray(conta.comprovantes_metadados) &&
+                                  conta.comprovantes_metadados.length > 0),
+                              ) && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setContaParaCredor(conta)
+                                    setModalSalvarCredorAberto(true)
+                                  }}
+                                  className="inline-flex items-center gap-1 text-[10px] font-semibold text-[#FF6A13] hover:text-[#D65100] hover:underline"
+                                  title="Criar ou vincular credor a partir dos dados do comprovante"
+                                >
+                                  <Building2 className="h-2.5 w-2.5" />
+                                  Salvar como credor
+                                </button>
+                              )}
+                          </div>
                         )}
                       </td>
 
@@ -850,6 +904,29 @@ export function ContasPagarTab({
                                 </Button>
                               )}
 
+                              {/* AÇÃO CRIAR CREDOR DO COMPROVANTE (quando não tem credor vinculado) */}
+                              {!conta.credor &&
+                                !conta.expand?.credor &&
+                                Boolean(
+                                  conta.comprovante ||
+                                  (Array.isArray(conta.comprovantes_metadados) &&
+                                    conta.comprovantes_metadados.length > 0),
+                                ) && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => {
+                                      setContaParaCredor(conta)
+                                      setModalSalvarCredorAberto(true)
+                                    }}
+                                    className="h-7 px-2 text-xs border-orange-400 bg-orange-50/50 text-[#D65100] hover:bg-orange-100 font-semibold shadow-sm"
+                                    title="Salvar empresa identificada no comprovante como credor oficial"
+                                  >
+                                    <Building2 className="mr-1 h-3 w-3 text-[#FF6A13]" />
+                                    Salvar como credor
+                                  </Button>
+                                )}
+
                               {/* AÇÃO REVISAR LEITURA / CORRIGIR VALORES COM FOTO LADO A LADO */}
                               {Boolean(
                                 conta.comprovante ||
@@ -867,14 +944,13 @@ export function ContasPagarTab({
                                       setModalComprovanteFiscalAberto(true)
                                     }
                                   }}
-                                  className="h-7 px-2 text-xs border-orange-300 text-[#FF6A13] hover:bg-orange-50 font-semibold shadow-sm"
+                                  className="h-7 px-2 text-xs border-neutral-300 text-neutral-700 hover:bg-neutral-100 font-semibold shadow-sm"
                                   title="Reabrir foto original e corrigir valores manualmente"
                                 >
-                                  <Sparkles className="mr-1 h-3 w-3" />
+                                  <Sparkles className="mr-1 h-3 w-3 text-[#FF6A13]" />
                                   Revisar leitura
                                 </Button>
                               )}
-
                               <Button
                                 size="sm"
                                 variant="ghost"
@@ -938,9 +1014,30 @@ export function ContasPagarTab({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <Label className="text-[11px] text-neutral-700 font-semibold">
-                    Selecionar do Cadastro de Credores
-                  </Label>
+                  <div className="flex items-center justify-between">
+                    <Label className="text-[11px] text-neutral-700 font-semibold">
+                      Selecionar do Cadastro de Credores
+                    </Label>
+                    {editando &&
+                      !formData.credor &&
+                      Boolean(
+                        editando.comprovante ||
+                        (Array.isArray(editando.comprovantes_metadados) &&
+                          editando.comprovantes_metadados.length > 0),
+                      ) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setContaParaCredor(editando)
+                            setModalSalvarCredorAberto(true)
+                          }}
+                          className="text-[10px] text-[#FF6A13] hover:underline font-semibold flex items-center gap-1"
+                        >
+                          <Building2 className="h-3 w-3" />
+                          Salvar comprovante como credor
+                        </button>
+                      )}
+                  </div>
                   <Select
                     value={formData.credor || 'nenhum'}
                     onValueChange={(val) => {
@@ -1359,6 +1456,53 @@ export function ContasPagarTab({
         contaEdicao={contaParaRevisao}
         onSuccess={async () => {
           await onReload()
+        }}
+      />
+
+      {/* Modal Salvar como Credor a partir do comprovante salvo */}
+      <SalvarCredorComprovanteModal
+        open={modalSalvarCredorAberto}
+        onOpenChange={(aberto) => {
+          setModalSalvarCredorAberto(aberto)
+          if (!aberto) setContaParaCredor(null)
+        }}
+        conta={contaParaCredor}
+        credores={credores}
+        usuarioId={user?.id}
+        onSuccess={async (credorSalvo) => {
+          if (editando && contaParaCredor?.id === editando.id) {
+            setFormData((prev) => ({
+              ...prev,
+              credor: credorSalvo.id,
+              fornecedor: credorSalvo.nome_razao_social,
+              cnpj_cpf_beneficiario: credorSalvo.cnpj_cpf || prev.cnpj_cpf_beneficiario,
+            }))
+          }
+          await onReload()
+        }}
+        onAbrirRevisaoLeitura={(c) => {
+          setContaParaRevisao(c)
+          if (c.forma_pagamento === 'boleto') {
+            setModalBoletoAberto(true)
+          } else {
+            setModalComprovanteFiscalAberto(true)
+          }
+        }}
+      />
+
+      {/* Modal Regularizar Credores em Lote */}
+      <VincularCredoresLoteModal
+        open={modalLoteCredoresAberto}
+        onOpenChange={setModalLoteCredoresAberto}
+        contas={contas}
+        credores={credores}
+        usuarioId={user?.id}
+        onSuccess={async () => {
+          await onReload()
+        }}
+        onAbrirIndividual={(contaAlvo) => {
+          setContaParaCredor(contaAlvo)
+          setModalSalvarCredorAberto(true)
         }}
       />
     </div>

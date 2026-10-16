@@ -53,6 +53,8 @@ import {
   desativarCredor,
   ImpactoExclusaoCredor,
 } from '@/services/credores'
+import { SalvarCredorComprovanteModal } from '@/components/financeiro/SalvarCredorComprovanteModal'
+import { VincularCredoresLoteModal } from '@/components/financeiro/VincularCredoresLoteModal'
 
 interface CredoresTabProps {
   credores: CredorRecord[]
@@ -103,6 +105,12 @@ export function CredoresTab({
   const [modalHistoricoOpen, setModalHistoricoOpen] = useState(false)
   const [credorHistorico, setCredorHistorico] = useState<CredorRecord | null>(null)
 
+  // Modais de Criação a partir de Comprovantes e Lote
+  const [modalLoteOpen, setModalLoteOpen] = useState(false)
+  const [modalIndividualComprovanteOpen, setModalIndividualComprovanteOpen] = useState(false)
+  const [contaSelecionadaComprovante, setContaSelecionadaComprovante] =
+    useState<ContaPagarRecord | null>(null)
+
   // Modal de Exclusão com verificação de impacto
   const [modalExcluirOpen, setModalExcluirOpen] = useState(false)
   const [credorParaExcluir, setCredorParaExcluir] = useState<CredorRecord | null>(null)
@@ -121,6 +129,19 @@ export function CredoresTab({
       }
     }
     return mapa
+  }, [contasPagar])
+
+  // Contas com comprovante sem credor vinculado
+  const contasSemCredorComComprovante = useMemo(() => {
+    return contasPagar.filter((c) => {
+      const semCredor = !c.credor && !c.expand?.credor
+      const temComprovante = Boolean(
+        (Array.isArray(c.comprovante) && c.comprovante.length > 0) ||
+        (typeof c.comprovante === 'string' && c.comprovante.trim().length > 0) ||
+        (Array.isArray(c.comprovantes_metadados) && c.comprovantes_metadados.length > 0),
+      )
+      return semCredor && temComprovante
+    })
   }, [contasPagar])
 
   // Filtros
@@ -255,6 +276,40 @@ export function CredoresTab({
 
   return (
     <div className="space-y-4">
+      {/* Card de Alerta / Limpeza de Histórico: Contas com comprovante sem credor */}
+      {canWrite && contasSemCredorComComprovante.length > 0 && (
+        <div className="p-3.5 rounded-xl border border-amber-300 bg-gradient-to-r from-amber-50/90 to-orange-50/80 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-start gap-2.5">
+            <div className="p-1.5 rounded-lg bg-amber-100 text-[#FF6A13] shrink-0 mt-0.5">
+              <Building2 className="h-4 w-4" />
+            </div>
+            <div>
+              <div className="text-xs font-bold text-neutral-900 flex items-center gap-1.5">
+                <span>Comprovantes com empresas a cadastrar como credor</span>
+                <span className="text-[10px] font-mono px-2 py-0.2 rounded-full bg-amber-200 text-amber-900 font-bold">
+                  {contasSemCredorComComprovante.length} pendentes
+                </span>
+              </div>
+              <p className="text-[11px] text-neutral-600 mt-0.5">
+                Existem contas a pagar salvas com comprovante/boleto que ainda não possuem credor
+                oficial vinculado. Regularize o histórico de uma vez.
+              </p>
+            </div>
+          </div>
+
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => setModalLoteOpen(true)}
+            className="bg-[#FF6A13] hover:bg-[#E85B06] text-white text-xs font-semibold h-8 shrink-0 shadow-sm"
+          >
+            <Building2 className="mr-1.5 h-3.5 w-3.5" />
+            Regularizar Credores em Lote
+            <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+          </Button>
+        </div>
+      )}
+
       {/* Cards de Resumo */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="crm-card p-3 sm:p-4 border-l-4 border-l-[#FF6A13]">
@@ -343,6 +398,18 @@ export function CredoresTab({
               <SelectItem value="inativo">Inativos</SelectItem>
             </SelectContent>
           </Select>
+
+          {canWrite && contasSemCredorComComprovante.length > 0 && (
+            <Button
+              type="button"
+              onClick={() => setModalLoteOpen(true)}
+              className="bg-amber-600 hover:bg-amber-700 text-white h-9 text-xs font-semibold shrink-0"
+              title="Criar e vincular credores a partir dos comprovantes salvos em contas a pagar"
+            >
+              <Building2 className="mr-1.5 h-4 w-4" />
+              Importar de Comprovantes ({contasSemCredorComComprovante.length})
+            </Button>
+          )}
 
           {canWrite && (
             <Button
@@ -1063,6 +1130,37 @@ export function CredoresTab({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Modal Regularizar Credores em Lote a partir dos Comprovantes */}
+      <VincularCredoresLoteModal
+        open={modalLoteOpen}
+        onOpenChange={setModalLoteOpen}
+        contas={contasPagar}
+        credores={credores}
+        usuarioId={pb.authStore.record?.id}
+        onSuccess={async () => {
+          await onReload()
+        }}
+        onAbrirIndividual={(contaAlvo) => {
+          setContaSelecionadaComprovante(contaAlvo)
+          setModalIndividualComprovanteOpen(true)
+        }}
+      />
+
+      {/* Modal Individual para Salvar Credor a partir de Comprovante */}
+      <SalvarCredorComprovanteModal
+        open={modalIndividualComprovanteOpen}
+        onOpenChange={(aberto) => {
+          setModalIndividualComprovanteOpen(aberto)
+          if (!aberto) setContaSelecionadaComprovante(null)
+        }}
+        conta={contaSelecionadaComprovante}
+        credores={credores}
+        usuarioId={pb.authStore.record?.id}
+        onSuccess={async () => {
+          await onReload()
+        }}
+      />
     </div>
   )
 }
