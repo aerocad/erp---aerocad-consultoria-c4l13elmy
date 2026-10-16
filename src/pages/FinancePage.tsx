@@ -1506,7 +1506,7 @@ export function FinancePage() {
           }`}
         >
           <BarChart3 className="h-4 w-4" />
-          Balanço & DRE Avançados
+          Balancete, Balanço & DRE
         </button>
 
         <button

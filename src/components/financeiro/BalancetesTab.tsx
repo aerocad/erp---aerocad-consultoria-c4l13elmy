@@ -496,7 +496,7 @@ export function BalancetesTab({
               </SelectContent>
             </Select>
 
-            {canWrite && (
+            {canWrite ? (
               <Button
                 onClick={() => handleGerarBalancete(anoSelecionado, mesSelecionado)}
                 disabled={gerando}
@@ -504,6 +504,15 @@ export function BalancetesTab({
               >
                 <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${gerando ? 'animate-spin' : ''}`} />
                 {gerando ? 'Consolidando...' : 'Gerar / Atualizar Balancete'}
+              </Button>
+            ) : (
+              <Button
+                disabled
+                className="bg-neutral-200 text-neutral-400 font-bold text-xs h-9 shrink-0 cursor-not-allowed"
+                title="Apenas usuários Admin ou Financeiro podem gerar balancetes oficiais."
+              >
+                <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                Gerar Balancete (Restrito)
               </Button>
             )}
           </div>

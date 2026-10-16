@@ -1,5 +1,5 @@
 import JSZip from 'jszip'
-import { pb } from '@/lib/pocketbase/client'
+import pb from '@/lib/pocketbase/client'
 import { INSTITUTIONAL_DATA } from '@/lib/documentCatalogo'
 import { formatCurrency, formatDate, formatDateBrasilia } from '@/lib/format'
 import { ContaPagarRecord, ExtratoRecord, ParcelaRecord, ContaReceberRecord } from '@/types/crm'

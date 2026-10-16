@@ -258,8 +258,8 @@ export function CentralFinanceiraHub({
     },
     {
       id: 'balancetes',
-      title: 'Balancetes',
-      subtitle: 'Balancetes mensais oficiais da AEROCAD',
+      title: 'Balancetes Mensais',
+      subtitle: 'Consolidação mensal e histórico arquivado',
       icon: Scale,
       accentColor: '#9333EA',
       iconBg: 'bg-purple-50 border-purple-200 text-purple-600',
@@ -278,27 +278,29 @@ export function CentralFinanceiraHub({
       statSubtext:
         totalBalancetesEmitidos > 0
           ? `${totalBalancetesEmitidos} balancete(s) gerado(s)`
-          : 'Gerar primeiro balancete',
+          : 'Gerar balancete oficial',
       visible: true,
     },
     {
       id: 'relatorios_avancados',
-      title: 'Relatórios & DRE',
-      subtitle: 'Balanço (Minuta), DRE, Ponto Equilíbrio e Contas PJ',
+      title: 'Relatórios & Balancete',
+      subtitle: 'Balancete de Verificação, Balanço, DRE & Contas PJ',
       icon: BarChart3,
       accentColor: '#2563EB',
       iconBg: 'bg-blue-50 border-blue-200 text-blue-600',
       iconColor: 'text-blue-600',
       badge: (
         <span className="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-800 border border-blue-200">
-          Contábil Avançado
+          Balancete & DRE
         </span>
       ),
-      statLabel: 'Balanço, DRE & Break-even',
+      statLabel: 'Balancete, Balanço & DRE',
       statValue: (
-        <span className="font-semibold text-neutral-900 text-xs sm:text-sm">Minuta A4 & XLSX</span>
+        <span className="font-semibold text-neutral-900 text-xs sm:text-sm">
+          Testagem A4 & XLSX
+        </span>
       ),
-      statSubtext: 'DRE por período, PE, Indicadores PJ',
+      statSubtext: 'Débitos, créditos, saldos e contas PJ',
       visible: true,
     },
     {

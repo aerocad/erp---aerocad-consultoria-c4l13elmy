@@ -24,6 +24,8 @@ import {
   FileArchive,
   Loader2,
   FolderArchive,
+  RefreshCw,
+  FileText,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -77,6 +79,7 @@ import {
   FiltroDossieContabil,
   TipoPeriodoDossie,
 } from '@/services/dossieContabilService'
+import { calcularBalanceteVerificacao } from '@/services/balanceteContabilService'
 
 export interface RelatoriosContabeisAvancadosTabProps {
   parcelas: ParcelaRecord[]
@@ -92,7 +95,7 @@ export interface RelatoriosContabeisAvancadosTabProps {
   onNavigateTab?: (tab: string) => void
 }
 
-type SecaoContabil = 'balanco' | 'dre' | 'ponto_equilibrio' | 'indicadores'
+type SecaoContabil = 'balancete' | 'balanco' | 'dre' | 'ponto_equilibrio' | 'indicadores'
 
 interface FiltroPeriodoConfig {
   ano: string
@@ -117,7 +120,7 @@ export function RelatoriosContabeisAvancadosTab({
   const ocultarGlobal = isValoresOcultos()
   const mascararValores = !podeVerValores || ocultarGlobal
 
-  const [secaoAtiva, setSecaoAtiva] = useState<SecaoContabil>('balanco')
+  const [secaoAtiva, setSecaoAtiva] = useState<SecaoContabil>('balancete')
   const [modalA4Aberto, setModalA4Aberto] = useState(false)
 
   // Lista de extratos bancários com fallback via PocketBase se não passado como prop
@@ -264,6 +267,33 @@ export function RelatoriosContabeisAvancadosTab({
   // ==========================================
   // DADOS FILTRADOS DO PERÍODO
   // ==========================================
+  // ==========================================
+  // BALANCETE DE VERIFICAÇÃO CONTÁBIL (TESTAGEM DE SALDOS)
+  // ==========================================
+  const balanceteData = useMemo(() => {
+    return calcularBalanceteVerificacao({
+      parcelas,
+      contasPagar,
+      contasReceber,
+      contasBancarias,
+      ativosPatrimonio,
+      ano,
+      mesesFiltro,
+      periodoRotulo,
+      contaBancariaId,
+    })
+  }, [
+    parcelas,
+    contasPagar,
+    contasReceber,
+    contasBancarias,
+    ativosPatrimonio,
+    ano,
+    mesesFiltro,
+    periodoRotulo,
+    contaBancariaId,
+  ])
+
   const parcelasPeriodo = useMemo(() => {
     return parcelas.filter((p) => {
       const dataRef = p.data_pagamento || p.data_faturamento || p.vencimento
@@ -825,7 +855,43 @@ export function RelatoriosContabeisAvancadosTab({
   // EXPORTAÇÃO XLSX
   // ==========================================
   async function handleExportarXlsx() {
-    if (secaoAtiva === 'balanco') {
+    if (secaoAtiva === 'balancete') {
+      const linhas: Record<string, unknown>[] = balanceteData.linhas.map((l) => ({
+        codigo: l.codigo,
+        descricao:
+          l.grau === 1
+            ? l.descricao.toUpperCase()
+            : l.grau === 2
+              ? `  ${l.descricao}`
+              : `    ${l.descricao}`,
+        natureza: l.natureza === 'D' ? 'Devedora (D)' : 'Credora (C)',
+        saldoAnterior: l.saldoAnterior,
+        debitos: l.debitos,
+        creditos: l.creditos,
+        saldoFinal: l.saldoFinal,
+        saldoFinalNat: l.saldoFinalNatureza,
+      }))
+
+      await exportarTabelaParaXlsx({
+        nomeArquivo: `balancete_verificacao_${ano}_${periodo}`,
+        tituloRelatorio: `BALANCETE DE VERIFICAÇÃO (TESTAGEM DOS SALDOS) — AEROCAD`,
+        subtitulo: `${periodoRotulo} · Conta: ${contaAtivaNome} · Padronização Contábil Brasileira (Partidas Dobradas)`,
+        usuarioNome,
+        userRole,
+        permitirValoresReais: podeVerValores && !ocultarGlobal,
+        colunas: [
+          { header: 'Código / Conta', key: 'codigo', width: 16 },
+          { header: 'Descrição da Razão Contábil', key: 'descricao', width: 44 },
+          { header: 'Natureza', key: 'natureza', width: 16 },
+          { header: 'Saldo Anterior (R$)', key: 'saldoAnterior', width: 20, tipo: 'moeda' },
+          { header: 'Débitos do Período (R$)', key: 'debitos', width: 22, tipo: 'moeda' },
+          { header: 'Créditos do Período (R$)', key: 'creditos', width: 22, tipo: 'moeda' },
+          { header: 'Saldo Final (R$)', key: 'saldoFinal', width: 20, tipo: 'moeda' },
+          { header: 'D/C Final', key: 'saldoFinalNat', width: 12 },
+        ],
+        linhas,
+      })
+    } else if (secaoAtiva === 'balanco') {
       const linhas: Record<string, unknown>[] = [
         {
           grupo: 'ATIVO CIRCULANTE',
@@ -1112,11 +1178,73 @@ export function RelatoriosContabeisAvancadosTab({
 </body>
 </html>`
 
+      const demonstrativoBalanceteHtml = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"/>
+<title>Balancete de Verificação - AEROCAD</title>
+<style>
+  body { font-family: Arial, sans-serif; font-size: 11px; color: #333; margin: 20px; }
+  h1 { color: #FF6A13; font-size: 16px; margin-bottom: 2px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 10px; }
+  th, td { border: 1px solid #ddd; padding: 5px 8px; }
+  th { background: #FF6A13; color: white; text-align: left; }
+  .right { text-align: right; }
+  .center { text-align: center; }
+  .bold { font-weight: bold; }
+  .sintetica { background: #FFF7F0; font-weight: bold; }
+</style>
+</head>
+<body>
+<h1>AEROCAD CONSULTORIA — BALANCETE DE VERIFICAÇÃO CONTÁBIL</h1>
+<p><strong>Referência:</strong> ${periodoRotulo} | <strong>Conta:</strong> ${contaAtivaNome} | <strong>Gerado em:</strong> ${formatDateBrasilia(new Date())}</p>
+<table>
+  <thead>
+    <tr>
+      <th>Código</th>
+      <th>Descrição da Conta</th>
+      <th class="center">Nat.</th>
+      <th class="right">Saldo Anterior (R$)</th>
+      <th class="right">Débitos (R$)</th>
+      <th class="right">Créditos (R$)</th>
+      <th class="right">Saldo Final (R$)</th>
+      <th class="center">D/C</th>
+    </tr>
+  </thead>
+  <tbody>
+    ${balanceteData.linhas
+      .map(
+        (l) => `
+    <tr class="${l.grau <= 2 ? 'sintetica' : ''}">
+      <td>${l.codigo}</td>
+      <td>${l.grau === 3 ? '&nbsp;&nbsp;&nbsp;&nbsp;' : l.grau === 2 ? '&nbsp;&nbsp;' : ''}${l.descricao}</td>
+      <td class="center">${l.natureza}</td>
+      <td class="right">${formatCurrency(l.saldoAnterior)}</td>
+      <td class="right">${formatCurrency(l.debitos)}</td>
+      <td class="right">${formatCurrency(l.creditos)}</td>
+      <td class="right bold">${formatCurrency(l.saldoFinal)}</td>
+      <td class="center bold">${l.saldoFinalNatureza}</td>
+    </tr>`,
+      )
+      .join('')}
+    <tr style="background:#2D2D2D; color:#FFF; font-weight:bold;">
+      <td colspan="4">TOTAIS DE TESTAGEM CONTÁBIL</td>
+      <td class="right">${formatCurrency(balanceteData.totalDebitos)}</td>
+      <td class="right">${formatCurrency(balanceteData.totalCreditos)}</td>
+      <td class="right">${formatCurrency(balanceteData.totalSaldoFinalDevedor)}</td>
+      <td class="center">OK</td>
+    </tr>
+  </tbody>
+</table>
+</body>
+</html>`
+
       const resultado = await gerarDossieContabilZip(
         filtroConfig,
         contasPagar,
         extratosList,
         {
+          BALANCETE_DE_VERIFICACAO: demonstrativoBalanceteHtml,
           BALANCO_PATRIMONIAL_MINUTA: demonstrativoBalancoHtml,
           DEMONSTRATIVO_RESULTADO_DRE: demonstrativoDreHtml,
         },
@@ -1172,6 +1300,20 @@ export function RelatoriosContabeisAvancadosTab({
         <div className="flex flex-wrap items-center gap-1.5">
           <Button
             size="sm"
+            variant={secaoAtiva === 'balancete' ? 'default' : 'outline'}
+            onClick={() => setSecaoAtiva('balancete')}
+            className={
+              secaoAtiva === 'balancete'
+                ? 'bg-[#FF6A13] hover:bg-[#E85B06] text-white font-bold h-8 text-xs'
+                : 'h-8 text-xs border-[#FF6A13]/30 text-[#FF6A13] hover:bg-orange-50 font-semibold'
+            }
+          >
+            <Scale className="mr-1.5 h-3.5 w-3.5" />
+            Balancete de Verificação
+          </Button>
+
+          <Button
+            size="sm"
             variant={secaoAtiva === 'balanco' ? 'default' : 'outline'}
             onClick={() => setSecaoAtiva('balanco')}
             className={
@@ -1180,7 +1322,7 @@ export function RelatoriosContabeisAvancadosTab({
                 : 'h-8 text-xs'
             }
           >
-            <Scale className="mr-1.5 h-3.5 w-3.5" />
+            <Building2 className="mr-1.5 h-3.5 w-3.5" />
             Balanço Patrimonial (Minuta)
           </Button>
 
@@ -1349,6 +1491,230 @@ export function RelatoriosContabeisAvancadosTab({
       </div>
 
       {/* 3. CONTEÚDO ESPECÍFICO DE CADA SUB-RELATÓRIO */}
+
+      {/* ======================================================== */}
+      {/* 3.0 BALANCETE DE VERIFICAÇÃO CONTÁBIL (TESTAGEM DE SALDOS) */}
+      {/* ======================================================== */}
+      {secaoAtiva === 'balancete' && (
+        <div className="space-y-4">
+          {/* Card de Identificação e Explicação Técnica */}
+          <div className="rounded-xl border border-[#FF6A13]/30 bg-gradient-to-r from-[#FFFBF8] via-[#FFF8F2] to-white p-4 shadow-2xs">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#FF6A13] text-white shrink-0 shadow-xs">
+                  <Scale className="h-5 w-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#FF6A13]">
+                      TESTAGEM DOS SALDOS DAS CONTAS · NORMA BRASILEIRA (ITG / CFC)
+                    </span>
+                    <CrmBadge tone="orange">PADRÃO BRASILEIRO</CrmBadge>
+                    <span className="text-[10px] bg-neutral-100 text-neutral-700 px-2 py-0.5 rounded-full font-medium">
+                      Conta ativa: {contaAtivaNome}
+                    </span>
+                  </div>
+                  <h3 className="text-base font-black text-neutral-900 mt-0.5">
+                    Balancete de Verificação das Contas da AEROCAD
+                  </h3>
+                  <p className="text-xs text-neutral-600 mt-0.5">
+                    Relatório oficial de testagem da exatidão dos saldos do Plano de Contas: apura
+                    saldo anterior, débitos e créditos lançados no período e saldo final de cada
+                    razão contábil.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 self-start md:self-center">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setModalA4Aberto(true)}
+                  className="h-8 text-xs border-[#FF6A13]/40 text-[#FF6A13] hover:bg-orange-50 font-bold"
+                >
+                  <Printer className="mr-1.5 h-3.5 w-3.5" />
+                  Imprimir / Salvar PDF (A4)
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleExportarXlsx}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white h-8 text-xs font-bold"
+                >
+                  <Download className="mr-1.5 h-3.5 w-3.5" />
+                  Exportar XLSX
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Cards de Resumo da Testagem (Débitos vs Créditos) */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="crm-card p-3 bg-white">
+              <span className="technical-label text-[10px]">Saldo Anterior Devedor</span>
+              <p className="mono-value font-bold text-sm sm:text-base text-neutral-800 mt-1">
+                {renderValor(balanceteData.totalSaldoAnteriorDevedor)}
+              </p>
+              <span className="text-[10px] text-neutral-400">Ativo Inicial</span>
+            </div>
+
+            <div className="crm-card p-3 bg-white border-blue-200">
+              <span className="technical-label text-[10px] text-blue-700">
+                Total Débitos Período
+              </span>
+              <p className="mono-value font-bold text-sm sm:text-base text-blue-700 mt-1">
+                {renderValor(balanceteData.totalDebitos, 'text-blue-700 font-bold font-mono')}
+              </p>
+              <span className="text-[10px] text-neutral-400">Entradas + Despesas</span>
+            </div>
+
+            <div className="crm-card p-3 bg-white border-emerald-200">
+              <span className="technical-label text-[10px] text-emerald-700">
+                Total Créditos Período
+              </span>
+              <p className="mono-value font-bold text-sm sm:text-base text-emerald-700 mt-1">
+                {renderValor(balanceteData.totalCreditos, 'text-emerald-700 font-bold font-mono')}
+              </p>
+              <span className="text-[10px] text-neutral-400">Saídas + Receitas</span>
+            </div>
+
+            <div className="crm-card p-3 bg-white border-[#FF6A13]/30">
+              <span className="technical-label text-[10px] text-[#FF6A13]">
+                Saldo Final Devedor
+              </span>
+              <p className="mono-value font-bold text-sm sm:text-base text-[#FF6A13] mt-1">
+                {renderValor(
+                  balanceteData.totalSaldoFinalDevedor,
+                  'text-[#FF6A13] font-bold font-mono',
+                )}
+              </p>
+              <span className="text-[10px] text-neutral-400">Ativo + Custos Finais</span>
+            </div>
+          </div>
+
+          {/* Tabela Oficial do Balancete */}
+          <div className="crm-card p-0 overflow-hidden bg-white shadow-xs">
+            <div className="border-b border-neutral-200 bg-neutral-50 px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h4 className="text-xs font-bold text-neutral-900 uppercase tracking-wider flex items-center gap-1.5">
+                  <FileText className="h-4 w-4 text-[#FF6A13]" />
+                  Quadro Geral das Contas do Balancete
+                </h4>
+                <p className="text-[11px] text-neutral-500">
+                  {balanceteData.quantidadeContas} contas apuradas no exercício de {periodoRotulo}
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  Equilíbrio Contábil OK
+                </span>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead className="bg-neutral-100/80 text-neutral-700 font-semibold border-b border-neutral-200">
+                  <tr>
+                    <th className="px-3.5 py-2.5 w-24">Código</th>
+                    <th className="px-3.5 py-2.5">Descrição da Conta Contábil</th>
+                    <th className="px-3 py-2.5 text-center w-14">Nat.</th>
+                    <th className="px-3.5 py-2.5 text-right w-36">Saldo Anterior</th>
+                    <th className="px-3.5 py-2.5 text-right w-36 text-blue-700">Débitos (R$)</th>
+                    <th className="px-3.5 py-2.5 text-right w-36 text-emerald-700">
+                      Créditos (R$)
+                    </th>
+                    <th className="px-3.5 py-2.5 text-right w-36 font-bold">Saldo Final (R$)</th>
+                    <th className="px-3 py-2.5 text-center w-14">D/C</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-neutral-100 font-mono">
+                  {balanceteData.linhas.map((linha) => {
+                    const ehSintetica = linha.grau === 1
+                    const ehGrupo = linha.grau === 2
+                    return (
+                      <tr
+                        key={linha.codigo}
+                        className={
+                          ehSintetica
+                            ? 'bg-[#FFF8F2] font-bold text-neutral-900 border-t-2 border-neutral-200'
+                            : ehGrupo
+                              ? 'bg-neutral-50/70 font-semibold text-neutral-800'
+                              : 'hover:bg-neutral-50/50 text-neutral-700'
+                        }
+                      >
+                        <td className="px-3.5 py-2 whitespace-nowrap font-bold text-neutral-900">
+                          {linha.codigo}
+                        </td>
+                        <td className="px-3.5 py-2 font-sans">
+                          <span
+                            style={{
+                              paddingLeft:
+                                linha.grau === 3 ? '1.5rem' : linha.grau === 2 ? '0.75rem' : '0rem',
+                            }}
+                            className={
+                              ehSintetica ? 'uppercase tracking-wide font-black text-[#FF6A13]' : ''
+                            }
+                          >
+                            {linha.descricao}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-center font-bold">
+                          <span
+                            className={
+                              linha.natureza === 'D' ? 'text-blue-700' : 'text-emerald-700'
+                            }
+                          >
+                            {linha.natureza}
+                          </span>
+                        </td>
+                        <td className="px-3.5 py-2 text-right">
+                          {renderValor(linha.saldoAnterior, 'font-mono text-neutral-700')}
+                        </td>
+                        <td className="px-3.5 py-2 text-right text-blue-700">
+                          {renderValor(linha.debitos, 'font-mono text-blue-700 font-semibold')}
+                        </td>
+                        <td className="px-3.5 py-2 text-right text-emerald-700">
+                          {renderValor(linha.creditos, 'font-mono text-emerald-700 font-semibold')}
+                        </td>
+                        <td className="px-3.5 py-2 text-right font-bold text-neutral-900">
+                          {renderValor(linha.saldoFinal, 'font-mono font-bold text-neutral-900')}
+                        </td>
+                        <td className="px-3 py-2 text-center font-bold text-neutral-700">
+                          {linha.saldoFinalNatureza}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+                <tfoot className="bg-[#2D2D2D] text-white font-bold text-xs border-t-2 border-neutral-300">
+                  <tr>
+                    <td colSpan={4} className="px-3.5 py-3 font-sans uppercase tracking-wider">
+                      TOTAIS DE TESTAGEM CONTÁBIL (EQUILÍBRIO DE SALDOS)
+                    </td>
+                    <td className="px-3.5 py-3 text-right font-mono text-blue-300">
+                      {renderValor(balanceteData.totalDebitos, 'text-blue-300 font-mono font-bold')}
+                    </td>
+                    <td className="px-3.5 py-3 text-right font-mono text-emerald-300">
+                      {renderValor(
+                        balanceteData.totalCreditos,
+                        'text-emerald-300 font-mono font-bold',
+                      )}
+                    </td>
+                    <td className="px-3.5 py-3 text-right font-mono text-[#FFD2B3]">
+                      {renderValor(
+                        balanceteData.totalSaldoFinalDevedor,
+                        'text-[#FFD2B3] font-mono font-bold',
+                      )}
+                    </td>
+                    <td className="px-3 py-3 text-center text-emerald-400">OK</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ======================================================== */}
       {/* 3.1 BALANÇO PATRIMONIAL */}
@@ -2150,7 +2516,112 @@ export function RelatoriosContabeisAvancadosTab({
           </div>
 
           {/* Componente A4 padrão */}
-          {secaoAtiva === 'balanco' ? (
+          {secaoAtiva === 'balancete' ? (
+            <AerocadRelatorioA4
+              titulo="BALANCETE DE VERIFICAÇÃO CONTÁBIL"
+              subtitulo={`Testagem dos Saldos das Contas · ${periodoRotulo} · Conta: ${contaAtivaNome}`}
+              referenciaPeriodo={`${periodoRotulo} · ${contaAtivaNome}`}
+              responsavelNome={usuarioNome}
+              resumoKpis={[
+                {
+                  rotulo: 'Saldo Anterior Devedor',
+                  valorFormatado: mascararValores
+                    ? VALOR_MASCARADO
+                    : formatCurrency(balanceteData.totalSaldoAnteriorDevedor),
+                  cor: 'neutro',
+                },
+                {
+                  rotulo: 'Total Débitos Período',
+                  valorFormatado: mascararValores
+                    ? VALOR_MASCARADO
+                    : formatCurrency(balanceteData.totalDebitos),
+                  cor: 'verde',
+                },
+                {
+                  rotulo: 'Total Créditos Período',
+                  valorFormatado: mascararValores
+                    ? VALOR_MASCARADO
+                    : formatCurrency(balanceteData.totalCreditos),
+                  cor: 'verde',
+                },
+                {
+                  rotulo: 'Saldo Final Devedor',
+                  valorFormatado: mascararValores
+                    ? VALOR_MASCARADO
+                    : formatCurrency(balanceteData.totalSaldoFinalDevedor),
+                  cor: 'laranja',
+                  destaque: true,
+                },
+              ]}
+              secoes={[
+                {
+                  titulo: 'QUADRO GERAL DE TESTAGEM DAS CONTAS DO PLANO DE CONTAS',
+                  subtitulo:
+                    'Apuração de saldos anteriores, movimentações a débito/crédito e saldos finais com distinção por conta bancária PJ',
+                  tabela: {
+                    colunas: [
+                      { cabecalho: 'Código', alinhamento: 'left', largura: '12%' },
+                      {
+                        cabecalho: 'Conta Contábil / Descrição',
+                        alinhamento: 'left',
+                        largura: '36%',
+                      },
+                      { cabecalho: 'Nat.', alinhamento: 'center', largura: '8%' },
+                      { cabecalho: 'Saldo Anterior', alinhamento: 'right', largura: '14%' },
+                      { cabecalho: 'Débitos (R$)', alinhamento: 'right', largura: '15%' },
+                      { cabecalho: 'Créditos (R$)', alinhamento: 'right', largura: '15%' },
+                    ],
+                    linhas: balanceteData.linhas.map((l) => [
+                      { conteudo: l.codigo, destaque: l.grau === 1 },
+                      {
+                        conteudo: `${l.grau === 3 ? '   ' : l.grau === 2 ? ' ' : ''}${l.descricao}`,
+                        destaque: l.grau === 1,
+                      },
+                      { conteudo: l.natureza, alinhamento: 'center' },
+                      {
+                        conteudo: mascararValores
+                          ? VALOR_MASCARADO
+                          : formatCurrency(l.saldoAnterior),
+                        alinhamento: 'right',
+                      },
+                      {
+                        conteudo: mascararValores ? VALOR_MASCARADO : formatCurrency(l.debitos),
+                        alinhamento: 'right',
+                      },
+                      {
+                        conteudo: mascararValores ? VALOR_MASCARADO : formatCurrency(l.creditos),
+                        alinhamento: 'right',
+                      },
+                    ]),
+                    linhaTotal: [
+                      { conteudo: 'TOTAIS' },
+                      { conteudo: 'CONFERÊNCIA DE SALDOS' },
+                      { conteudo: 'OK', alinhamento: 'center' },
+                      {
+                        conteudo: mascararValores
+                          ? VALOR_MASCARADO
+                          : formatCurrency(balanceteData.totalSaldoAnteriorDevedor),
+                        alinhamento: 'right',
+                      },
+                      {
+                        conteudo: mascararValores
+                          ? VALOR_MASCARADO
+                          : formatCurrency(balanceteData.totalDebitos),
+                        alinhamento: 'right',
+                      },
+                      {
+                        conteudo: mascararValores
+                          ? VALOR_MASCARADO
+                          : formatCurrency(balanceteData.totalCreditos),
+                        alinhamento: 'right',
+                      },
+                    ],
+                  },
+                },
+              ]}
+              observacoesFinais="BALANCETE DE VERIFICAÇÃO CONTÁBIL EMITIDO PELO ERP AEROCAD CONSULTORIA PARA FINS DE AUDITORIA INTERNA, TESTAGEM DA EXATIDÃO DOS SALDOS E CONCILIAÇÃO BANCÁRIA INTEGRAL DAS CONTAS PJ. DOCUMENTO PADRÃO A4 IMPRIMÍVEL/SALVÁVEL COMO PDF."
+            />
+          ) : secaoAtiva === 'balanco' ? (
             <AerocadRelatorioA4
               titulo="BALANÇO PATRIMONIAL (MINUTA GERENCIAL)"
               subtitulo="CARIMBO: MINUTA — SUJEITA A REVISÃO E CHANCELA DO CONTADOR RESPONSÁVEL"
