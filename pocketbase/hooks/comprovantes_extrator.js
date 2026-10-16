@@ -73,22 +73,29 @@ routerAdd(
 
       let promptMessage = ''
       const contextoOtimizacao = preProcessado
-        ? ` (Imagem pré-processada com realce de contraste +12% e redimensionamento para leitura de cupom fiscal térmico${dimensoesInfo ? ', dimensões originais: ' + dimensoesInfo : ''})`
+        ? ` (Imagem pré-processada com realce de contraste +12% e redimensionamento para leitura de documento fiscal/cupom${dimensoesInfo ? ', dimensões originais: ' + dimensoesInfo : ''})`
         : ''
 
       if (rawContent && rawContent.trim().length > 0) {
-        promptMessage = `Analise o seguinte conteúdo extraído do documento/comprovante fiscal (${fileName}${contextoOtimizacao}) e retorne o JSON estruturado conforme as instruções do seu sistema:\n\n${rawContent.slice(0, 4000)}`
+        promptMessage = `Analise o seguinte conteúdo extraído do documento fiscal (${fileName}${contextoOtimizacao}).
+Pode ser um DANFE (NF-e formato A4), um Cupom Fiscal (NFC-e/SAT) ou outro comprovante fiscal:
+- Se for DANFE NF-e: extraia Emitente, CNPJ, Destinatário, Número, Série, Chave de Acesso de 44 dígitos, Data de Emissão, Valor Total, Impostos, Itens e condições de pagamento.
+- Se for Cupom Fiscal (NFC-e/SAT): extraia Estabelecimento, CNPJ, Número/Extrato, Chave de Acesso de 44 dígitos se houver, Itens, Valor Total e Forma de Pagamento.
+Classifique contabilmente no Plano de Contas AEROCAD e retorne o JSON estruturado puro conforme suas instruções:\n\n${rawContent.slice(0, 4500)}`
       } else {
-        promptMessage = `Analise a foto/digitalização do comprovante fiscal anexado (${fileName}${contextoOtimizacao}).
-Foque especialmente na identificação precisa de Cupom Fiscal Eletrônico (NFC-e / SAT-CF-e / ECF):
-1. Fornecedor / Razão Social e Nome Fantasia (ex: posto de combustível, lanchonete, loja de materiais).
-2. CNPJ do emitente (14 dígitos formatados).
-3. Data de emissão (AAAA-MM-DD).
-4. Número do documento (CCF, COO, NFC-e nº, Extrato nº) e chave de acesso de 44 dígitos se houver.
-5. Valor total pago (R$) e impostos destacados se houver.
-6. Forma de pagamento (pix, cartao_credito, cartao_debito, dinheiro, boleto, outro).
-7. Descrição sucinta dos itens (ex: "Gasolina Comum 40L", "Refeição em campo").
-8. Categoria AEROCAD (despesas_operacionais, terceirizados, impostos, equipamentos, folha, outros) e código do Plano de Contas (ex: 3.1.4 para viagens/campo, 3.1.1 para administrativo).
+        promptMessage = `Analise a foto/digitalização do documento fiscal anexado (${fileName}${contextoOtimizacao}).
+Pode ser um DANFE (Nota Fiscal Eletrônica NF-e em folha A4), Cupom Fiscal Eletrônico (NFC-e / SAT-CF-e / ECF) ou Recibo:
+1. Identifique o tipo de documento: "nfe" (se for DANFE em papel A4), "cupom_fiscal" (se for cupom térmico NFC-e/SAT) ou outro.
+2. Fornecedor / Razão Social e Nome Fantasia do emitente.
+3. CNPJ do emitente (14 dígitos formatados).
+4. Destinatário / Tomador (razão social e CNPJ/CPF se houver).
+5. Data de emissão (AAAA-MM-DD).
+6. Número do documento (NF-e nº, Cupom nº, Extrato nº) e série se constar.
+7. Chave de acesso de 44 dígitos (leia com extrema atenção no cabeçalho ou rodapé do documento).
+8. Valor total da nota / valor pago (R$) e impostos destacados.
+9. Forma de pagamento sugerida (pix, boleto, cartao_credito, cartao_debito, dinheiro, ted_doc, outro).
+10. Descrição sucinta dos itens e lista detalhada se visível.
+11. Categoria AEROCAD (despesas_operacionais, terceirizados, impostos, equipamentos, folha, outros) e código do Plano de Contas (ex: 3.1.4 para despesas de campo/viagem, 3.2.1 para terceiros de engenharia, 3.1.1 administrativo, 3.4.1 equipamentos).
 Retorne EXCLUSIVAMENTE o JSON estruturado puro.`
       }
 
@@ -183,6 +190,302 @@ Se os dados não puderem ser identificados, defina sucesso=false, fornecedor="",
       console.log('Erro geral no endpoint /backend/v1/comprovantes/extrair:', err.message)
       return e.json(500, {
         error: 'Erro ao processar comprovante: ' + (err.message || 'desconhecido'),
+      })
+    }
+  },
+  $apis.requireAuth(),
+)
+
+// 1.1 CONSULTA DE QR CODE FISCAL (SEFAZ / SAT / NFC-E / DANFE)
+routerAdd(
+  'POST',
+  '/backend/v1/fiscal/consultar-qr',
+  (e) => {
+    try {
+      const authUser = e.auth
+      if (!authUser || !authUser.id) {
+        return e.unauthorizedError('Autenticação necessária')
+      }
+
+      const role = authUser.getString('role')
+      if (role !== 'admin' && role !== 'financeiro') {
+        return e.forbiddenError(
+          'Apenas usuários Administrador ou Financeiro podem processar consultas fiscais',
+        )
+      }
+
+      const body = e.requestInfo().body || {}
+      const qrRaw = (body.qr_content || body.url || '').trim()
+
+      if (!qrRaw) {
+        return e.badRequestError('Conteúdo do QR code não informado (qr_content)')
+      }
+
+      // Função utilitária para extrair chave de 44 dígitos
+      function extrairChave44(texto) {
+        if (!texto) return ''
+        // Tenta achar 44 dígitos contínuos
+        const matchContinuo = texto.match(/\b\d{44}\b/)
+        if (matchContinuo) return matchContinuo[0]
+
+        // Tenta achar em query param: chNFe=..., p=..., chave=...
+        const paramMatch = texto.match(/(?:chNFe|chave|p|C)=([0-9]{44})/i)
+        if (paramMatch) return paramMatch[1]
+
+        // Procura padrão SEFAZ versão 2 onde p=35...|2|1|1|...
+        const pMatch = texto.match(/[?&]p=([0-9]{44})[|%7C]/i)
+        if (pMatch) return pMatch[1]
+
+        return ''
+      }
+
+      // Decompõe a chave de 44 dígitos se encontrada
+      function decomporChave(chave) {
+        if (!chave || chave.length !== 44) return null
+        const ufs = {
+          11: 'RO',
+          12: 'AC',
+          13: 'AM',
+          14: 'RR',
+          15: 'PA',
+          16: 'AP',
+          17: 'TO',
+          21: 'MA',
+          22: 'PI',
+          23: 'CE',
+          24: 'RN',
+          25: 'PB',
+          26: 'PE',
+          27: 'AL',
+          28: 'SE',
+          29: 'BA',
+          31: 'MG',
+          32: 'ES',
+          33: 'RJ',
+          35: 'SP',
+          41: 'PR',
+          42: 'SC',
+          43: 'RS',
+          50: 'MS',
+          51: 'MT',
+          52: 'GO',
+          53: 'DF',
+        }
+        const cUF = chave.substring(0, 2)
+        const aamm = chave.substring(2, 6)
+        const ano = '20' + aamm.substring(0, 2)
+        const mes = aamm.substring(2, 4)
+        const cnpjCru = chave.substring(6, 20)
+        const modelo = chave.substring(20, 22)
+        const serie = chave.substring(22, 25).replace(/^0+/, '') || '1'
+        const nNF = chave.substring(25, 34).replace(/^0+/, '') || ''
+
+        const cnpjFmt = cnpjCru.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5')
+        const tipoDoc = modelo === '65' ? 'cupom_fiscal' : modelo === '59' ? 'cupom_fiscal' : 'nfe'
+
+        return {
+          chave,
+          uf: ufs[cUF] || cUF,
+          ano_mes: `${ano}-${mes}`,
+          data_aproximada: `${ano}-${mes}-01`,
+          cnpj_emitente: cnpjFmt,
+          cnpj_cru: cnpjCru,
+          modelo,
+          tipo_documento: tipoDoc,
+          serie,
+          numero_documento: nNF,
+        }
+      }
+
+      // Análise do QR code (pode ser SAT pipe ou URL SEFAZ)
+      const chaveDetectada = extrairChave44(qrRaw)
+      const decomposicao = chaveDetectada ? decomporChave(chaveDetectada) : null
+
+      // Se for padrão SAT CF-e (pipe: chave|datahora|valor|cpf...)
+      if (qrRaw.includes('|') && !qrRaw.startsWith('http')) {
+        const partes = qrRaw.split('|')
+        const chaveSat = partes[0] ? extrairChave44(partes[0]) : ''
+        const dataHoraStr = partes[1] || '' // AAAAMMDDHHMMSS
+        const valorSatStr = partes[2] || ''
+        const cpfCnpjDest = partes[3] || ''
+
+        let dataEmissaoSat = new Date().toISOString().slice(0, 10)
+        if (dataHoraStr.length >= 8) {
+          dataEmissaoSat = `${dataHoraStr.substring(0, 4)}-${dataHoraStr.substring(4, 6)}-${dataHoraStr.substring(6, 8)}`
+        }
+
+        const valorTotalNum = parseFloat(valorSatStr.replace(',', '.')) || 0
+        const decompostoSat = chaveSat ? decomporChave(chaveSat) : null
+
+        return e.json(200, {
+          sucesso: true,
+          origem: 'sat_qrcode_pipe',
+          chave_acesso: chaveSat,
+          dados: {
+            tipo_documento: 'cupom_fiscal',
+            fornecedor: decompostoSat ? `Fornecedor CNPJ ${decompostoSat.cnpj_emitente}` : '',
+            cnpj_cpf: decompostoSat ? decompostoSat.cnpj_emitente : '',
+            data_emissao: dataEmissaoSat,
+            numero_documento: decompostoSat ? decompostoSat.numero_documento : '',
+            serie: decompostoSat ? decompostoSat.serie : '',
+            chave_acesso: chaveSat,
+            destinatario: cpfCnpjDest ? `Destinatário doc ${cpfCnpjDest}` : '',
+            cnpj_destinatario: cpfCnpjDest,
+            valor_total: valorTotalNum,
+            valor_impostos: null,
+            forma_pagamento_sugerida: 'pix',
+            categoria_sugerida: 'despesas_operacionais',
+            plano_contas_codigo: '3.1.4',
+            plano_contas_nome: 'Despesas de Viagens e Campo',
+            descricao_itens: 'Despesa Cupom Fiscal Eletrônico SAT (Extrato)',
+            observacoes: `Chave SAT: ${chaveSat}`,
+            confianca: 'alta',
+          },
+          portal_consultado: false,
+          mensagem: 'Dados fiscais decodificados diretamente da estrutura oficial do QR Code SAT.',
+        })
+      }
+
+      // Se o QR Code for uma URL
+      const isUrl = qrRaw.startsWith('http://') || qrRaw.startsWith('https://')
+      let dadosFinais = {
+        tipo_documento: decomposicao ? decomposicao.tipo_documento : 'cupom_fiscal',
+        fornecedor: decomposicao ? `Fornecedor CNPJ ${decomposicao.cnpj_emitente}` : '',
+        cnpj_cpf: decomposicao ? decomposicao.cnpj_emitente : '',
+        data_emissao: decomposicao
+          ? decomposicao.data_aproximada
+          : new Date().toISOString().slice(0, 10),
+        numero_documento: decomposicao ? decomposicao.numero_documento : '',
+        serie: decomposicao ? decomposicao.serie : '',
+        chave_acesso: chaveDetectada,
+        destinatario: '',
+        cnpj_destinatario: '',
+        valor_total: 0,
+        valor_impostos: null,
+        forma_pagamento_sugerida: 'pix',
+        categoria_sugerida: 'despesas_operacionais',
+        plano_contas_codigo: '3.1.4',
+        plano_contas_nome: 'Despesas de Viagens e Campo',
+        descricao_itens: decomposicao
+          ? `Nota Fiscal ${decomposicao.modelo === '65' ? 'NFC-e' : 'NF-e'} nº ${decomposicao.numero_documento}`
+          : 'Documento Fiscal lido por QR Code',
+        observacoes: chaveDetectada ? `Chave de Acesso: ${chaveDetectada}` : '',
+        confianca: chaveDetectada ? 'media' : 'baixa',
+      }
+
+      let portalAcessado = false
+      let portalErro = null
+      let htmlPublico = ''
+
+      // Tentativa de consulta no portal público com timeout curto
+      if (isUrl) {
+        try {
+          const httpRes = $http.send({
+            url: qrRaw,
+            method: 'GET',
+            timeout: 5, // 5 segundos
+            headers: {
+              'User-Agent':
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+              Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+              'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+            },
+          })
+
+          if (httpRes && httpRes.statusCode >= 200 && httpRes.statusCode < 300 && httpRes.raw) {
+            portalAcessado = true
+            htmlPublico = (httpRes.raw || '').slice(0, 8000)
+          } else {
+            portalErro = `Portal SEFAZ retornou status HTTP ${httpRes ? httpRes.statusCode : 'sem resposta'}`
+          }
+        } catch (fetchErr) {
+          portalErro = `Não foi possível acessar diretamente o portal SEFAZ (${fetchErr.message || 'tempo limite excedido ou bloqueio de bot/captcha'})`
+        }
+      }
+
+      // Se conseguimos obter o HTML público da SEFAZ, usamos a IA para extrair Razão Social, Itens e Valores
+      if (portalAcessado && htmlPublico.trim().length > 100) {
+        try {
+          const promptSefaz = `Você é o Auditor Fiscal do CRM AEROCAD. Analise este trecho HTML retornado da consulta pública de NFC-e/NF-e da SEFAZ e extraia os dados da nota:
+${htmlPublico}
+
+Chave de acesso conhecida: ${chaveDetectada || 'não informada'}
+Retorne EXCLUSIVAMENTE um JSON puro:
+{
+  "sucesso": true,
+  "tipo_documento": "cupom_fiscal",
+  "fornecedor": "Razão Social do Emitente",
+  "cnpj_cpf": "CNPJ formatado",
+  "data_emissao": "AAAA-MM-DD",
+  "numero_documento": "Número da nota",
+  "serie": "Série",
+  "valor_total": 0.0,
+  "valor_impostos": 0.0,
+  "forma_pagamento_sugerida": "pix",
+  "descricao_itens": "Resumo dos itens principais faturados",
+  "observacoes": "Chave de acesso e informações SEFAZ"
+}`
+          const aiReply = $ai.chat({
+            model: 'fast',
+            messages: [
+              {
+                role: 'system',
+                content: 'Você extrai dados fiscais de páginas públicas SEFAZ. Retorne JSON puro.',
+              },
+              { role: 'user', content: promptSefaz },
+            ],
+          })
+
+          if (aiReply && aiReply.choices && aiReply.choices[0]) {
+            const replyText = aiReply.choices[0].message.content.trim()
+            const match = replyText.match(/\{[\s\S]*\}/)
+            if (match) {
+              const dadosParseados = JSON.parse(match[0])
+              if (dadosParseados && dadosParseados.sucesso !== false) {
+                dadosFinais = {
+                  ...dadosFinais,
+                  ...dadosParseados,
+                  chave_acesso: chaveDetectada || dadosParseados.chave_acesso || '',
+                  confianca: 'alta',
+                }
+              }
+            }
+          }
+        } catch (aiErr) {
+          console.log('Falha na interpretação do HTML SEFAZ por IA:', aiErr.message)
+        }
+      }
+
+      // Monta mensagem amigável explicando o que foi lido e se o portal precisou de conferência manual
+      let mensagemRetorno = ''
+      if (
+        chaveDetectada &&
+        portalAcessado &&
+        dadosFinais.fornecedor &&
+        dadosFinais.valor_total > 0
+      ) {
+        mensagemRetorno =
+          'Dados fiscais completos extraídos da consulta pública da SEFAZ via QR Code!'
+      } else if (chaveDetectada) {
+        mensagemRetorno = `Chave de acesso de 44 dígitos (${chaveDetectada.slice(0, 4)}...${chaveDetectada.slice(-4)}) e dados estruturais identificados pelo QR Code. ${portalErro ? 'O portal da SEFAZ requer conferência manual (' + portalErro + ').' : 'Confira os campos antes de salvar.'}`
+      } else {
+        mensagemRetorno =
+          'QR Code lido, mas não foi possível extrair a chave de 44 dígitos da SEFAZ. Faça a conferência manual dos dados.'
+      }
+
+      return e.json(200, {
+        sucesso: true,
+        origem: 'qrcode_sefaz',
+        chave_acesso: chaveDetectada,
+        portal_consultado: portalAcessado,
+        aviso_portal: portalErro,
+        dados: dadosFinais,
+        mensagem: mensagemRetorno,
+      })
+    } catch (err) {
+      console.log('Erro no endpoint /backend/v1/fiscal/consultar-qr:', err.message)
+      return e.json(500, {
+        error: 'Erro ao consultar QR code fiscal: ' + (err.message || 'desconhecido'),
       })
     }
   },

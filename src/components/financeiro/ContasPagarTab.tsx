@@ -17,6 +17,8 @@ import {
   Landmark,
 } from 'lucide-react'
 import { CapturaBoletoModal } from '@/components/financeiro/CapturaBoletoModal'
+import { CapturaComprovanteModal } from '@/components/financeiro/CapturaComprovanteModal'
+import { useIsMobile } from '@/hooks/use-mobile'
 import { PLANO_CONTAS_AEROCAD, sugerirPlanoContasPorCategoria } from '@/lib/planoContas'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -119,7 +121,9 @@ export function ContasPagarTab({
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   // Form state
+  const isMobile = useIsMobile()
   const [modalBoletoAberto, setModalBoletoAberto] = useState(false)
+  const [modalComprovanteFiscalAberto, setModalComprovanteFiscalAberto] = useState(false)
   const [contasBancarias, setContasBancarias] = useState<ContaBancariaRecord[]>([])
   const [filtroContaBancaria, setFiltroContaBancaria] = useState<string>('todos')
 
@@ -611,6 +615,15 @@ export function ContasPagarTab({
 
           {canWrite && (
             <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                onClick={() => setModalComprovanteFiscalAberto(true)}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white h-9 text-xs shrink-0 font-semibold"
+                title="Fotografar ou ler QR Code / DANFE / Cupom Fiscal com IA"
+              >
+                <Camera className="mr-1.5 h-4 w-4" />
+                Fotografar / QR Code / DANFE
+              </Button>
               <Button
                 type="button"
                 onClick={() => setModalBoletoAberto(true)}
@@ -1296,6 +1309,18 @@ export function ContasPagarTab({
         projetos={projetos}
         contasBancarias={contasBancarias}
         onContaCriada={async () => {
+          await onReload()
+        }}
+      />
+
+      {/* Modal de Fotografia / QR Code / DANFE / Cupom Fiscal com IA */}
+      <CapturaComprovanteModal
+        open={modalComprovanteFiscalAberto}
+        onOpenChange={setModalComprovanteFiscalAberto}
+        projetos={projetos}
+        credores={credores}
+        isMobile={isMobile}
+        onSuccess={async () => {
           await onReload()
         }}
       />

@@ -8,6 +8,15 @@ import type { ContaPagarRecord } from '@/types/crm'
 
 export type TipoDocumentoFiscal = 'nfe' | 'nfse' | 'cupom_fiscal' | 'recibo' | 'fatura' | 'outro'
 
+export interface ItemFiscalDanfe {
+  descricao: string
+  quantidade?: number
+  valor_unitario?: number
+  valor_total?: number
+  unidade?: string
+  ncm?: string
+}
+
 export interface ComprovanteExtraido {
   sucesso: boolean
   tipo_documento: TipoDocumentoFiscal
@@ -15,6 +24,10 @@ export interface ComprovanteExtraido {
   cnpj_cpf: string
   data_emissao: string
   numero_documento: string
+  serie?: string
+  chave_acesso?: string
+  destinatario?: string
+  cnpj_destinatario?: string
   valor_total: number
   valor_impostos: number | null
   forma_pagamento_sugerida:
@@ -35,9 +48,18 @@ export interface ComprovanteExtraido {
   plano_contas_codigo?: string
   plano_contas_nome?: string
   descricao_itens: string
+  itens_detalhados?: ItemFiscalDanfe[]
   observacoes?: string
   confianca?: 'alta' | 'media' | 'baixa'
   erro?: string
+  // Metadados da consulta do QR code / SEFAZ
+  metadados_qr?: {
+    qr_detectado?: boolean
+    conteudo_qr?: string
+    portal_consultado?: boolean
+    aviso_portal?: string | null
+    origem?: string
+  }
 }
 
 export interface BoletoExtraido {
@@ -157,6 +179,38 @@ export async function extrairDadosComprovante(
 
   const json: ExtracaoComprovanteResponse = await res.json()
   return json.dados
+}
+
+export interface ConsultaQrResponse {
+  sucesso: boolean
+  origem?: string
+  chave_acesso?: string
+  portal_consultado?: boolean
+  aviso_portal?: string | null
+  dados: ComprovanteExtraido
+  mensagem: string
+}
+
+/**
+ * Consulta a SEFAZ ou decodifica estrutura oficial no backend a partir da URL/string do QR code
+ */
+export async function consultarQrCodeFiscalBackend(qrContent: string): Promise<ConsultaQrResponse> {
+  const baseUrl = import.meta.env.VITE_POCKETBASE_URL
+  const res = await fetch(`${baseUrl}/backend/v1/fiscal/consultar-qr`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: pb.authStore.token,
+    },
+    body: JSON.stringify({ qr_content: qrContent }),
+  })
+
+  if (!res.ok) {
+    const errorBody = await res.json().catch(() => ({}))
+    throw new Error(errorBody?.error || `Falha ao consultar QR Code fiscal (status ${res.status})`)
+  }
+
+  return (await res.json()) as ConsultaQrResponse
 }
 
 /**

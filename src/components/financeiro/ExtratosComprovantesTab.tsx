@@ -486,7 +486,6 @@ export function ExtratosComprovantesTab({
           )}
         </div>
       </div>
-
       {/* Seção de Extratos Importados */}
       {extratos.length > 0 && (
         <div className="crm-card p-3 space-y-2">
@@ -551,7 +550,6 @@ export function ExtratosComprovantesTab({
           </div>
         </div>
       )}
-
       {/* Filtros e Busca de Transações */}
       <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 crm-card p-3">
         <div className="flex flex-1 items-center gap-2">
@@ -607,7 +605,6 @@ export function ExtratosComprovantesTab({
           </Select>
         </div>
       </div>
-
       {/* Tabela de Transações */}
       {transacoesFiltradas.length === 0 ? (
         <EmptyState
@@ -779,7 +776,6 @@ export function ExtratosComprovantesTab({
           </div>
         </div>
       )}
-
       {/* Modal de Importação de Extrato */}
       <Dialog open={modalUploadAberto} onOpenChange={setModalUploadAberto}>
         <DialogContent className="max-w-md">
@@ -852,7 +848,6 @@ export function ExtratosComprovantesTab({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
       {/* Modal de Conciliação com Sugestões */}
       <Dialog open={!!transacaoParaConciliar} onOpenChange={() => setTransacaoParaConciliar(null)}>
         <DialogContent className="max-w-xl">
@@ -977,7 +972,6 @@ export function ExtratosComprovantesTab({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
       {/* Modal de Comprovante Avulso */}
       <Dialog open={modalComprovanteAvulso} onOpenChange={setModalComprovanteAvulso}>
         <DialogContent className="max-w-md">
@@ -1058,7 +1052,6 @@ export function ExtratosComprovantesTab({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
       {/* Modal Excluir Extrato */}
       <Dialog open={!!modalExcluirExtrato} onOpenChange={() => setModalExcluirExtrato(null)}>
         <DialogContent className="max-w-md">
@@ -1084,7 +1077,6 @@ export function ExtratosComprovantesTab({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
       {/* Modal de Captura Mobile / Extração IA de Comprovantes */}
       <CapturaComprovanteModal
         open={modalCapturaIaAberto}
@@ -1094,7 +1086,7 @@ export function ExtratosComprovantesTab({
         onSuccess={async () => {
           await onReloadContasPagar()
         }}
-      />
+      />{' '}
     </div>
   )
 }
