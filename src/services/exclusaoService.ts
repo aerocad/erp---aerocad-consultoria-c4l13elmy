@@ -44,6 +44,14 @@ export interface DetalhesImpactoCliente {
   notasFiscais: ParcelaRecord[]
 }
 
+export interface DetalhesImpactoOportunidade {
+  projetoVinculado: ProjetoRecord | null
+  propostas: PropostaRecord[]
+  tarefas: TarefaRecord[]
+  anexos: AnexoRecord[]
+  atividades: AtividadeRecord[]
+}
+
 const STORAGE_KEY_ORPHANS = 'aerocad_nfse_orfas'
 
 /**
@@ -410,6 +418,223 @@ export async function excluirProjetoEmCascata(
   }
 
   return { notasOrfasDevolvidas }
+}
+
+/**
+ * Consulta em detalhe os vínculos de uma oportunidade comercial antes da exclusão
+ */
+export async function obterImpactoExclusaoOportunidade(
+  oportunidadeId: string,
+): Promise<DetalhesImpactoOportunidade> {
+  const [oppRecord, propostas, tarefas, anexos, atividades, projsComOpp] = await Promise.all([
+    pb
+      .collection('oportunidades')
+      .getOne<OportunidadeRecord>(oportunidadeId, {
+        expand: 'cliente,projeto',
+      })
+      .catch(() => null),
+    pb
+      .collection('propostas')
+      .getFullList<PropostaRecord>({
+        filter: `oportunidade = '${oportunidadeId}'`,
+        sort: '-created',
+      })
+      .catch(() => []),
+    pb
+      .collection('tarefas')
+      .getFullList<TarefaRecord>({
+        filter: `oportunidade = '${oportunidadeId}'`,
+        sort: '-created',
+      })
+      .catch(() => []),
+    pb
+      .collection('anexos')
+      .getFullList<AnexoRecord>({
+        filter: `oportunidade = '${oportunidadeId}'`,
+        sort: '-created',
+      })
+      .catch(() => []),
+    pb
+      .collection('atividades')
+      .getFullList<AtividadeRecord>({
+        filter: `oportunidade = '${oportunidadeId}'`,
+        sort: '-created',
+      })
+      .catch(() => []),
+    pb
+      .collection('projetos')
+      .getFullList<ProjetoRecord>({
+        filter: `oportunidade = '${oportunidadeId}'`,
+      })
+      .catch(() => []),
+  ])
+
+  let projetoVinculado: ProjetoRecord | null = null
+  if (projsComOpp.length > 0) {
+    projetoVinculado = projsComOpp[0]
+  } else if (oppRecord?.projeto) {
+    projetoVinculado =
+      oppRecord.expand?.projeto ||
+      (await pb
+        .collection('projetos')
+        .getOne<ProjetoRecord>(oppRecord.projeto)
+        .catch(() => null))
+  }
+
+  return {
+    projetoVinculado,
+    propostas,
+    tarefas,
+    anexos,
+    atividades,
+  }
+}
+
+/**
+ * Exclui a oportunidade comercial com cascata segura:
+ * - Limpa o campo relacional `oportunidade` no projeto vinculado (o projeto NÃO é excluído, permanece intacto!)
+ * - Remove tarefas vinculadas à oportunidade
+ * - Remove anexos vinculados à oportunidade
+ * - Remove propostas vinculadas à oportunidade (se houver e não vinculadas a contrato ativo)
+ * - Remove atividades vinculadas à oportunidade
+ * - Exclui a oportunidade
+ * - Registra auditoria na timeline do cliente e no importacoes_log
+ */
+export async function excluirOportunidadeEmCascata(
+  oportunidade: OportunidadeRecord,
+  usuarioNome: string,
+  usuarioId: string,
+): Promise<{ projetoDesvinculado: ProjetoRecord | null }> {
+  const oportunidadeId = oportunidade.id
+  const currentUserId = usuarioId || pb.authStore.record?.id || ''
+  const currentUserName = usuarioNome || pb.authStore.record?.name || 'Administrador'
+
+  const impacto = await obterImpactoExclusaoOportunidade(oportunidadeId)
+  let projetoDesvinculado: ProjetoRecord | null = null
+
+  // 1. Se houver projeto vinculado, LIMPAR o vínculo no projeto (o projeto NUNCA é excluído)
+  if (impacto.projetoVinculado) {
+    try {
+      const projId = impacto.projetoVinculado.id
+      await pb.collection('projetos').update(projId, {
+        oportunidade: null,
+      })
+      projetoDesvinculado = impacto.projetoVinculado
+
+      // Registrar atividade de desvinculação no histórico do projeto
+      await pb
+        .collection('atividades')
+        .create({
+          usuario: currentUserId || null,
+          projeto: projId,
+          cliente: impacto.projetoVinculado.cliente || oportunidade.cliente || null,
+          texto: `[AUDITORIA COMERCIAL] A oportunidade vinculada "${oportunidade.titulo}" foi excluída por ${currentUserName}. O projeto permanece ativo e o vínculo com a oportunidade foi desfeito.`,
+          tipo: 'auditoria',
+          data_hora: new Date().toISOString(),
+        })
+        .catch(() => null)
+    } catch (errProj) {
+      console.warn('Aviso ao desvincular oportunidade do projeto:', errProj)
+    }
+  }
+
+  // 2. Apagar tarefas vinculadas à oportunidade
+  for (const t of impacto.tarefas) {
+    try {
+      await pb.collection('tarefas').delete(t.id)
+    } catch (e) {
+      console.warn(`Erro ao excluir tarefa ${t.id} da oportunidade:`, e)
+    }
+  }
+
+  // 3. Apagar anexos vinculados à oportunidade
+  for (const anexo of impacto.anexos) {
+    try {
+      await pb.collection('anexos').delete(anexo.id)
+    } catch (e) {
+      console.warn(`Erro ao excluir anexo ${anexo.id} da oportunidade:`, e)
+    }
+  }
+
+  // 4. Apagar propostas comerciais/técnicas vinculadas à oportunidade
+  for (const prop of impacto.propostas) {
+    try {
+      await pb.collection('propostas').delete(prop.id)
+    } catch (e) {
+      console.warn(`Erro ao excluir proposta ${prop.id} da oportunidade:`, e)
+    }
+  }
+
+  // 5. Apagar atividades da timeline vinculadas à oportunidade
+  for (const ativ of impacto.atividades) {
+    try {
+      await pb.collection('atividades').delete(ativ.id)
+    } catch (e) {
+      console.warn(`Erro ao excluir atividade ${ativ.id} da oportunidade:`, e)
+    }
+  }
+
+  // 6. Excluir a oportunidade da coleção
+  await pb.collection('oportunidades').delete(oportunidadeId)
+
+  // 7. Registrar auditoria na timeline do cliente e no importacoes_log
+  try {
+    const resumoAuditoria = {
+      acao: 'exclusao_oportunidade',
+      oportunidadeId: oportunidade.id,
+      oportunidadeTitulo: oportunidade.titulo,
+      oportunidadeEtapa: oportunidade.etapa,
+      oportunidadeValor: oportunidade.valor_estimado || 0,
+      clienteId: oportunidade.cliente,
+      usuarioId: currentUserId || null,
+      usuarioNome: currentUserName,
+      dataHora: new Date().toISOString(),
+      projetoDesvinculadoNumero: projetoDesvinculado?.numero || null,
+      projetoDesvinculadoNome: projetoDesvinculado?.nome || null,
+      itensRemovidos: {
+        tarefas: impacto.tarefas.length,
+        anexos: impacto.anexos.length,
+        propostas: impacto.propostas.length,
+        atividades: impacto.atividades.length,
+      },
+    }
+
+    // Timeline do cliente
+    if (oportunidade.cliente) {
+      const vinculoProjetoMsg = projetoDesvinculado
+        ? ` O vínculo com o Projeto ${projetoDesvinculado.numero} foi removido (o projeto foi mantido intacto).`
+        : ''
+      await pb
+        .collection('atividades')
+        .create({
+          usuario: currentUserId || null,
+          cliente: oportunidade.cliente,
+          texto: `[AUDITORIA COMERCIAL] Oportunidade "${oportunidade.titulo}" (etapa: ${oportunidade.etapa}, valor: R$ ${(oportunidade.valor_estimado || 0).toFixed(2)}) foi excluída permanentemente por ${currentUserName}.${vinculoProjetoMsg}`,
+          tipo: 'auditoria',
+          data_hora: new Date().toISOString(),
+        })
+        .catch(() => null)
+    }
+
+    // importacoes_log
+    await pb
+      .collection('importacoes_log')
+      .create({
+        arquivo_nome: `AUDITORIA_EXCLUSAO_OPORTUNIDADE_${oportunidade.id}.json`,
+        tamanho_bytes: 0,
+        usuario: currentUserId || null,
+        total_clientes: 0,
+        total_projetos: projetoDesvinculado ? 1 : 0,
+        total_financeiro: 0,
+        total_comunicacoes: impacto.atividades.length,
+        resumo: resumoAuditoria,
+      })
+      .catch(() => null)
+  } catch (errLog) {
+    console.warn('Falha secundária ao registrar auditoria de exclusão de oportunidade:', errLog)
+  }
+
+  return { projetoDesvinculado }
 }
 
 export interface NotaExclusaoAlvo {

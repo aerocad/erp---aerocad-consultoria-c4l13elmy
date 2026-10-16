@@ -3,15 +3,26 @@ import {
   CalendarDays,
   Filter,
   GripVertical,
+  MoreVertical,
   Plus,
   Search,
   MessageSquare,
   ExternalLink,
+  Trash2,
+  Edit2,
 } from 'lucide-react'
 import { useNavigate, useSearchParams, Link } from 'react-router-dom'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { buildWhatsAppChatUrl } from '@/services/whatsappService'
 import { toast } from 'sonner'
 import { FolderKanban, ArrowUpRight } from 'lucide-react'
+import { ExcluirOportunidadeModal } from '@/components/oportunidades/ExcluirOportunidadeModal'
 
 import { CrmBadge } from '@/components/common/CrmBadge'
 import { EmptyState, ErrorState, PageLoading } from '@/components/common/States'
@@ -71,6 +82,10 @@ export default function FunnelPage() {
   const [selected, setSelected] = useState<OportunidadeRecord | null>(null)
   const [editOpen, setEditOpen] = useState(false)
   const [projectOpen, setProjectOpen] = useState(false)
+  const [excluirModalOpen, setExcluirModalOpen] = useState(false)
+  const [oportunidadeParaExcluir, setOportunidadeParaExcluir] = useState<OportunidadeRecord | null>(
+    null,
+  )
   const [query, setQuery] = useState('')
   const [trail, setTrail] = useState('todos')
   const [dragged, setDragged] = useState<OportunidadeRecord | null>(null)
@@ -85,6 +100,7 @@ export default function FunnelPage() {
     if (params.get('novo') === '1') setNewOpen(true)
   }, [params])
   const canWrite = user?.role === 'admin' || user?.role === 'comercial'
+  const canDelete = Boolean(user && (user.role === 'admin' || user.role === 'comercial'))
   // Trilhas dinâmicas para o filtro: padrão + qualquer trilha customizada encontrada nos dados
   const availableTrails = useMemo(() => {
     const list: Array<{ value: string; label: string }> = [
@@ -297,11 +313,76 @@ export default function FunnelPage() {
                             <p className="truncate text-xs font-bold uppercase tracking-wide text-[#8A8A8A]">
                               {item.expand?.cliente?.razao_social || 'Cliente'}
                             </p>
-                            {item.origem_canal === 'whatsapp' && (
-                              <CrmBadge tone="green" className="px-1.5 py-0 text-[9px] font-bold">
-                                WhatsApp
-                              </CrmBadge>
-                            )}
+                            <div className="flex items-center gap-1 shrink-0">
+                              {item.origem_canal === 'whatsapp' && (
+                                <CrmBadge tone="green" className="px-1.5 py-0 text-[9px] font-bold">
+                                  WhatsApp
+                                </CrmBadge>
+                              )}
+                              {/* Menu de contexto (três pontos) */}
+                              <DropdownMenu>
+                                <DropdownMenuTrigger
+                                  asChild
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                  }}
+                                >
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6 text-[#9A9A9A] hover:text-[#4B4B4B] hover:bg-neutral-100 -mr-1"
+                                    title="Opções da oportunidade"
+                                    aria-label="Opções da oportunidade"
+                                  >
+                                    <MoreVertical className="h-3.5 w-3.5" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent
+                                  align="end"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="w-48 text-xs"
+                                >
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setSelected(item)
+                                      setEditOpen(true)
+                                    }}
+                                    disabled={!canWrite}
+                                    className="cursor-pointer"
+                                  >
+                                    <Edit2 className="mr-2 h-3.5 w-3.5 text-neutral-600" />
+                                    Editar oportunidade
+                                  </DropdownMenuItem>
+
+                                  {(item.projeto || item.expand?.projeto) && (
+                                    <DropdownMenuItem asChild className="cursor-pointer">
+                                      <Link
+                                        to={`/projetos/${item.projeto || item.expand?.projeto?.id}`}
+                                      >
+                                        <FolderKanban className="mr-2 h-3.5 w-3.5 text-[#FF6A13]" />
+                                        Acessar projeto
+                                      </Link>
+                                    </DropdownMenuItem>
+                                  )}
+
+                                  {canDelete && (
+                                    <>
+                                      <DropdownMenuSeparator />
+                                      <DropdownMenuItem
+                                        onClick={() => {
+                                          setOportunidadeParaExcluir(item)
+                                          setExcluirModalOpen(true)
+                                        }}
+                                        className="cursor-pointer text-rose-600 focus:text-rose-600 focus:bg-rose-50"
+                                      >
+                                        <Trash2 className="mr-2 h-3.5 w-3.5 text-rose-600" />
+                                        Excluir oportunidade
+                                      </DropdownMenuItem>
+                                    </>
+                                  )}
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
                           </div>
                           <h3 className="mt-1 text-sm font-semibold leading-snug text-[#4B4B4B]">
                             {item.titulo}
@@ -393,6 +474,26 @@ export default function FunnelPage() {
           setSelected(updated)
           void reload()
         }}
+        onDeleted={(deletedId) => {
+          if (selected?.id === deletedId) {
+            setSelected(null)
+          }
+          void reload()
+        }}
+      />
+
+      {/* Modal centralizado de confirmação e exclusão de oportunidade */}
+      <ExcluirOportunidadeModal
+        open={excluirModalOpen}
+        onOpenChange={setExcluirModalOpen}
+        oportunidade={oportunidadeParaExcluir}
+        onDeleted={(deletedId) => {
+          if (selected?.id === deletedId) {
+            setSelected(null)
+          }
+          setOportunidadeParaExcluir(null)
+          void reload()
+        }}
       />
       <Sheet open={Boolean(selected)} onOpenChange={(value) => !value && setSelected(null)}>
         <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
@@ -414,7 +515,6 @@ export default function FunnelPage() {
                   <p className="mono-value mt-1 font-bold">{selected.probabilidade}%</p>
                 </div>
               </div>
-
               {/* Detalhes de Serviço, Trilha e Responsável */}
               <div className="rounded-lg border bg-neutral-50/70 p-3.5 space-y-2.5 text-xs">
                 <div className="flex items-center justify-between">
@@ -523,7 +623,6 @@ export default function FunnelPage() {
                   )}
                 </div>
               )}
-
               <div>
                 <p className="technical-label">OBSERVAÇÕES</p>
                 <div
@@ -558,16 +657,31 @@ export default function FunnelPage() {
                   </Button>
                 </div>
               )}
-
-              <div className="flex flex-col gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => setEditOpen(true)}
-                  disabled={!canWrite}
-                  className="w-full border-neutral-300"
-                >
-                  Editar oportunidade
-                </Button>
+              <div className="flex flex-col gap-2 pt-2 border-t border-neutral-200">
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => setEditOpen(true)}
+                    disabled={!canWrite}
+                    className="flex-1 border-neutral-300"
+                  >
+                    <Edit2 className="mr-1.5 h-3.5 w-3.5 text-neutral-600" />
+                    Editar oportunidade
+                  </Button>
+                  {canDelete && (
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setOportunidadeParaExcluir(selected)
+                        setExcluirModalOpen(true)
+                      }}
+                      className="border-rose-200 text-rose-600 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-300 px-3"
+                      title="Excluir oportunidade"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
                 {selected.projeto || selected.expand?.projeto ? (
                   <Button
                     asChild
@@ -591,7 +705,7 @@ export default function FunnelPage() {
                     Converter em projeto
                   </Button>
                 )}
-              </div>
+              </div>{' '}
             </div>
           )}
         </SheetContent>

@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { Compass, Briefcase, PlusCircle, Users } from 'lucide-react'
+import { Compass, Briefcase, PlusCircle, Users, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
+import { ExcluirOportunidadeModal } from '@/components/oportunidades/ExcluirOportunidadeModal'
 import {
   Dialog,
   DialogContent,
@@ -41,6 +42,7 @@ type Props = {
   oportunidade?: OportunidadeRecord | null
   presetClient?: string
   onSaved: (record: OportunidadeRecord) => void
+  onDeleted?: (oportunidadeId: string) => void
 }
 
 const TRILHAS_PADRAO: Array<{ id: string; label: string; base: 'opea' | 'registro' | 'demais' }> = [
@@ -55,6 +57,7 @@ export function OportunidadeDialog({
   oportunidade,
   presetClient,
   onSaved,
+  onDeleted,
 }: Props) {
   const { user } = useAuth()
   const [clients, setClients] = useState<ClienteRecord[]>([])
@@ -63,6 +66,9 @@ export function OportunidadeDialog({
   const [users, setUsers] = useState<UserRecord[]>([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [excluirModalOpen, setExcluirModalOpen] = useState(false)
+
+  const canDelete = Boolean(user && (user.role === 'admin' || user.role === 'comercial'))
 
   // Modos customizados "Outro / Criar..."
   const [modoServicoCustomizado, setModoServicoCustomizado] = useState(false)
@@ -675,16 +681,45 @@ export function OportunidadeDialog({
             />
           </div>
           {error && <p className="text-sm text-red-600 sm:col-span-2">{error}</p>}
-          <DialogFooter className="sm:col-span-2">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancelar
-            </Button>
-            <Button type="submit" disabled={saving} className="bg-[#FF6A13] hover:bg-[#E85B06]">
-              {saving ? 'Salvando...' : 'Salvar oportunidade'}
-            </Button>
+          <DialogFooter className="sm:col-span-2 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-2 pt-2 border-t">
+            <div>
+              {oportunidade && canDelete && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setExcluirModalOpen(true)}
+                  className="text-neutral-500 hover:text-rose-600 hover:bg-rose-50 px-2.5 h-8 text-xs font-semibold"
+                >
+                  <Trash2 className="mr-1.5 h-3.5 w-3.5 text-rose-500" />
+                  Excluir oportunidade...
+                </Button>
+              )}
+            </div>
+            <div className="flex items-center justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={saving} className="bg-[#FF6A13] hover:bg-[#E85B06]">
+                {saving ? 'Salvando...' : 'Salvar oportunidade'}
+              </Button>
+            </div>
           </DialogFooter>
         </form>
       </DialogContent>
+
+      {/* Modal de confirmação de exclusão em cascata */}
+      {oportunidade && (
+        <ExcluirOportunidadeModal
+          open={excluirModalOpen}
+          onOpenChange={setExcluirModalOpen}
+          oportunidade={oportunidade}
+          onDeleted={(id) => {
+            onOpenChange(false)
+            onDeleted?.(id)
+          }}
+        />
+      )}
     </Dialog>
   )
 }
