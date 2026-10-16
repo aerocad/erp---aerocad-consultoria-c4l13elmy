@@ -35,15 +35,22 @@ import {
 import {
   extrairDadosBoleto,
   salvarContaPagarComComprovante,
+  consultarQrCodeFiscalBackend,
   type BoletoExtraido,
+  type ComprovanteExtraido,
 } from '@/services/comprovantesVision'
+import { escanearQrCodeDocumento } from '@/services/qrFiscalScanner'
+import {
+  formatarResumoDanfeParaAreaTransferencia,
+  imprimirDanfeSimplificado,
+} from '@/services/danfeSimplificadoBuilder'
+import { useFinanceiroVisibilidade } from '@/contexts/FinanceiroVisibilidadeContext'
 import { PLANO_CONTAS_AEROCAD, sugerirPlanoContasPorCategoria } from '@/lib/planoContas'
 import { formatCurrencyRaw } from '@/lib/format'
 import { toast } from 'sonner'
-import type { ProjetoRecord, ContaBancariaRecord } from '@/types/crm'
-
-import type { CredorRecord } from '@/types/crm'
+import type { ProjetoRecord, ContaBancariaRecord, CredorRecord } from '@/types/crm'
 import { salvarCredor, CATEGORIA_CREDOR_LABELS } from '@/services/credores'
+import { Copy, Printer } from 'lucide-react'
 
 export interface CapturaBoletoModalProps {
   open: boolean
@@ -65,6 +72,7 @@ export function CapturaBoletoModal({
   credores = [],
   onContaCriada,
 }: CapturaBoletoModalProps) {
+  const { podeVerValores } = useFinanceiroVisibilidade()
   const [etapa, setEtapa] = useState<EtapaCaptura>('upload')
   const [arquivo, setArquivo] = useState<File | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
@@ -76,6 +84,10 @@ export function CapturaBoletoModal({
   const [credorId, setCredorId] = useState<string>('')
   const [mostrarCadastroCredor, setMostrarCadastroCredor] = useState(false)
   const [salvandoCredorRapido, setSalvandoCredorRapido] = useState(false)
+
+  // Chave de acesso / série fiscal quando documento possuir QR fiscal / DANFE
+  const [chaveAcesso, setChaveAcesso] = useState('')
+  const [serieDoc, setSerieDoc] = useState('')
 
   // Formulário editável de conferência lado a lado
   const [beneficiario, setBeneficiario] = useState('')
@@ -125,6 +137,8 @@ export function CapturaBoletoModal({
     setIsPdf(false)
     setDadosExtraidos(null)
     setErroAnalise(null)
+    setChaveAcesso('')
+    setSerieDoc('')
     setBeneficiario('')
     setCnpjCpf('')
     setLinhaDigitavel('')
@@ -167,38 +181,67 @@ export function CapturaBoletoModal({
     setErroAnalise(null)
 
     try {
+      // 1. Tentar varredura prévia de QR fiscal (DANFE / NFC-e / SAT)
+      let qrFiscalLido = false
+      let dadosQrBackend: ComprovanteExtraido | null = null
+      let avisoQrPortal: string | null = null
+
+      try {
+        const resultadoQr = await escanearQrCodeDocumento(file)
+        if (resultadoQr.sucesso && resultadoQr.qrEncontrado && resultadoQr.conteudoBruto) {
+          qrFiscalLido = true
+          const consultaBackend = await consultarQrCodeFiscalBackend(resultadoQr.conteudoBruto)
+          if (consultaBackend && consultaBackend.dados) {
+            dadosQrBackend = consultaBackend.dados
+            if (consultaBackend.chave_acesso) setChaveAcesso(consultaBackend.chave_acesso)
+            if (consultaBackend.aviso_portal) avisoQrPortal = consultaBackend.aviso_portal
+          }
+        }
+      } catch (qrErr) {
+        console.warn('Varredura de QR Code em boleto não encontrou QR fiscal:', qrErr)
+      }
+
       const extraido = await extrairDadosBoleto(file)
       setDadosExtraidos(extraido)
 
-      // Pré-preenche os campos conferíveis
-      setBeneficiario(extraido.beneficiario_fornecedor || '')
-      setCnpjCpf(extraido.cnpj_cpf_beneficiario || '')
-      setLinhaDigitavel(extraido.linha_digitavel || extraido.codigo_barras || '')
-      setNumeroDoc(extraido.numero_documento || '')
+      // Pré-preenche os campos conferíveis, mesclando dados do QR Code se houver
+      const fornFinal = dadosQrBackend?.fornecedor || extraido.beneficiario_fornecedor || ''
+      const cnpjFinal = dadosQrBackend?.cnpj_cpf || extraido.cnpj_cpf_beneficiario || ''
+      const numFinal = dadosQrBackend?.numero_documento || extraido.numero_documento || ''
+      if (dadosQrBackend?.serie) setSerieDoc(dadosQrBackend.serie)
+      if (dadosQrBackend?.chave_acesso) setChaveAcesso(dadosQrBackend.chave_acesso)
 
-      const docVal = extraido.valor_documento || extraido.valor_cobrado || 0
+      setBeneficiario(fornFinal)
+      setCnpjCpf(cnpjFinal)
+      setLinhaDigitavel(extraido.linha_digitavel || extraido.codigo_barras || '')
+      setNumeroDoc(numFinal)
+
+      const docVal =
+        extraido.valor_documento || extraido.valor_cobrado || dadosQrBackend?.valor_total || 0
       setValorDoc(docVal ? String(docVal) : '')
       setValorDesconto(extraido.valor_desconto ? String(extraido.valor_desconto) : '0')
       setValorJurosMulta(extraido.valor_juros_multa ? String(extraido.valor_juros_multa) : '0')
 
       if (extraido.data_vencimento) {
         setVencimento(extraido.data_vencimento.slice(0, 10))
+      } else if (dadosQrBackend?.data_emissao) {
+        setVencimento(dadosQrBackend.data_emissao.slice(0, 10))
       } else {
         setVencimento(new Date().toISOString().slice(0, 10))
       }
 
-      setDescricao(
-        extraido.beneficiario_fornecedor
-          ? `Boleto - ${extraido.beneficiario_fornecedor}`
-          : `Boleto a pagar (${file.name})`,
-      )
+      setDescricao(fornFinal ? `Boleto - ${fornFinal}` : `Boleto a pagar (${file.name})`)
 
-      const catSugerida = extraido.categoria_sugerida || 'despesas_operacionais'
+      const catSugerida =
+        dadosQrBackend?.categoria_sugerida || extraido.categoria_sugerida || 'despesas_operacionais'
       setCategoria(catSugerida)
 
       if (extraido.plano_contas_codigo) {
         setPlanoContasCodigo(extraido.plano_contas_codigo)
         setPlanoContasNome(extraido.plano_contas_nome || 'Despesas Gerais')
+      } else if (dadosQrBackend?.plano_contas_codigo) {
+        setPlanoContasCodigo(dadosQrBackend.plano_contas_codigo)
+        setPlanoContasNome(dadosQrBackend.plano_contas_nome || 'Despesas Gerais')
       } else {
         const itemPlano = sugerirPlanoContasPorCategoria(catSugerida)
         setPlanoContasCodigo(itemPlano.codigo)
@@ -210,13 +253,13 @@ export function CapturaBoletoModal({
       }
 
       // Verificação automática se já existe credor cadastrado com este CNPJ/CPF ou nome
-      const docLimpo = (extraido.cnpj_cpf_beneficiario || '').replace(/\D/g, '')
-      const nomeLimpo = (extraido.beneficiario_fornecedor || '').trim().toLowerCase()
+      const docLimpo = cnpjFinal.replace(/\D/g, '')
+      const nomeLimpo = fornFinal.trim().toLowerCase()
 
       const credorEncontrado = credores.find((c) => {
-        const cDoc = (c.cnpj_cpf || '').replace(/\D/g, '')
+        const cDoc = (c.cpf_cnpj || c.cnpj_cpf || '').replace(/\D/g, '')
         if (docLimpo && cDoc && docLimpo === cDoc) return true
-        const cNome = (c.nome_razao_social || '').toLowerCase()
+        const cNome = (c.nome || c.nome_razao_social || '').toLowerCase()
         const cFantasia = (c.nome_fantasia || '').toLowerCase()
         if (nomeLimpo && (cNome.includes(nomeLimpo) || nomeLimpo.includes(cNome))) return true
         if (
@@ -237,13 +280,21 @@ export function CapturaBoletoModal({
       }
 
       setEtapa('conferencia')
-      if (extraido.sucesso === false) {
+      if (avisoQrPortal) {
+        setErroAnalise(
+          `QR Code fiscal detectado no boleto. Portal SEFAZ requer conferência manual: ${avisoQrPortal}. Confira os dados pré-preenchidos.`,
+        )
+      } else if (extraido.sucesso === false && !qrFiscalLido) {
         setErroAnalise(
           extraido.erro ||
             'Não foi possível ler o boleto — aproxime a câmera, garanta boa iluminação ou anexe o PDF com código de barras nítido.',
         )
       } else {
-        toast.success('Boleto analisado com sucesso pela IA do CRM AEROCAD!')
+        toast.success(
+          qrFiscalLido
+            ? 'Boleto/DANFE analisado com auxílio do QR Code fiscal!'
+            : 'Boleto analisado com sucesso pela IA do CRM AEROCAD!',
+        )
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
@@ -258,6 +309,71 @@ export function CapturaBoletoModal({
       toast.warning(
         'A extração automática teve limitações. Preencha os campos manualmente ou tente reprocessar.',
       )
+    }
+  }
+
+  // Copiar resumo estruturado do DANFE/boleto para área de transferência
+  async function handleCopiarResumoDanfe() {
+    try {
+      const dadosParaResumo: ComprovanteExtraido = {
+        sucesso: true,
+        tipo_documento: 'boleto',
+        fornecedor: beneficiario,
+        cnpj_cpf: cnpjCpf,
+        numero_documento: numeroDoc,
+        serie: serieDoc,
+        chave_acesso: chaveAcesso,
+        data_emissao: vencimento,
+        valor_total: valorLiquidoFinal,
+        valor_impostos: null,
+        forma_pagamento_sugerida: 'boleto',
+        categoria_sugerida: categoria,
+        plano_contas_codigo: planoContasCodigo,
+        plano_contas_nome: planoContasNome,
+        descricao_itens: descricao,
+        observacoes: [observacoes, linhaDigitavel ? `Linha Digitável: ${linhaDigitavel}` : '']
+          .filter(Boolean)
+          .join(' | '),
+        confianca: 'alta',
+      }
+      const texto = formatarResumoDanfeParaAreaTransferencia(dadosParaResumo, podeVerValores)
+      await navigator.clipboard.writeText(texto)
+      toast.success('Resumo do documento copiado para a área de transferência!')
+    } catch (err) {
+      console.error(err)
+      toast.error('Não foi possível copiar para a área de transferência.')
+    }
+  }
+
+  // Imprimir DANFE simplificado A4
+  function handleImprimirDanfeSimplificado() {
+    try {
+      const dadosParaImpressao: ComprovanteExtraido = {
+        sucesso: true,
+        tipo_documento: 'boleto',
+        fornecedor: beneficiario,
+        cnpj_cpf: cnpjCpf,
+        numero_documento: numeroDoc,
+        serie: serieDoc,
+        chave_acesso: chaveAcesso,
+        data_emissao: vencimento,
+        valor_total: valorLiquidoFinal,
+        valor_impostos: null,
+        forma_pagamento_sugerida: 'boleto',
+        categoria_sugerida: categoria,
+        plano_contas_codigo: planoContasCodigo,
+        plano_contas_nome: planoContasNome,
+        descricao_itens: descricao,
+        observacoes: [observacoes, linhaDigitavel ? `Linha Digitável: ${linhaDigitavel}` : '']
+          .filter(Boolean)
+          .join(' | '),
+        confianca: 'alta',
+      }
+      imprimirDanfeSimplificado(dadosParaImpressao, podeVerValores)
+      toast.info('Abrindo visualização de impressão do DANFE Simplificado...')
+    } catch (err) {
+      console.error(err)
+      toast.error('Erro ao gerar visualização do DANFE Simplificado.')
     }
   }
 
@@ -359,6 +475,8 @@ export function CapturaBoletoModal({
         observacoes: [
           observacoes,
           linhaDigitavel ? `Linha Digitável: ${linhaDigitavel}` : null,
+          chaveAcesso ? `Chave de Acesso Fiscal: ${chaveAcesso}` : null,
+          serieDoc ? `Série Fiscal: ${serieDoc}` : null,
           `Conta Bancária PJ: ${contasBancarias.find((c) => c.id === contaBancariaId)?.apelido || 'Não associada'}`,
         ]
           .filter(Boolean)
@@ -583,9 +701,9 @@ export function CapturaBoletoModal({
                       type="button"
                       variant="ghost"
                       size="sm"
-                      className="h-6 text-[10px] text-neutral-300 hover:text-white"
+                      className="h-6 text-[10px] text-[#FF6A13] hover:text-orange-300 font-semibold"
                       onClick={handleReprocessarMesmoBoleto}
-                      title="Reprocessar este mesmo boleto"
+                      title="Reprocessar este mesmo boleto ou DANFE com IA e QR Code"
                     >
                       <RotateCcw className="h-3 w-3 mr-1 text-[#FF6A13]" />
                       Reprocessar
@@ -726,6 +844,23 @@ export function CapturaBoletoModal({
                     />
                   </div>
                 </div>
+
+                {chaveAcesso && (
+                  <div className="space-y-1 p-2 rounded border border-orange-200 bg-orange-50/50">
+                    <Label className="text-xs font-semibold text-neutral-800 flex items-center justify-between">
+                      <span>Chave de Acesso Fiscal (44 dígitos)</span>
+                      <span className="text-[10px] text-neutral-500 font-mono">
+                        {chaveAcesso.length} dígitos
+                      </span>
+                    </Label>
+                    <Input
+                      value={chaveAcesso}
+                      onChange={(e) => setChaveAcesso(e.target.value)}
+                      placeholder="Chave de 44 dígitos"
+                      className="h-8 text-xs font-mono bg-white"
+                    />
+                  </div>
+                )}
 
                 <div className="space-y-1">
                   <Label className="text-xs font-semibold flex items-center justify-between">
@@ -945,7 +1080,31 @@ export function CapturaBoletoModal({
           </Button>
 
           {etapa === 'conferencia' && (
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleCopiarResumoDanfe}
+                className="h-8 text-xs"
+                title="Copiar resumo estruturado para a área de transferência"
+              >
+                <Copy className="mr-1.5 h-3.5 w-3.5 text-neutral-600" />
+                Copiar dados
+              </Button>
+
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleImprimirDanfeSimplificado}
+                className="h-8 text-xs text-[#FF6A13] border-orange-200 hover:bg-orange-50"
+                title="Gerar DANFE Simplificado A4 com carimbo informativo"
+              >
+                <Printer className="mr-1.5 h-3.5 w-3.5" />
+                Gerar DANFE simplificado
+              </Button>
+
               <Button
                 type="button"
                 variant="ghost"
@@ -953,14 +1112,15 @@ export function CapturaBoletoModal({
                   setEtapa('upload')
                   setArquivo(null)
                 }}
-                className="text-xs"
+                className="text-xs h-8"
               >
                 Voltar
               </Button>
+
               <Button
                 type="button"
                 onClick={handleSalvarContaPagar}
-                className="bg-[#FF6A13] hover:bg-[#E85B06] text-white text-xs font-semibold"
+                className="bg-[#FF6A13] hover:bg-[#E85B06] text-white text-xs font-semibold h-8"
               >
                 <CheckCircle2 className="h-4 w-4 mr-1.5" />
                 Gravar Conta a Pagar com Boleto

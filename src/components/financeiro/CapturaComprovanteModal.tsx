@@ -39,17 +39,27 @@ import { formatCurrency } from '@/lib/format'
 import {
   extrairDadosComprovante,
   salvarContaPagarComComprovante,
+  consultarQrCodeFiscalBackend,
   TIPO_DOC_LABELS,
   type ComprovanteExtraido,
   type TipoDocumentoFiscal,
 } from '@/services/comprovantesVision'
+import { escanearQrCodeDocumento } from '@/services/qrFiscalScanner'
+import {
+  formatarResumoDanfeParaAreaTransferencia,
+  imprimirDanfeSimplificado,
+} from '@/services/danfeSimplificadoBuilder'
+import { useFinanceiroVisibilidade } from '@/contexts/FinanceiroVisibilidadeContext'
+import { salvarCredor } from '@/services/credores'
 import { PLANO_CONTAS_AEROCAD, sugerirPlanoContasPorCategoria } from '@/lib/planoContas'
-import type { ProjetoRecord } from '@/types/crm'
+import type { ProjetoRecord, CredorRecord } from '@/types/crm'
+import { Building2, Copy, Printer, Plus, CheckCircle2 } from 'lucide-react'
 
 interface CapturaComprovanteModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   projetos: ProjetoRecord[]
+  credores?: CredorRecord[]
   isMobile: boolean
   onSuccess: () => Promise<void> | void
 }
@@ -58,10 +68,12 @@ export function CapturaComprovanteModal({
   open,
   onOpenChange,
   projetos,
+  credores = [],
   isMobile,
   onSuccess,
 }: CapturaComprovanteModalProps) {
   const { user } = useAuth()
+  const { podeVerValores } = useFinanceiroVisibilidade()
 
   // Referências para os inputs de arquivo
   const cameraInputRef = useRef<HTMLInputElement>(null)
@@ -75,6 +87,16 @@ export function CapturaComprovanteModal({
   const [isPdf, setIsPdf] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [mensagemAnalise, setMensagemAnalise] = useState('Analisando o comprovante com IA...')
+
+  // Integração com Credores
+  const [credorId, setCredorId] = useState<string>('')
+  const [mostrarCadastroCredor, setMostrarCadastroCredor] = useState(false)
+  const [salvandoCredorRapido, setSalvandoCredorRapido] = useState(false)
+
+  // Dados fiscais adicionais (chave 44, série, etc.)
+  const [chaveAcesso, setChaveAcesso] = useState('')
+  const [serieDoc, setSerieDoc] = useState('')
+  const [dadosCompletosDoc, setDadosCompletosDoc] = useState<Partial<ComprovanteExtraido>>({})
 
   // Campos do formulário de conferência
   const [tipoDoc, setTipoDoc] = useState<TipoDocumentoFiscal>('cupom_fiscal')
@@ -112,6 +134,11 @@ export function CapturaComprovanteModal({
       setIsPdf(false)
       setIsSubmitting(false)
       setAvisoExtracao(null)
+      setCredorId('')
+      setMostrarCadastroCredor(false)
+      setChaveAcesso('')
+      setSerieDoc('')
+      setDadosCompletosDoc({})
     }
   }, [open])
 
@@ -136,20 +163,94 @@ export function CapturaComprovanteModal({
   // Executa o pipeline de extração com tratamento de erro claro e resiliente
   async function executarExtracao(file: File) {
     setEtapa('analise')
-    setMensagemAnalise('Otimizando imagem e analisando cupom/comprovante com IA...')
+    setMensagemAnalise('Varrendo QR Code fiscal (NFC-e / SAT / DANFE) e analisando com IA...')
 
     try {
-      const extraido = await extrairDadosComprovante(file)
-      preencherFormularioComExtraido(extraido, file.name)
+      // 1. Tentar leitura de QR Code Fiscal (jsQR / pdfJsLoader)
+      let qrFiscalLido = false
+      let dadosQrBackend: ComprovanteExtraido | null = null
+      let avisoQrPortal: string | null = null
+
+      try {
+        const resultadoQr = await escanearQrCodeDocumento(file)
+        if (resultadoQr.sucesso && resultadoQr.qrEncontrado && resultadoQr.conteudoBruto) {
+          qrFiscalLido = true
+          setMensagemAnalise('QR Code fiscal detectado! Consultando SEFAZ e dados estruturais...')
+
+          const consultaBackend = await consultarQrCodeFiscalBackend(resultadoQr.conteudoBruto)
+          if (consultaBackend && consultaBackend.dados) {
+            dadosQrBackend = consultaBackend.dados
+            if (consultaBackend.chave_acesso) {
+              setChaveAcesso(consultaBackend.chave_acesso)
+            }
+            if (consultaBackend.aviso_portal) {
+              avisoQrPortal = consultaBackend.aviso_portal
+            }
+          }
+        }
+      } catch (qrErr) {
+        console.warn(
+          'Tentativa de varredura de QR Code não encontrou código fiscal, prosseguindo com visão:',
+          qrErr,
+        )
+      }
+
+      // 2. Se obteve dados via QR Code Fiscal com fornecedor e valor preenchidos
+      if (dadosQrBackend && (dadosQrBackend.valor_total > 0 || dadosQrBackend.fornecedor)) {
+        preencherFormularioComExtraido(dadosQrBackend, file.name)
+        setEtapa('conferencia')
+        if (avisoQrPortal) {
+          setAvisoExtracao(
+            `QR Code fiscal lido! O portal SEFAZ requer conferência manual de alguns campos (${avisoQrPortal}). Os dados da chave foram decompostos abaixo.`,
+          )
+        } else {
+          setAvisoExtracao(null)
+          toast.success('Documento fiscal lido via QR Code com sucesso!')
+        }
+        return
+      }
+
+      // 3. Se o QR Code leu uma chave mas a SEFAZ bloqueou/não retornou valor, rodar visão e mesclar
+      const extraidoVisao = await extrairDadosComprovante(file)
+      let consolidado = extraidoVisao
+
+      if (dadosQrBackend) {
+        // Mesclar dados do QR Code com os dados da visão (QR tem chave, modelo e série mais exatos)
+        consolidado = {
+          ...extraidoVisao,
+          tipo_documento: dadosQrBackend.tipo_documento || extraidoVisao.tipo_documento,
+          fornecedor: extraidoVisao.fornecedor || dadosQrBackend.fornecedor,
+          cnpj_cpf: dadosQrBackend.cnpj_cpf || extraidoVisao.cnpj_cpf,
+          numero_documento: dadosQrBackend.numero_documento || extraidoVisao.numero_documento,
+          serie: dadosQrBackend.serie || extraidoVisao.serie,
+          chave_acesso: dadosQrBackend.chave_acesso || extraidoVisao.chave_acesso,
+          valor_total: extraidoVisao.valor_total || dadosQrBackend.valor_total,
+          valor_impostos: extraidoVisao.valor_impostos ?? dadosQrBackend.valor_impostos,
+          observacoes: [extraidoVisao.observacoes, dadosQrBackend.observacoes]
+            .filter(Boolean)
+            .join(' | '),
+        }
+      }
+
+      preencherFormularioComExtraido(consolidado, file.name)
       setEtapa('conferencia')
-      if (extraido.sucesso === false) {
+
+      if (avisoQrPortal) {
         setAvisoExtracao(
-          extraido.erro ||
+          `QR Code fiscal identificado (${consolidado.chave_acesso ? consolidado.chave_acesso.slice(0, 4) + '...' + consolidado.chave_acesso.slice(-4) : 'chave 44'}). O portal SEFAZ solicitou conferência (${avisoQrPortal}). Confira os dados preenchidos ao lado.`,
+        )
+      } else if (consolidado.sucesso === false) {
+        setAvisoExtracao(
+          consolidado.erro ||
             'Não foi possível ler o documento — aproxime a câmera, garanta boa iluminação ou anexe o PDF.',
         )
       } else {
         setAvisoExtracao(null)
-        toast.success('Informações do comprovante extraídas com sucesso!')
+        toast.success(
+          qrFiscalLido
+            ? 'Informações fiscais extraídas com auxílio do QR Code!'
+            : 'Informações do comprovante extraídas com sucesso!',
+        )
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
@@ -181,10 +282,15 @@ export function CapturaComprovanteModal({
   }
 
   function preencherFormularioComExtraido(extraido: ComprovanteExtraido, nomeArquivo: string) {
+    setDadosCompletosDoc(extraido)
     setTipoDoc(extraido.tipo_documento || 'outro')
-    setFornecedor(extraido.fornecedor || '')
-    setCnpjCpf(extraido.cnpj_cpf || '')
+    const forn = extraido.fornecedor || ''
+    setFornecedor(forn)
+    const docLimpo = extraido.cnpj_cpf || ''
+    setCnpjCpf(docLimpo)
     setNumeroDoc(extraido.numero_documento || '')
+    if (extraido.serie) setSerieDoc(extraido.serie)
+    if (extraido.chave_acesso) setChaveAcesso(extraido.chave_acesso)
     setDataEmissao(extraido.data_emissao || new Date().toISOString().slice(0, 10))
     setValorTotal(extraido.valor_total || '')
     setValorImpostos(extraido.valor_impostos || '')
@@ -204,6 +310,122 @@ export function CapturaComprovanteModal({
     )
     setObservacoes(extraido.observacoes || '')
     setConfianca(extraido.confianca || 'media')
+
+    // Tentar vincular automaticamente a um credor existente por CNPJ/CPF ou Razão Social
+    if (credores.length > 0) {
+      const matchDoc = docLimpo
+        ? credores.find(
+            (c) => c.cpf_cnpj && c.cpf_cnpj.replace(/\D/g, '') === docLimpo.replace(/\D/g, ''),
+          )
+        : null
+
+      if (matchDoc) {
+        setCredorId(matchDoc.id)
+      } else if (forn) {
+        const matchNome = credores.find(
+          (c) => c.nome.toLowerCase().trim() === forn.toLowerCase().trim(),
+        )
+        if (matchNome) {
+          setCredorId(matchNome.id)
+        } else {
+          setCredorId('')
+        }
+      } else {
+        setCredorId('')
+      }
+    }
+  }
+
+  // Cadastro rápido de credor caso não exista
+  async function handleCadastrarCredorRapido() {
+    if (!fornecedor.trim()) {
+      toast.error('Informe a Razão Social ou Nome do fornecedor.')
+      return
+    }
+    setSalvandoCredorRapido(true)
+    try {
+      const novo = await salvarCredor({
+        nome: fornecedor.trim(),
+        tipo_pessoa: cnpjCpf.replace(/\D/g, '').length === 11 ? 'pf' : 'pj',
+        cpf_cnpj: cnpjCpf.trim() || undefined,
+        categoria: 'outros',
+        status: 'ativo',
+        observacoes: 'Cadastrado automaticamente via leitura de comprovante fiscal',
+      })
+      toast.success(`Credor "${novo.nome}" cadastrado com sucesso!`)
+      setCredorId(novo.id)
+      setMostrarCadastroCredor(false)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      toast.error(`Erro ao cadastrar credor: ${msg}`)
+    } finally {
+      setSalvandoCredorRapido(false)
+    }
+  }
+
+  // Copiar resumo estruturado do DANFE para área de transferência
+  async function handleCopiarResumoDanfe() {
+    try {
+      const dadosParaResumo: ComprovanteExtraido = {
+        sucesso: true,
+        tipo_documento: tipoDoc,
+        fornecedor,
+        cnpj_cpf: cnpjCpf,
+        numero_documento: numeroDoc,
+        serie: serieDoc,
+        chave_acesso: chaveAcesso,
+        data_emissao: dataEmissao,
+        valor_total:
+          typeof valorTotal === 'number' ? valorTotal : parseFloat(String(valorTotal)) || 0,
+        valor_impostos: typeof valorImpostos === 'number' ? valorImpostos : null,
+        forma_pagamento_sugerida: formaPagamento,
+        categoria_sugerida: categoria,
+        plano_contas_codigo: planoContasCodigo,
+        plano_contas_nome: planoContasNome,
+        descricao_itens: descricaoItens,
+        observacoes,
+        confianca,
+        itens_danfe: dadosCompletosDoc.itens_danfe,
+      }
+      const texto = formatarResumoDanfeParaAreaTransferencia(dadosParaResumo, podeVerValores)
+      await navigator.clipboard.writeText(texto)
+      toast.success('Resumo do documento fiscal copiado para a área de transferência!')
+    } catch (err) {
+      console.error(err)
+      toast.error('Não foi possível copiar para a área de transferência.')
+    }
+  }
+
+  // Imprimir DANFE simplificado A4
+  function handleImprimirDanfeSimplificado() {
+    try {
+      const dadosParaImpressao: ComprovanteExtraido = {
+        sucesso: true,
+        tipo_documento: tipoDoc,
+        fornecedor,
+        cnpj_cpf: cnpjCpf,
+        numero_documento: numeroDoc,
+        serie: serieDoc,
+        chave_acesso: chaveAcesso,
+        data_emissao: dataEmissao,
+        valor_total:
+          typeof valorTotal === 'number' ? valorTotal : parseFloat(String(valorTotal)) || 0,
+        valor_impostos: typeof valorImpostos === 'number' ? valorImpostos : null,
+        forma_pagamento_sugerida: formaPagamento,
+        categoria_sugerida: categoria,
+        plano_contas_codigo: planoContasCodigo,
+        plano_contas_nome: planoContasNome,
+        descricao_itens: descricaoItens,
+        observacoes,
+        confianca,
+        itens_danfe: dadosCompletosDoc.itens_danfe,
+      }
+      imprimirDanfeSimplificado(dadosParaImpressao, podeVerValores)
+      toast.info('Abrindo visualização de impressão do DANFE Simplificado...')
+    } catch (err) {
+      console.error(err)
+      toast.error('Erro ao gerar visualização do DANFE Simplificado.')
+    }
   }
 
   // Reprocessa a MESMA foto/arquivo já carregado sem exigir recaptura
@@ -257,13 +479,16 @@ export function CapturaComprovanteModal({
         observacoes: [
           observacoes.trim(),
           cnpjCpf ? `CNPJ/CPF: ${cnpjCpf}` : '',
+          chaveAcesso ? `Chave de Acesso: ${chaveAcesso}` : '',
+          serieDoc ? `Série: ${serieDoc}` : '',
           valorImpostos ? `Impostos destacados: R$ ${valorImpostos}` : '',
-          `Extraído via IA / Visão computacional (${TIPO_DOC_LABELS[tipoDoc]})`,
+          `Extraído via IA / Varredura Fiscal (${TIPO_DOC_LABELS[tipoDoc]})`,
         ]
           .filter(Boolean)
           .join('\n'),
         arquivoComprovante: arquivoSelecionado,
         userId: user?.id || null,
+        credorId: credorId || null,
         plano_contas_codigo: planoContasCodigo,
         plano_contas_nome: planoContasNome,
       })
@@ -574,39 +799,122 @@ export function CapturaComprovanteModal({
 
                   <div className="space-y-1">
                     <Label className="text-xs">Número / Série</Label>
-                    <Input
-                      value={numeroDoc}
-                      onChange={(e) => setNumeroDoc(e.target.value)}
-                      placeholder="Ex: 004821"
-                      className="h-8 text-xs font-mono"
-                    />
+                    <div className="flex gap-1.5">
+                      <Input
+                        value={numeroDoc}
+                        onChange={(e) => setNumeroDoc(e.target.value)}
+                        placeholder="Número: 004821"
+                        className="h-8 text-xs font-mono flex-1"
+                      />
+                      <Input
+                        value={serieDoc}
+                        onChange={(e) => setSerieDoc(e.target.value)}
+                        placeholder="Série"
+                        className="h-8 text-xs font-mono w-20"
+                        title="Série fiscal"
+                      />
+                    </div>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* VINCULAÇÃO DE CREDOR / FORNECEDOR */}
+                <div className="p-2.5 rounded-lg border border-neutral-200 bg-neutral-50/70 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 text-xs font-semibold text-neutral-800">
+                      <Building2 className="h-3.5 w-3.5 text-[#FF6A13]" />
+                      <span>Credor / Fornecedor Vinculado</span>
+                    </div>
+                    {credorId && (
+                      <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded flex items-center gap-1">
+                        <CheckCircle2 className="h-3 w-3" /> Vinculado ao Credor
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <Label className="text-xs font-medium text-neutral-700">
+                        Fornecedor / Razão Social *
+                      </Label>
+                      <Input
+                        value={fornecedor}
+                        onChange={(e) => setFornecedor(e.target.value)}
+                        placeholder="Nome fantasia ou razão social"
+                        className="h-8 text-xs"
+                        required
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label className="text-xs font-medium text-neutral-700">CNPJ / CPF</Label>
+                      <Input
+                        value={cnpjCpf}
+                        onChange={(e) => setCnpjCpf(e.target.value)}
+                        placeholder="00.000.000/0000-00"
+                        className="h-8 text-xs font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  {credores.length > 0 && (
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pt-1 text-[11px]">
+                      <div className="flex-1 w-full sm:w-auto">
+                        <Select
+                          value={credorId || 'nenhum'}
+                          onValueChange={(val) => setCredorId(val === 'nenhum' ? '' : val)}
+                        >
+                          <SelectTrigger className="h-7 text-xs bg-white">
+                            <SelectValue placeholder="Selecione credor cadastrado..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="nenhum">Nenhum (usar apenas nome avulso)</SelectItem>
+                            {credores.map((c) => (
+                              <SelectItem key={c.id} value={c.id}>
+                                {c.nome} {c.cpf_cnpj ? `(${c.cpf_cnpj})` : ''}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {!credorId && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={salvandoCredorRapido || !fornecedor}
+                          onClick={handleCadastrarCredorRapido}
+                          className="h-7 text-xs text-[#FF6A13] border-orange-200 hover:bg-orange-50 shrink-0 font-medium"
+                        >
+                          {salvandoCredorRapido ? (
+                            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                          ) : (
+                            <Plus className="mr-1 h-3 w-3" />
+                          )}
+                          Cadastrar Credor
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Chave de Acesso se houver */}
+                {chaveAcesso && (
                   <div className="space-y-1">
-                    <Label className="text-xs font-semibold text-neutral-900">
-                      Fornecedor / Razão Social *
+                    <Label className="text-xs font-medium text-neutral-700 flex items-center justify-between">
+                      <span>Chave de Acesso (44 dígitos)</span>
+                      <span className="text-[10px] text-neutral-400 font-mono">
+                        {chaveAcesso.length} dígitos
+                      </span>
                     </Label>
                     <Input
-                      value={fornecedor}
-                      onChange={(e) => setFornecedor(e.target.value)}
-                      placeholder="Nome fantasia ou razão social"
-                      className="h-8 text-xs"
-                      required
+                      value={chaveAcesso}
+                      onChange={(e) => setChaveAcesso(e.target.value)}
+                      placeholder="Chave de 44 dígitos"
+                      className="h-8 text-xs font-mono bg-neutral-50"
                     />
                   </div>
-
-                  <div className="space-y-1">
-                    <Label className="text-xs">CNPJ / CPF</Label>
-                    <Input
-                      value={cnpjCpf}
-                      onChange={(e) => setCnpjCpf(e.target.value)}
-                      placeholder="00.000.000/0000-00"
-                      className="h-8 text-xs font-mono"
-                    />
-                  </div>
-                </div>
+                )}
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className="space-y-1">
@@ -659,17 +967,19 @@ export function CapturaComprovanteModal({
                     <Label className="text-xs">Categoria de Conta a Pagar</Label>
                     <Select
                       value={categoria}
-                      onValueChange={(val) =>
-                        setCategoria(
-                          val as
-                            | 'despesas_operacionais'
-                            | 'terceirizados'
-                            | 'impostos'
-                            | 'equipamentos'
-                            | 'folha'
-                            | 'outros',
-                        )
-                      }
+                      onValueChange={(val) => {
+                        const novaCat = val as
+                          | 'despesas_operacionais'
+                          | 'terceirizados'
+                          | 'impostos'
+                          | 'equipamentos'
+                          | 'folha'
+                          | 'outros'
+                        setCategoria(novaCat)
+                        const pc = sugerirPlanoContasPorCategoria(novaCat)
+                        setPlanoContasCodigo(pc.codigo)
+                        setPlanoContasNome(pc.nome)
+                      }}
                     >
                       <SelectTrigger className="h-8 text-xs">
                         <SelectValue />
@@ -718,21 +1028,47 @@ export function CapturaComprovanteModal({
                   </div>
                 </div>
 
-                <div className="space-y-1">
-                  <Label className="text-xs">Projeto AEROCAD Vinculado (Opcional)</Label>
-                  <Select value={projetoId} onValueChange={setProjetoId}>
-                    <SelectTrigger className="h-8 text-xs">
-                      <SelectValue placeholder="Selecione se for custo de projeto específico..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="nenhum">Nenhum (Despesa Operacional Geral)</SelectItem>
-                      {projetos.map((p) => (
-                        <SelectItem key={p.id} value={p.id}>
-                          {p.numero} · {p.nome}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                {/* Classificação Contábil Editável (Plano de Contas) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Classificação Contábil (Plano de Contas)</Label>
+                    <Select
+                      value={planoContasCodigo}
+                      onValueChange={(val) => {
+                        setPlanoContasCodigo(val)
+                        const item = PLANO_CONTAS_AEROCAD.find((p) => p.codigo === val)
+                        if (item) setPlanoContasNome(item.nome)
+                      }}
+                    >
+                      <SelectTrigger className="h-8 text-xs font-mono">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PLANO_CONTAS_AEROCAD.filter((p) => p.tipo === 'despesa').map((p) => (
+                          <SelectItem key={p.codigo} value={p.codigo}>
+                            {p.codigo} - {p.nome}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-xs">Projeto AEROCAD Vinculado (Opcional)</Label>
+                    <Select value={projetoId} onValueChange={setProjetoId}>
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue placeholder="Selecione se for custo de projeto específico..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="nenhum">Nenhum (Despesa Operacional Geral)</SelectItem>
+                        {projetos.map((p) => (
+                          <SelectItem key={p.id} value={p.id}>
+                            {p.numero} · {p.nome}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
 
                 <div className="space-y-1">
@@ -773,7 +1109,33 @@ export function CapturaComprovanteModal({
                 Voltar / Nova Foto
               </Button>
 
-              <div className="flex items-center gap-2 w-full sm:w-auto">
+              <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCopiarResumoDanfe}
+                  disabled={isSubmitting}
+                  className="h-8 text-xs"
+                  title="Copiar resumo estruturado para a área de transferência"
+                >
+                  <Copy className="mr-1.5 h-3.5 w-3.5 text-neutral-600" />
+                  Copiar dados
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleImprimirDanfeSimplificado}
+                  disabled={isSubmitting}
+                  className="h-8 text-xs text-[#FF6A13] border-orange-200 hover:bg-orange-50"
+                  title="Gerar DANFE Simplificado A4 com carimbo informativo"
+                >
+                  <Printer className="mr-1.5 h-3.5 w-3.5" />
+                  Gerar DANFE simplificado
+                </Button>
+
                 <Button
                   size="sm"
                   onClick={handleSalvarContaPagar}

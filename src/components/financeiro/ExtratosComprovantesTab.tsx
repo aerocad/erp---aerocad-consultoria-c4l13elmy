@@ -71,6 +71,7 @@ interface ExtratosComprovantesTabProps {
   contasPagar: ContaPagarRecord[]
   contasReceber: ContaReceberRecord[]
   projetos?: import('@/types/crm').ProjetoRecord[]
+  credores?: import('@/types/crm').CredorRecord[]
   canWrite: boolean
   onReloadExtratos: () => Promise<void> | void
   onReloadTransacoes: () => Promise<void> | void
@@ -86,6 +87,7 @@ export function ExtratosComprovantesTab({
   contasPagar,
   contasReceber,
   projetos = [],
+  credores = [],
   canWrite,
   onReloadExtratos,
   onReloadTransacoes,
@@ -1082,6 +1084,7 @@ export function ExtratosComprovantesTab({
         open={modalCapturaIaAberto}
         onOpenChange={setModalCapturaIaAberto}
         projetos={projetos}
+        credores={credores}
         isMobile={isMobile}
         onSuccess={async () => {
           await onReloadContasPagar()

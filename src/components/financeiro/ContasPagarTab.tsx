@@ -14,6 +14,7 @@ import {
   Trash2,
   UploadCloud,
   Barcode,
+  Camera,
   Landmark,
 } from 'lucide-react'
 import { CapturaBoletoModal } from '@/components/financeiro/CapturaBoletoModal'
@@ -1318,7 +1319,7 @@ export function ContasPagarTab({
         open={modalComprovanteFiscalAberto}
         onOpenChange={setModalComprovanteFiscalAberto}
         projetos={projetos}
-        credores={credores}
+        credores={credores ?? []}
         isMobile={isMobile}
         onSuccess={async () => {
           await onReload()
