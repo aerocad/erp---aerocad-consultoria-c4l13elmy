@@ -12,11 +12,13 @@ import {
   UserRound,
   XCircle,
   MessageSquare,
+  Building2,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { ImportacaoWizard } from '@/components/importacao/ImportacaoWizard'
 import { WhatsAppSettingsSection } from '@/components/settings/WhatsAppSettingsSection'
 import { ExportarDadosSection } from '@/components/settings/ExportarDadosSection'
+import { DadosEmpresaSection } from '@/components/settings/DadosEmpresaSection'
 import { ContasBancariasTab } from '@/components/financeiro/ContasBancariasTab'
 
 import { CrmBadge } from '@/components/common/CrmBadge'
@@ -200,6 +202,13 @@ export default function SettingsPage() {
           </TabsTrigger>
           {isAdmin && (
             <>
+              <TabsTrigger
+                value="empresa"
+                className="flex items-center gap-1.5 font-semibold text-[#D65100]"
+              >
+                <Building2 className="h-3.5 w-3.5" />
+                Dados da Empresa (AEROCAD)
+              </TabsTrigger>
               <TabsTrigger
                 value="whatsapp"
                 className="flex items-center gap-1.5 font-semibold text-[#D65100]"
@@ -531,6 +540,9 @@ export default function SettingsPage() {
         </TabsContent>
         {isAdmin && (
           <>
+            <TabsContent value="empresa">
+              <DadosEmpresaSection />
+            </TabsContent>
             <TabsContent value="whatsapp">
               <WhatsAppSettingsSection />
             </TabsContent>

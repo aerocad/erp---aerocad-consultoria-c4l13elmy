@@ -838,3 +838,56 @@ export interface ExtratoTransacaoRecord extends RecordModel {
     extrato?: ExtratoRecord
   }
 }
+
+export type SocioContratoSocial = SocioItemCredor
+
+export interface EmpresaRecord extends RecordModel {
+  chave: string
+  razao_social: string
+  nome_fantasia?: string
+  cnpj: string
+  inscricao_estadual?: string
+  inscricao_municipal?: string
+  data_constituicao?: string
+  capital_social?: number
+  cnae_principal?: string
+  objeto_social?: string
+  endereco?: string
+  cidade_uf?: string
+  cep?: string
+  telefone?: string
+  email?: string
+  website?: string
+  banco_nome?: string
+  banco_agencia?: string
+  banco_conta?: string
+  chave_pix?: string
+  socios?: SocioContratoSocial[]
+  contrato_social?: string[] | string
+  observacoes?: string
+}
+
+export interface EmpresaFormData {
+  chave?: string
+  razao_social: string
+  nome_fantasia?: string
+  cnpj: string
+  inscricao_estadual?: string
+  inscricao_municipal?: string
+  data_constituicao?: string
+  capital_social?: number
+  cnae_principal?: string
+  objeto_social?: string
+  endereco?: string
+  cidade_uf?: string
+  cep?: string
+  telefone?: string
+  email?: string
+  website?: string
+  banco_nome?: string
+  banco_agencia?: string
+  banco_conta?: string
+  chave_pix?: string
+  socios?: SocioContratoSocial[]
+  observacoes?: string
+}

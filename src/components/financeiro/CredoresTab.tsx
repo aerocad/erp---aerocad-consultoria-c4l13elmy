@@ -421,19 +421,29 @@ export function CredoresTab({
           )}
 
           {canWrite && (
-            <Button
-              type="button"
-              onClick={() => {
-                setCredorParaContratoSocial(null)
-                setModalContratoSocialOpen(true)
-              }}
-              variant="outline"
-              className="border-orange-300 text-[#FF6A13] hover:bg-orange-50 h-9 text-xs font-semibold shrink-0"
-              title="Carregar Contrato Social / Alteração Contratual para extrair dados da empresa e sócios via IA"
-            >
-              <FileText className="mr-1.5 h-4 w-4" />
-              Extrair Contrato Social (IA)
-            </Button>
+            <div className="flex items-center gap-1.5">
+              <Button
+                type="button"
+                onClick={() => {
+                  setCredorParaContratoSocial(null)
+                  setModalContratoSocialOpen(true)
+                }}
+                variant="outline"
+                className="border-orange-300 text-[#FF6A13] hover:bg-orange-50 h-9 text-xs font-semibold shrink-0"
+                title="Carregar Contrato Social / Alteração Contratual de um credor para extrair dados e sócios via IA"
+              >
+                <FileText className="mr-1.5 h-4 w-4" />
+                Extrair Contrato Credor (IA)
+              </Button>
+              <a
+                href="/configuracoes"
+                className="inline-flex items-center gap-1 text-xs text-neutral-600 hover:text-[#FF6A13] px-2 py-1.5 rounded hover:bg-orange-50 transition border border-transparent hover:border-orange-200"
+                title="Ir para o cadastro societário oficial da própria AEROCAD em Configurações"
+              >
+                <Building2 className="h-3.5 w-3.5 text-[#FF6A13]" />
+                <span className="hidden lg:inline">Contrato AEROCAD</span>
+              </a>
+            </div>
           )}
 
           {canWrite && (

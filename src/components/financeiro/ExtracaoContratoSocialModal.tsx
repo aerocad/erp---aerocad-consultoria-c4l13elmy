@@ -39,29 +39,32 @@ import {
   type ContratoSocialExtraido,
   type SocioContratoSocialExtraido,
 } from '@/services/comprovantesVision'
-import {
-  salvarCredorComContratoSocial,
-  CATEGORIA_CREDOR_LABELS,
-  TIPO_PESSOA_LABELS,
-} from '@/services/credores'
+import { salvarCredorComContratoSocial, CATEGORIA_CREDOR_LABELS } from '@/services/credores'
+import { salvarDadosEmpresa } from '@/services/empresaService'
 import { toast } from 'sonner'
-import type { CredorRecord, CategoriaCredor, TipoPessoaCredor } from '@/types/crm'
+import type { CredorRecord, CategoriaCredor, TipoPessoaCredor, EmpresaRecord } from '@/types/crm'
 import pb from '@/lib/pocketbase/client'
 
 export interface ExtracaoContratoSocialModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
+  alvo?: 'credor' | 'empresa'
+  empresaExistente?: EmpresaRecord | null
   credorExistente?: CredorRecord | null
-  credores: CredorRecord[]
-  onSalvo: (credor: CredorRecord) => void
+  credores?: CredorRecord[]
+  onSalvo?: (credor: CredorRecord) => void
+  onEmpresaSalva?: (empresa: EmpresaRecord) => void
 }
 
 export function ExtracaoContratoSocialModal({
   open,
   onOpenChange,
+  alvo = 'credor',
+  empresaExistente = null,
   credorExistente = null,
-  credores,
+  credores = [],
   onSalvo,
+  onEmpresaSalva,
 }: ExtracaoContratoSocialModalProps) {
   const [etapa, setEtapa] = useState<'upload' | 'analisando' | 'conferencia'>('upload')
   const [arquivo, setArquivo] = useState<File | null>(null)
@@ -104,7 +107,11 @@ export function ExtracaoContratoSocialModal({
 
   useEffect(() => {
     if (open) {
-      if (credorExistente) {
+      if (alvo === 'empresa') {
+        if (empresaExistente) {
+          preencherComEmpresa(empresaExistente)
+        }
+      } else if (credorExistente) {
         setModoDestino('atualizar')
         setCredorSelecionadoId(credorExistente.id)
         preencherComCredorExistente(credorExistente)
@@ -115,7 +122,30 @@ export function ExtracaoContratoSocialModal({
     } else {
       resetar()
     }
-  }, [open, credorExistente])
+  }, [open, alvo, empresaExistente, credorExistente])
+
+  function preencherComEmpresa(emp: EmpresaRecord) {
+    setRazaoSocial(emp.razao_social || '')
+    setNomeFantasia(emp.nome_fantasia || '')
+    setCnpj(emp.cnpj || '')
+    setTipoPessoa('pj')
+    setCapitalSocial(emp.capital_social ? String(emp.capital_social) : '')
+    setDataConstituicao(emp.data_constituicao || '')
+    setEnderecoCompleto(emp.endereco || '')
+    setCidadeUf(emp.cidade_uf || '')
+    setCnaePrincipal(emp.cnae_principal || '')
+    setObjetoSocial(emp.objeto_social || '')
+    setChavePix(emp.chave_pix || '')
+    setBancoNome(emp.banco_nome || '')
+    setBancoAgencia(emp.banco_agencia || '')
+    setBancoConta(emp.banco_conta || '')
+    setEmail(emp.email || '')
+    setTelefone(emp.telefone || '')
+    setObservacoes(emp.observacoes || '')
+    if (Array.isArray(emp.socios) && emp.socios.length > 0) {
+      setSocios(emp.socios)
+    }
+  }
 
   function preencherComCredorExistente(c: CredorRecord) {
     setRazaoSocial(c.nome_razao_social || '')
@@ -189,8 +219,8 @@ export function ExtracaoContratoSocialModal({
           setSocios(extraido.socios)
         }
 
-        // Tentar correlacionar com credor existente se ainda em modo novo
-        if (!credorExistente && extraido.cnpj) {
+        // Tentar correlacionar com credor existente se ainda em modo novo (apenas modo credor)
+        if (alvo === 'credor' && !credorExistente && extraido.cnpj) {
           const limpoCnpj = extraido.cnpj.replace(/\D/g, '')
           const matchCredor = credores.find((c) => c.cnpj_cpf.replace(/\D/g, '') === limpoCnpj)
           if (matchCredor) {
@@ -248,17 +278,64 @@ export function ExtracaoContratoSocialModal({
 
   async function handleSalvar() {
     if (!razaoSocial.trim() || !cnpj.trim()) {
-      toast.error('Informe a Razão Social e o CNPJ do credor.')
+      toast.error('Informe a Razão Social e o CNPJ da empresa.')
       return
     }
 
     setIsSubmitting(true)
 
     try {
+      const capSocNum = parseFloat(capitalSocial.replace(/[^\d.,]/g, '').replace(',', '.')) || 0
+
+      // FLUXO 1: Salvar na PRÓPRIA EMPRESA (AEROCAD)
+      if (alvo === 'empresa') {
+        const empresaSalva = await salvarDadosEmpresa(
+          {
+            razao_social: razaoSocial.trim(),
+            nome_fantasia: nomeFantasia.trim(),
+            cnpj: cnpj.trim(),
+            capital_social: capSocNum,
+            socios,
+            cnae_principal: cnaePrincipal.trim(),
+            objeto_social: objetoSocial.trim(),
+            data_constituicao: dataConstituicao.trim(),
+            endereco: enderecoCompleto.trim(),
+            cidade_uf: cidadeUf.trim(),
+            chave_pix: chavePix.trim(),
+            banco_nome: bancoNome.trim(),
+            banco_agencia: bancoAgencia.trim(),
+            banco_conta: bancoConta.trim(),
+            email: email.trim(),
+            telefone: telefone.trim(),
+            observacoes: observacoes.trim(),
+          },
+          empresaExistente?.id,
+          arquivo,
+        )
+
+        try {
+          await pb.collection('atividades').create({
+            usuario: pb.authStore.record?.id || null,
+            texto: `Contrato Social da AEROCAD processado por IA e gravado no cadastro institucional (${socios.length} sócio(s)).`,
+            tipo: 'financeiro',
+          })
+        } catch {
+          /* intentionally ignored */
+        }
+
+        toast.success(
+          `Contrato Social da AEROCAD gravado com sucesso! Dados societários atualizados.`,
+        )
+
+        onEmpresaSalva?.(empresaSalva)
+        onOpenChange(false)
+        resetar()
+        return
+      }
+
+      // FLUXO 2: Salvar em CREDOR
       const targetId =
         modoDestino === 'atualizar' && credorSelecionadoId ? credorSelecionadoId : undefined
-
-      const capSocNum = parseFloat(capitalSocial.replace(/[^\d.,]/g, '').replace(',', '.')) || 0
 
       const credorSalvo = await salvarCredorComContratoSocial(
         {
@@ -304,12 +381,12 @@ export function ExtracaoContratoSocialModal({
           : `Novo credor "${credorSalvo.nome_razao_social}" cadastrado com sucesso!`,
       )
 
-      onSalvo(credorSalvo)
+      onSalvo?.(credorSalvo)
       onOpenChange(false)
       resetar()
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
-      toast.error(`Erro ao salvar credor: ${msg}`)
+      toast.error(`Erro ao salvar: ${msg}`)
     } finally {
       setIsSubmitting(false)
     }
@@ -422,65 +499,85 @@ export function ExtracaoContratoSocialModal({
               </Alert>
             )}
 
-            {/* Seletor de Modo: Atualizar Credor Existente OU Criar Novo */}
-            <div className="p-3 rounded-lg border border-neutral-200 bg-neutral-50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-              <div className="flex items-center gap-2">
-                <ShieldCheck className="h-4 w-4 text-[#FF6A13]" />
-                <span className="font-semibold text-neutral-800">Destino dos Dados Extraídos:</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <label className="flex items-center gap-1.5 cursor-pointer font-medium">
-                  <input
-                    type="radio"
-                    name="modoDestino"
-                    checked={modoDestino === 'novo'}
-                    onChange={() => {
-                      setModoDestino('novo')
-                      setCredorSelecionadoId('')
-                    }}
-                    className="text-[#FF6A13] focus:ring-[#FF6A13]"
-                  />
-                  <span>Cadastrar Novo Credor</span>
-                </label>
-                <label className="flex items-center gap-1.5 cursor-pointer font-medium">
-                  <input
-                    type="radio"
-                    name="modoDestino"
-                    checked={modoDestino === 'atualizar'}
-                    onChange={() => setModoDestino('atualizar')}
-                    className="text-[#FF6A13] focus:ring-[#FF6A13]"
-                  />
-                  <span>Atualizar Credor Já Existente</span>
-                </label>
-              </div>
-
-              {modoDestino === 'atualizar' && (
-                <div className="w-full sm:w-64">
-                  <Select
-                    value={credorSelecionadoId}
-                    onValueChange={(val) => {
-                      setCredorSelecionadoId(val)
-                      const selecionado = credores.find((c) => c.id === val)
-                      if (selecionado) {
-                        preencherComCredorExistente(selecionado)
-                        toast.info(`Dados do credor "${selecionado.nome_razao_social}" carregados.`)
-                      }
-                    }}
-                  >
-                    <SelectTrigger className="h-8 text-xs bg-white">
-                      <SelectValue placeholder="Selecione o credor..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {credores.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>
-                          {c.nome_razao_social} ({c.cnpj_cpf})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+            {/* Seletor de Modo: Credor vs Empresa */}
+            {alvo === 'empresa' ? (
+              <div className="p-3 rounded-lg border border-orange-200 bg-orange-50/60 flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2">
+                  <Building2 className="h-4 w-4 text-[#FF6A13]" />
+                  <span className="font-semibold text-neutral-900">
+                    Destino: Cadastro Institucional da Própria Empresa (AEROCAD)
+                  </span>
                 </div>
-              )}
-            </div>
+                <span className="text-[11px] font-mono text-[#D65100] bg-white px-2 py-0.5 rounded border border-orange-200">
+                  {empresaExistente
+                    ? 'Atualizar cadastro institucional existente'
+                    : 'Novo cadastro institucional'}
+                </span>
+              </div>
+            ) : (
+              <div className="p-3 rounded-lg border border-neutral-200 bg-neutral-50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="h-4 w-4 text-[#FF6A13]" />
+                  <span className="font-semibold text-neutral-800">
+                    Destino dos Dados Extraídos:
+                  </span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-1.5 cursor-pointer font-medium">
+                    <input
+                      type="radio"
+                      name="modoDestino"
+                      checked={modoDestino === 'novo'}
+                      onChange={() => {
+                        setModoDestino('novo')
+                        setCredorSelecionadoId('')
+                      }}
+                      className="text-[#FF6A13] focus:ring-[#FF6A13]"
+                    />
+                    <span>Cadastrar Novo Credor</span>
+                  </label>
+                  <label className="flex items-center gap-1.5 cursor-pointer font-medium">
+                    <input
+                      type="radio"
+                      name="modoDestino"
+                      checked={modoDestino === 'atualizar'}
+                      onChange={() => setModoDestino('atualizar')}
+                      className="text-[#FF6A13] focus:ring-[#FF6A13]"
+                    />
+                    <span>Atualizar Credor Já Existente</span>
+                  </label>
+                </div>
+
+                {modoDestino === 'atualizar' && (
+                  <div className="w-full sm:w-64">
+                    <Select
+                      value={credorSelecionadoId}
+                      onValueChange={(val) => {
+                        setCredorSelecionadoId(val)
+                        const selecionado = credores.find((c) => c.id === val)
+                        if (selecionado) {
+                          preencherComCredorExistente(selecionado)
+                          toast.info(
+                            `Dados do credor "${selecionado.nome_razao_social}" carregados.`,
+                          )
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="h-8 text-xs bg-white">
+                        <SelectValue placeholder="Selecione o credor..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {credores.map((c) => (
+                          <SelectItem key={c.id} value={c.id}>
+                            {c.nome_razao_social} ({c.cnpj_cpf})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Layout LADO A LADO: Documento à esquerda, Ficha editável à direita */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
@@ -615,24 +712,26 @@ export function ExtracaoContratoSocialModal({
                       />
                     </div>
 
-                    <div className="space-y-1">
-                      <Label className="text-xs font-semibold">Categoria</Label>
-                      <Select
-                        value={categoria}
-                        onValueChange={(val: CategoriaCredor) => setCategoria(val)}
-                      >
-                        <SelectTrigger className="h-8 text-xs bg-white">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {Object.entries(CATEGORIA_CREDOR_LABELS).map(([k, label]) => (
-                            <SelectItem key={k} value={k}>
-                              {label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                    {alvo !== 'empresa' && (
+                      <div className="space-y-1">
+                        <Label className="text-xs font-semibold">Categoria</Label>
+                        <Select
+                          value={categoria}
+                          onValueChange={(val: CategoriaCredor) => setCategoria(val)}
+                        >
+                          <SelectTrigger className="h-8 text-xs bg-white">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Object.entries(CATEGORIA_CREDOR_LABELS).map(([k, label]) => (
+                              <SelectItem key={k} value={k}>
+                                {label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -864,9 +963,11 @@ export function ExtracaoContratoSocialModal({
               <CheckCircle2 className="h-4 w-4 mr-1.5" />
               {isSubmitting
                 ? 'Salvando...'
-                : modoDestino === 'atualizar'
-                  ? 'Atualizar Credor com Contrato Social'
-                  : 'Cadastrar Novo Credor'}
+                : alvo === 'empresa'
+                  ? 'Salvar Contrato Social da AEROCAD'
+                  : modoDestino === 'atualizar'
+                    ? 'Atualizar Credor com Contrato Social'
+                    : 'Cadastrar Novo Credor'}
             </Button>
           )}
         </DialogFooter>
