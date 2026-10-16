@@ -766,6 +766,7 @@ export interface ExtratoRecord extends RecordModel {
   banco?: string
   conta?: string
   conta_bancaria?: string
+  hash_arquivo?: string
   data_inicio?: string
   data_fim?: string
   total_transacoes: number
@@ -792,6 +793,7 @@ export interface ExtratoTransacaoRecord extends RecordModel {
   tipo: ExtratoTransacaoTipo
   documento_ref?: string
   fitid?: string
+  fingerprint?: string
   status_conciliacao: ExtratoConciliacaoStatus
   vinculo_tipo?: ExtratoVinculoTipo
   vinculo_id?: string

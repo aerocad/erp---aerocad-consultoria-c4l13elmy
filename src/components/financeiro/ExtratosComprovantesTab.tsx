@@ -60,6 +60,15 @@ import {
   type CnabRetornoParsed,
   type CnabTransacaoParsed,
 } from '@/services/cnabRetornoParser'
+import {
+  analisarDeduplicacao,
+  calcularHashArquivo,
+  calcularFingerprintTransacao,
+  normalizarDataChave,
+  type AnaliseDeduplicacaoArquivo,
+  type TransacaoCandidataImportacao,
+} from '@/services/extratoDeduplicador'
+import { PreviaImportacaoExtratoModal } from './PreviaImportacaoExtratoModal'
 import type {
   ContaPagarRecord,
   ContaReceberRecord,
@@ -144,9 +153,22 @@ export function ExtratosComprovantesTab({
   // Modais
   const [modalUploadAberto, setModalUploadAberto] = useState(false)
   const [isProcessandoUpload, setIsProcessandoUpload] = useState(false)
+  const [modalPreviaExtrato, setModalPreviaExtrato] = useState<{
+    file: File
+    formato: 'ofx' | 'csv' | 'xlsx'
+    contaBancariaId: string
+    analise: AnaliseDeduplicacaoArquivo<TransacaoCandidataImportacao>
+    saldoFinal?: number
+    dataInicio?: string
+    dataFim?: string
+    banco?: string
+    conta?: string
+  } | null>(null)
+  const [isGravandoExtrato, setIsGravandoExtrato] = useState(false)
   const [resumoRetornoModal, setResumoRetornoModal] = useState<{
     file: File
     parsed: CnabRetornoParsed
+    analise: AnaliseDeduplicacaoArquivo<CnabTransacaoParsed>
     contaBancariaId: string
   } | null>(null)
   const [isGravandoRetorno, setIsGravandoRetorno] = useState(false)
@@ -255,19 +277,30 @@ export function ExtratosComprovantesTab({
     return inseridas
   }
 
-  // Confirma e grava retorno .RET previamente analisado
+  // Confirma e grava retorno .RET previamente analisado (com deduplicação ativa)
   async function handleConfirmarGravacaoRetorno() {
     if (!resumoRetornoModal) return
     setIsGravandoRetorno(true)
 
-    const { file, parsed, contaBancariaId } = resumoRetornoModal
+    const { file, parsed, analise, contaBancariaId } = resumoRetornoModal
     const contaBancariaAlvo = contasBancarias.find((c) => c.id === contaBancariaId)
 
+    // Se todos os lançamentos são duplicados, avisa e encerra sem duplicar
+    if (analise.arquivoJaImportado || analise.totalNovas === 0) {
+      toast.info('Arquivo já importado anteriormente — nenhum lançamento novo adicionado.')
+      setResumoRetornoModal(null)
+      setIsGravandoRetorno(false)
+      return
+    }
+
     try {
-      // 1. Cria extrato com anexo do arquivo .ret disponível para download
+      // 1. Cria extrato com anexo do arquivo .ret e hash_arquivo calculado
       const formData = new FormData()
       formData.append('nome_arquivo', file.name)
       formData.append('formato', 'ret')
+      if (analise.hashArquivo) {
+        formData.append('hash_arquivo', analise.hashArquivo)
+      }
       formData.append(
         'banco',
         contaBancariaAlvo
@@ -284,10 +317,10 @@ export function ExtratosComprovantesTab({
       if (parsed.dataFim) {
         formData.append('data_fim', `${parsed.dataFim} 12:00:00.000Z`)
       }
-      formData.append('total_transacoes', String(parsed.transacoes.length))
-      formData.append('total_entradas', String(parsed.totalEntradas))
-      formData.append('total_saidas', String(parsed.totalSaidas))
-      formData.append('saldo_final', String(parsed.totalEntradas - parsed.totalSaidas))
+      formData.append('total_transacoes', String(analise.totalNovas))
+      formData.append('total_entradas', String(analise.totalEntradasNovas))
+      formData.append('total_saidas', String(analise.totalSaidasNovas))
+      formData.append('saldo_final', String(analise.totalEntradasNovas - analise.totalSaidasNovas))
       if (user?.id) {
         formData.append('usuario', user.id)
       }
@@ -295,23 +328,32 @@ export function ExtratosComprovantesTab({
 
       const extratoRecord = await pb.collection('extratos').create<ExtratoRecord>(formData)
 
-      // 2. Cria as linhas de transação com controle de concorrência e throttle anti-429
-      const payloads = parsed.transacoes.map((t) => ({
-        extrato: extratoRecord.id,
-        data: `${t.data} 12:00:00.000Z`,
-        descricao: t.descricao,
-        valor: t.valor,
-        tipo: t.tipo,
-        documento_ref: t.documentoRef || t.nossoNumero || '',
-        fitid: t.fitid,
-        status_conciliacao: 'pendente',
-        observacoes: `[${t.layout}] Ocorrência ${t.codigoOcorrencia} - ${t.ocorrenciaDescricao}`,
-      }))
+      // 2. Grava APENAS as transações genuinamente novas, com fingerprint persistido
+      const payloads = analise.itensNovos.map((itemNovo) => {
+        const t = itemNovo.item
+        return {
+          extrato: extratoRecord.id,
+          data: `${t.data} 12:00:00.000Z`,
+          descricao: t.descricao,
+          valor: t.valor,
+          tipo: t.tipo,
+          documento_ref: t.documentoRef || t.nossoNumero || '',
+          fitid: t.fitid,
+          fingerprint: itemNovo.fingerprint,
+          status_conciliacao: 'pendente',
+          observacoes: `[${t.layout}] Ocorrência ${t.codigoOcorrencia} - ${t.ocorrenciaDescricao}`,
+        }
+      })
 
       const salvas = await inserirTransacoesComThrottle(payloads)
 
+      const duplicadasTexto =
+        analise.totalDuplicadas > 0
+          ? ` (${analise.totalDuplicadas} duplicadas ignoradas com sucesso)`
+          : ''
+
       toast.success(
-        `Retorno bancário ${parsed.layout} importado com sucesso! ${salvas} lançamentos registrados para conciliação.`,
+        `Retorno bancário ${parsed.layout} importado! ${salvas} lançamentos novos registrados${duplicadasTexto}.`,
       )
       setResumoRetornoModal(null)
       setExtratoSelecionadoId(extratoRecord.id)
@@ -325,7 +367,91 @@ export function ExtratosComprovantesTab({
     }
   }
 
-  // Handler de importação de arquivos de extrato (suporta múltiplos extratos de uma vez)
+  // Confirma e grava extrato (OFX, CSV, XLSX) previamente analisado no modal de prévia
+  async function handleConfirmarGravacaoPreviaExtrato() {
+    if (!modalPreviaExtrato) return
+    setIsGravandoExtrato(true)
+
+    const {
+      file,
+      formato,
+      contaBancariaId,
+      analise,
+      saldoFinal,
+      dataInicio,
+      dataFim,
+      banco,
+      conta,
+    } = modalPreviaExtrato
+    const contaBancariaAlvo = contasBancarias.find((c) => c.id === contaBancariaId)
+
+    if (analise.arquivoJaImportado || analise.totalNovas === 0) {
+      toast.info('Arquivo já importado anteriormente — nenhum lançamento novo.')
+      setModalPreviaExtrato(null)
+      setIsGravandoExtrato(false)
+      return
+    }
+
+    try {
+      // 1. Cria o extrato com hash do arquivo e totais reais dos lançamentos novos
+      const extratoRecord = await createOne<ExtratoRecord>('extratos', {
+        nome_arquivo: file.name,
+        formato,
+        hash_arquivo: analise.hashArquivo || null,
+        banco: contaBancariaAlvo
+          ? `${contaBancariaAlvo.banco_nome} (${contaBancariaAlvo.apelido})`
+          : banco || 'Banco Comercial',
+        conta: contaBancariaAlvo?.numero_conta || conta || '',
+        conta_bancaria: contaBancariaId || null,
+        data_inicio: dataInicio ? `${dataInicio} 12:00:00.000Z` : null,
+        data_fim: dataFim ? `${dataFim} 12:00:00.000Z` : null,
+        total_transacoes: analise.totalNovas,
+        total_entradas: analise.totalEntradasNovas,
+        total_saidas: analise.totalSaidasNovas,
+        saldo_final: saldoFinal || 0,
+        usuario: user?.id || null,
+      })
+
+      // 2. Cria apenas as transações novas com fingerprint persistido
+      const payloads = analise.itensNovos.map((itemNovo) => {
+        const t = itemNovo.item
+        return {
+          extrato: extratoRecord.id,
+          data: `${normalizarDataChave(t.data)} 12:00:00.000Z`,
+          descricao: t.descricao,
+          valor: t.valor,
+          tipo: t.tipo,
+          documento_ref: t.documentoRef || '',
+          fitid: t.fitid,
+          fingerprint: itemNovo.fingerprint,
+          status_conciliacao: 'pendente',
+        }
+      })
+
+      const salvas = await inserirTransacoesComThrottle(payloads)
+
+      const duplicadasTexto =
+        analise.totalDuplicadas > 0
+          ? ` (${analise.totalDuplicadas} existentes no banco foram ignoradas)`
+          : ''
+
+      toast.success(
+        `Extrato "${file.name}" importado! ${salvas} lançamentos novos registrados${duplicadasTexto}.`,
+      )
+
+      setModalPreviaExtrato(null)
+      setExtratoSelecionadoId(extratoRecord.id)
+      await onReloadExtratos()
+      await onReloadTransacoes()
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      toast.error(`Falha ao salvar extrato: ${msg}`)
+    } finally {
+      setIsGravandoExtrato(false)
+    }
+  }
+
+  // Handler de importação de arquivos de extrato com detecção e prévia
   async function handleFileSelected(e: ChangeEvent<HTMLInputElement>) {
     const fileList = e.target.files
     if (!fileList || fileList.length === 0) return
@@ -334,124 +460,98 @@ export function ExtratosComprovantesTab({
     setIsProcessandoUpload(true)
 
     const contaBancariaAlvo = contasBancarias.find((c) => c.id === contaBancariaSelecionadaUpload)
-    let totalExtratosImportados = 0
-    let totalTransacoesImportadas = 0
-    let ultimoExtratoIdCriado = ''
 
     try {
-      for (const file of files) {
-        const ext = file.name.split('.').pop()?.toLowerCase() || ''
+      // Processa o primeiro arquivo abrindo a prévia interativa de deduplicação
+      const file = files[0]
+      const ext = file.name.split('.').pop()?.toLowerCase() || ''
+      const hashArquivo = await calcularHashArquivo(file)
 
-        // Intercepta arquivos .RET (CNAB 240 / 400) para exibir tela de conferência detalhada
-        if (ext === 'ret') {
-          try {
-            const text = await lerArquivoTextoComFallback(file)
-            const parsedCnab = parseCnabRetorno(text)
-
-            if (!parsedCnab.transacoes.length) {
-              toast.warning(`Arquivo .ret "${file.name}" não continha lançamentos válidos.`)
-              continue
-            }
-
-            // Abre modal de resumo pré-gravação do .RET com as ocorrências e totais
-            setResumoRetornoModal({
-              file,
-              parsed: parsedCnab,
-              contaBancariaId: contaBancariaSelecionadaUpload,
-            })
-            setModalUploadAberto(false)
-            setIsProcessandoUpload(false)
-            return
-          } catch (retErr: unknown) {
-            const errMsg = retErr instanceof Error ? retErr.message : String(retErr)
-            toast.error(`Erro ao interpretar retorno .ret "${file.name}": ${errMsg}`)
-            continue
-          }
-        }
-
-        let parsed = null
-        let formato: 'ofx' | 'csv' | 'xlsx' = 'ofx'
-
-        if (ext === 'ofx') {
-          formato = 'ofx'
+      // Intercepta arquivos .RET (CNAB 240 / 400)
+      if (ext === 'ret') {
+        try {
           const text = await lerArquivoTextoComFallback(file)
-          parsed = parseOfxString(text)
-        } else if (ext === 'csv' || ext === 'xlsx' || ext === 'xls') {
-          formato = ext === 'csv' ? 'csv' : 'xlsx'
-          parsed = await parsePlanilhaExtrato(file)
-        } else {
-          toast.error(
-            `Arquivo "${file.name}" ignorado: formato não suportado (use OFX, RET, CSV ou XLSX).`,
-          )
-          continue
+          const parsedCnab = parseCnabRetorno(text)
+
+          if (!parsedCnab.transacoes.length) {
+            toast.warning(`Arquivo .ret "${file.name}" não continha lançamentos válidos.`)
+            return
+          }
+
+          // Executa análise de deduplicação antes de abrir o modal
+          const analiseCnab = analisarDeduplicacao<CnabTransacaoParsed>({
+            arquivoNome: file.name,
+            arquivoHash: hashArquivo,
+            contaBancariaId: contaBancariaSelecionadaUpload,
+            contaNumero: contaBancariaAlvo?.numero_conta || parsedCnab.conta,
+            transacoesCandidatas: parsedCnab.transacoes,
+            transacoesExistentes: transacoes,
+            extratosExistentes: extratos,
+          })
+
+          setResumoRetornoModal({
+            file,
+            parsed: parsedCnab,
+            analise: analiseCnab,
+            contaBancariaId: contaBancariaSelecionadaUpload,
+          })
+          setModalUploadAberto(false)
+          return
+        } catch (retErr: unknown) {
+          const errMsg = retErr instanceof Error ? retErr.message : String(retErr)
+          toast.error(`Erro ao interpretar retorno .ret "${file.name}": ${errMsg}`)
+          return
         }
-
-        if (!parsed.transacoes.length) {
-          toast.warning(`Extrato "${file.name}" não continha transações válidas.`)
-          continue
-        }
-
-        // Calcula totais
-        const totalEntradas = parsed.transacoes
-          .filter((t) => t.tipo === 'entrada')
-          .reduce((acc, t) => acc + t.valor, 0)
-        const totalSaidas = parsed.transacoes
-          .filter((t) => t.tipo === 'saida')
-          .reduce((acc, t) => acc + t.valor, 0)
-
-        // 1. Cria o registro de Extrato no PB vinculado à conta bancária PJ escolhida
-        const extratoRecord = await createOne<ExtratoRecord>('extratos', {
-          nome_arquivo: file.name,
-          formato,
-          banco: contaBancariaAlvo
-            ? `${contaBancariaAlvo.banco_nome} (${contaBancariaAlvo.apelido})`
-            : parsed.banco || 'Banco Comercial',
-          conta: contaBancariaAlvo?.numero_conta || parsed.conta || '',
-          conta_bancaria: contaBancariaSelecionadaUpload || null,
-          data_inicio: parsed.dataInicio ? `${parsed.dataInicio} 12:00:00.000Z` : null,
-          data_fim: parsed.dataFim ? `${parsed.dataFim} 12:00:00.000Z` : null,
-          total_transacoes: parsed.transacoes.length,
-          total_entradas: totalEntradas,
-          total_saidas: totalSaidas,
-          saldo_final: parsed.saldoFinal || 0,
-          usuario: user?.id || null,
-        })
-
-        ultimoExtratoIdCriado = extratoRecord.id
-        totalExtratosImportados++
-
-        // 2. Cria as linhas de transação com throttle anti-429
-        const payloads = parsed.transacoes.map((t) => ({
-          extrato: extratoRecord.id,
-          data: `${t.data} 12:00:00.000Z`,
-          descricao: t.descricao,
-          valor: t.valor,
-          tipo: t.tipo,
-          documento_ref: t.documentoRef || '',
-          fitid: t.fitid,
-          status_conciliacao: 'pendente',
-        }))
-
-        const salvas = await inserirTransacoesComThrottle(payloads)
-        totalTransacoesImportadas += salvas
       }
 
-      if (totalExtratosImportados > 0) {
-        toast.success(
-          `${totalExtratosImportados} extrato(s) importado(s) com sucesso! ${totalTransacoesImportadas} transações alimentadas no Fluxo de Caixa e prontas para conciliação.`,
+      let parsed = null
+      let formato: 'ofx' | 'csv' | 'xlsx' = 'ofx'
+
+      if (ext === 'ofx') {
+        formato = 'ofx'
+        const text = await lerArquivoTextoComFallback(file)
+        parsed = parseOfxString(text)
+      } else if (ext === 'csv' || ext === 'xlsx' || ext === 'xls') {
+        formato = ext === 'csv' ? 'csv' : 'xlsx'
+        parsed = await parsePlanilhaExtrato(file)
+      } else {
+        toast.error(
+          `Arquivo "${file.name}" ignorado: formato não suportado (use OFX, RET, CSV ou XLSX).`,
         )
-        setModalUploadAberto(false)
-        if (totalExtratosImportados === 1 && ultimoExtratoIdCriado) {
-          setExtratoSelecionadoId(ultimoExtratoIdCriado)
-        } else {
-          setExtratoSelecionadoId('todos')
-        }
-        await onReloadExtratos()
-        await onReloadTransacoes()
+        return
       }
+
+      if (!parsed.transacoes.length) {
+        toast.warning(`Extrato "${file.name}" não continha transações válidas.`)
+        return
+      }
+
+      // Executa análise de deduplicação contra transações existentes
+      const analiseExtrato = analisarDeduplicacao({
+        arquivoNome: file.name,
+        arquivoHash: hashArquivo,
+        contaBancariaId: contaBancariaSelecionadaUpload,
+        contaNumero: contaBancariaAlvo?.numero_conta || parsed.conta,
+        transacoesCandidatas: parsed.transacoes,
+        transacoesExistentes: transacoes,
+        extratosExistentes: extratos,
+      })
+
+      setModalPreviaExtrato({
+        file,
+        formato,
+        contaBancariaId: contaBancariaSelecionadaUpload,
+        analise: analiseExtrato,
+        saldoFinal: parsed.saldoFinal,
+        dataInicio: parsed.dataInicio,
+        dataFim: parsed.dataFim,
+        banco: parsed.banco,
+        conta: parsed.conta,
+      })
+      setModalUploadAberto(false)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
-      toast.error(`Falha ao importar extratos: ${msg}`)
+      toast.error(`Falha ao ler extrato: ${msg}`)
     } finally {
       setIsProcessandoUpload(false)
       e.target.value = ''
@@ -1327,18 +1427,70 @@ export function ExtratosComprovantesTab({
                 </div>
               </div>
 
-              {/* Totais de lançamentos */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              {/* Banner de Deduplicação do Retorno */}
+              {resumoRetornoModal.analise.arquivoJaImportado ||
+              resumoRetornoModal.analise.totalNovas === 0 ? (
+                <div className="p-3.5 bg-amber-50 border border-amber-300 rounded-lg text-amber-900 space-y-1.5">
+                  <div className="flex items-center gap-2 font-bold text-xs text-amber-900">
+                    <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
+                    <span>Arquivo já importado anteriormente — nenhum lançamento novo</span>
+                  </div>
+                  <p className="text-[11px] text-amber-800 leading-relaxed">
+                    Todos os{' '}
+                    <strong>{resumoRetornoModal.analise.totalCandidatas} lançamentos</strong> deste
+                    retorno bancário já constam no banco de dados. Nenhuma movimentação será
+                    duplicada na conciliação ou no fluxo.
+                    {resumoRetornoModal.analise.extratoExistenteCorrespondente && (
+                      <span className="block mt-1 text-amber-900 font-medium">
+                        Importação anterior registrada em:{' '}
+                        {formatDate(
+                          resumoRetornoModal.analise.extratoExistenteCorrespondente.created,
+                        )}{' '}
+                        (Extrato ref:{' '}
+                        {resumoRetornoModal.analise.extratoExistenteCorrespondente.nome_arquivo})
+                      </span>
+                    )}
+                  </p>
+                </div>
+              ) : resumoRetornoModal.analise.totalDuplicadas > 0 ? (
+                <div className="p-3.5 bg-emerald-50 border border-emerald-300 rounded-lg text-emerald-950 space-y-1">
+                  <div className="flex items-center gap-2 font-bold text-xs text-emerald-900">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                    <span>Filtro de Deduplicação Ativo</span>
+                  </div>
+                  <p className="text-[11px] text-emerald-800 leading-relaxed">
+                    <strong>{resumoRetornoModal.analise.totalNovas} lançamentos novos</strong> serão
+                    gravados e{' '}
+                    <strong>
+                      {resumoRetornoModal.analise.totalDuplicadas} já existentes no banco
+                    </strong>{' '}
+                    serão ignorados para preservar integridade.
+                  </p>
+                </div>
+              ) : null}
+
+              {/* Totais de lançamentos e resumo de deduplicação */}
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
                 <div className="p-3 bg-emerald-50/50 border border-emerald-200 rounded-lg">
                   <span className="text-[10px] font-semibold text-emerald-800 uppercase block">
-                    Créditos / Liquidações
+                    Novos Lançamentos
                   </span>
                   <p className="text-base font-bold text-emerald-700 mt-1">
-                    {formatCurrency(resumoRetornoModal.parsed.totalEntradas)}
+                    {resumoRetornoModal.analise.totalNovas}
                   </p>
                   <span className="text-[10px] text-emerald-600">
-                    {resumoRetornoModal.parsed.qtdEntradas} título(s) recebido(s)
+                    +{formatCurrency(resumoRetornoModal.analise.totalEntradasNovas)}
                   </span>
+                </div>
+
+                <div className="p-3 bg-amber-50/50 border border-amber-200 rounded-lg">
+                  <span className="text-[10px] font-semibold text-amber-800 uppercase block">
+                    Já Existentes (Ignorados)
+                  </span>
+                  <p className="text-base font-bold text-amber-700 mt-1">
+                    {resumoRetornoModal.analise.totalDuplicadas}
+                  </p>
+                  <span className="text-[10px] text-amber-600">Evitando duplicidade</span>
                 </div>
 
                 <div className="p-3 bg-rose-50/50 border border-rose-200 rounded-lg">
@@ -1355,13 +1507,13 @@ export function ExtratosComprovantesTab({
 
                 <div className="p-3 bg-neutral-50 border rounded-lg">
                   <span className="text-[10px] font-semibold text-neutral-600 uppercase block">
-                    Total de Registros
+                    Total no Arquivo
                   </span>
                   <p className="text-base font-bold text-neutral-800 mt-1">
-                    {resumoRetornoModal.parsed.totalTransacoes} transações
+                    {resumoRetornoModal.parsed.totalTransacoes}
                   </p>
                   <span className="text-[10px] text-neutral-500">
-                    {resumoRetornoModal.parsed.totalRegistros} linhas processadas
+                    {resumoRetornoModal.parsed.totalRegistros} linhas
                   </span>
                 </div>
               </div>
@@ -1452,13 +1604,26 @@ export function ExtratosComprovantesTab({
             >
               Cancelar
             </Button>
-            <Button
-              onClick={handleConfirmarGravacaoRetorno}
-              disabled={isGravandoRetorno}
-              className="bg-[#FF6A13] hover:bg-[#E85B06] text-white font-semibold"
-            >
-              {isGravandoRetorno ? 'Gravando e Alimentando Fluxo...' : 'Confirmar e Gravar no CRM'}
-            </Button>
+            {resumoRetornoModal.analise.arquivoJaImportado ||
+            resumoRetornoModal.analise.totalNovas === 0 ? (
+              <Button
+                variant="default"
+                onClick={() => setResumoRetornoModal(null)}
+                className="bg-neutral-800 hover:bg-neutral-900 text-white"
+              >
+                Concluir
+              </Button>
+            ) : (
+              <Button
+                onClick={handleConfirmarGravacaoRetorno}
+                disabled={isGravandoRetorno || resumoRetornoModal.analise.totalNovas === 0}
+                className="bg-[#FF6A13] hover:bg-[#E85B06] text-white font-semibold"
+              >
+                {isGravandoRetorno
+                  ? 'Gravando e Alimentando Fluxo...'
+                  : `Confirmar e Gravar no CRM (${resumoRetornoModal.analise.totalNovas} novos)`}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1487,6 +1652,18 @@ export function ExtratosComprovantesTab({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {/* Modal de Prévia e Deduplicação de Extratos (OFX, CSV, XLSX) */}
+      <PreviaImportacaoExtratoModal
+        open={!!modalPreviaExtrato}
+        onOpenChange={(open) => {
+          if (!open && !isGravandoExtrato) setModalPreviaExtrato(null)
+        }}
+        analise={modalPreviaExtrato?.analise || null}
+        formato={modalPreviaExtrato?.formato || 'ofx'}
+        contaBancaria={contasBancarias.find((c) => c.id === modalPreviaExtrato?.contaBancariaId)}
+        isGravando={isGravandoExtrato}
+        onConfirmarGravacao={handleConfirmarGravacaoPreviaExtrato}
+      />
       {/* Modal de Captura Mobile / Extração IA de Comprovantes */}
       <CapturaComprovanteModal
         open={modalCapturaIaAberto}

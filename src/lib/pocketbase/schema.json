@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-16T14:11:27.840Z",
+  "generatedAt": "2026-10-16T14:30:47.681Z",
   "collections": [
     {
       "name": "users",
@@ -2905,11 +2905,18 @@
           "required": false,
           "system": false,
           "collectionRef": "contas_bancarias"
+        },
+        {
+          "name": "hash_arquivo",
+          "type": "text",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
         "CREATE INDEX idx_extratos_created ON extratos (created DESC)",
-        "CREATE INDEX idx_extratos_banco ON extratos (banco)"
+        "CREATE INDEX idx_extratos_banco ON extratos (banco)",
+        "CREATE INDEX `idx_extratos_hash_arquivo` ON `extratos` (hash_arquivo)"
       ]
     },
     {
@@ -3012,13 +3019,20 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "fingerprint",
+          "type": "text",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
         "CREATE INDEX idx_extratos_transacoes_extrato ON extratos_transacoes (extrato)",
         "CREATE INDEX idx_extratos_transacoes_data ON extratos_transacoes (data DESC)",
         "CREATE INDEX idx_extratos_transacoes_status ON extratos_transacoes (status_conciliacao)",
-        "CREATE INDEX idx_extratos_transacoes_tipo ON extratos_transacoes (tipo)"
+        "CREATE INDEX idx_extratos_transacoes_tipo ON extratos_transacoes (tipo)",
+        "CREATE INDEX `idx_extratos_transacoes_fingerprint` ON `extratos_transacoes` (fingerprint)"
       ]
     },
     {
