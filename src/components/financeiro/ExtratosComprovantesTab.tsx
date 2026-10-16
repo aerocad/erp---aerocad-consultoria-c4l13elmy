@@ -209,6 +209,52 @@ export function ExtratosComprovantesTab({
     )
   }, [transacaoParaConciliar, parcelas, contasPagar, contasReceber])
 
+  // Utilitário para ler arquivo de texto com suporte automático a ISO-8859-1 (Latin1) e UTF-8
+  async function lerArquivoTextoComFallback(file: File): Promise<string> {
+    try {
+      const buffer = await file.arrayBuffer()
+      // Tenta UTF-8 com 'fatal: true' para detectar se há bytes Latin1 / ANSI inválidos em UTF-8
+      try {
+        const utf8Decoder = new TextDecoder('utf-8', { fatal: true })
+        return utf8Decoder.decode(buffer)
+      } catch {
+        // Fallback robusto para ISO-8859-1 (padrão de arquivos bancários brasileiros legados / mainframe)
+        const latin1Decoder = new TextDecoder('iso-8859-1')
+        return latin1Decoder.decode(buffer)
+      }
+    } catch {
+      return await file.text()
+    }
+  }
+
+  // Utilitário para inserir transações com pausas para evitar Rate Limiting (HTTP 429)
+  async function inserirTransacoesComThrottle(
+    transacoesPayloads: Array<Record<string, unknown>>,
+  ): Promise<number> {
+    let inseridas = 0
+    const TAMANHO_LOTE = 10
+    const PAUSA_MS = 120
+
+    for (let i = 0; i < transacoesPayloads.length; i += TAMANHO_LOTE) {
+      const chunk = transacoesPayloads.slice(i, i + TAMANHO_LOTE)
+      const promessas = chunk.map(async (item) => {
+        try {
+          await createOne('extratos_transacoes', item)
+          return 1
+        } catch {
+          return 0
+        }
+      })
+      const resultados = await Promise.all(promessas)
+      inseridas += resultados.reduce((a, b) => a + b, 0)
+
+      if (i + TAMANHO_LOTE < transacoesPayloads.length) {
+        await new Promise((resolve) => setTimeout(resolve, PAUSA_MS))
+      }
+    }
+    return inseridas
+  }
+
   // Confirma e grava retorno .RET previamente analisado
   async function handleConfirmarGravacaoRetorno() {
     if (!resumoRetornoModal) return
@@ -249,26 +295,20 @@ export function ExtratosComprovantesTab({
 
       const extratoRecord = await pb.collection('extratos').create<ExtratoRecord>(formData)
 
-      // 2. Cria as linhas de transação
-      let salvas = 0
-      for (const t of parsed.transacoes) {
-        try {
-          await createOne('extratos_transacoes', {
-            extrato: extratoRecord.id,
-            data: `${t.data} 12:00:00.000Z`,
-            descricao: t.descricao,
-            valor: t.valor,
-            tipo: t.tipo,
-            documento_ref: t.documentoRef || t.nossoNumero || '',
-            fitid: t.fitid,
-            status_conciliacao: 'pendente',
-            observacoes: `[${t.layout}] Ocorrência ${t.codigoOcorrencia} - ${t.ocorrenciaDescricao}`,
-          })
-          salvas++
-        } catch {
-          /* continua importando as demais */
-        }
-      }
+      // 2. Cria as linhas de transação com controle de concorrência e throttle anti-429
+      const payloads = parsed.transacoes.map((t) => ({
+        extrato: extratoRecord.id,
+        data: `${t.data} 12:00:00.000Z`,
+        descricao: t.descricao,
+        valor: t.valor,
+        tipo: t.tipo,
+        documento_ref: t.documentoRef || t.nossoNumero || '',
+        fitid: t.fitid,
+        status_conciliacao: 'pendente',
+        observacoes: `[${t.layout}] Ocorrência ${t.codigoOcorrencia} - ${t.ocorrenciaDescricao}`,
+      }))
+
+      const salvas = await inserirTransacoesComThrottle(payloads)
 
       toast.success(
         `Retorno bancário ${parsed.layout} importado com sucesso! ${salvas} lançamentos registrados para conciliação.`,
@@ -304,23 +344,29 @@ export function ExtratosComprovantesTab({
 
         // Intercepta arquivos .RET (CNAB 240 / 400) para exibir tela de conferência detalhada
         if (ext === 'ret') {
-          const text = await file.text()
-          const parsedCnab = parseCnabRetorno(text)
+          try {
+            const text = await lerArquivoTextoComFallback(file)
+            const parsedCnab = parseCnabRetorno(text)
 
-          if (!parsedCnab.transacoes.length) {
-            toast.warning(`Arquivo .ret "${file.name}" não continha lançamentos válidos.`)
+            if (!parsedCnab.transacoes.length) {
+              toast.warning(`Arquivo .ret "${file.name}" não continha lançamentos válidos.`)
+              continue
+            }
+
+            // Abre modal de resumo pré-gravação do .RET com as ocorrências e totais
+            setResumoRetornoModal({
+              file,
+              parsed: parsedCnab,
+              contaBancariaId: contaBancariaSelecionadaUpload,
+            })
+            setModalUploadAberto(false)
+            setIsProcessandoUpload(false)
+            return
+          } catch (retErr: unknown) {
+            const errMsg = retErr instanceof Error ? retErr.message : String(retErr)
+            toast.error(`Erro ao interpretar retorno .ret "${file.name}": ${errMsg}`)
             continue
           }
-
-          // Abre modal de resumo pré-gravação do .RET com as ocorrências e totais
-          setResumoRetornoModal({
-            file,
-            parsed: parsedCnab,
-            contaBancariaId: contaBancariaSelecionadaUpload,
-          })
-          setModalUploadAberto(false)
-          setIsProcessandoUpload(false)
-          return
         }
 
         let parsed = null
@@ -328,7 +374,7 @@ export function ExtratosComprovantesTab({
 
         if (ext === 'ofx') {
           formato = 'ofx'
-          const text = await file.text()
+          const text = await lerArquivoTextoComFallback(file)
           parsed = parseOfxString(text)
         } else if (ext === 'csv' || ext === 'xlsx' || ext === 'xls') {
           formato = ext === 'csv' ? 'csv' : 'xlsx'
@@ -374,25 +420,19 @@ export function ExtratosComprovantesTab({
         ultimoExtratoIdCriado = extratoRecord.id
         totalExtratosImportados++
 
-        // 2. Cria as linhas de transação
-        let salvas = 0
-        for (const t of parsed.transacoes) {
-          try {
-            await createOne('extratos_transacoes', {
-              extrato: extratoRecord.id,
-              data: `${t.data} 12:00:00.000Z`,
-              descricao: t.descricao,
-              valor: t.valor,
-              tipo: t.tipo,
-              documento_ref: t.documentoRef || '',
-              fitid: t.fitid,
-              status_conciliacao: 'pendente',
-            })
-            salvas++
-          } catch {
-            /* continua importando as demais */
-          }
-        }
+        // 2. Cria as linhas de transação com throttle anti-429
+        const payloads = parsed.transacoes.map((t) => ({
+          extrato: extratoRecord.id,
+          data: `${t.data} 12:00:00.000Z`,
+          descricao: t.descricao,
+          valor: t.valor,
+          tipo: t.tipo,
+          documento_ref: t.documentoRef || '',
+          fitid: t.fitid,
+          status_conciliacao: 'pendente',
+        }))
+
+        const salvas = await inserirTransacoesComThrottle(payloads)
         totalTransacoesImportadas += salvas
       }
 

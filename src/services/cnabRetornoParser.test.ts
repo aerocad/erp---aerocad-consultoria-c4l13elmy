@@ -157,4 +157,167 @@ describe('cnabRetornoParser', () => {
     expect(result.transacoes[0].codigoOcorrencia).toBe('06')
     expect(result.transacoes[0].pagadorNome).toBe('CONSTRUTORA HORIZONTE S/A')
   })
+
+  it('tolera linhas CNAB 240 com espaços finais removidos (ex: 236 ou 238 caracteres)', () => {
+    // Linha header encurtada (trimRight simulando exportação de banco web)
+    const h0 =
+      '00100000' +
+      ' '.repeat(24) +
+      '12345678901234567890' +
+      '01234' +
+      ' ' +
+      '000012345678' +
+      '9' +
+      'AEROCAD ENGENHARIA LTDA       ' +
+      'BANCO DO BRASIL S.A.          ' +
+      ' '.repeat(11) +
+      '15042026' // corta aqui sem os 89 espaços finais (151 chars)
+
+    const segT =
+      '0010001300001T 06' +
+      ' '.repeat(20) +
+      '00000000001234567890' +
+      'DOC-2026-001   ' +
+      '15042026' +
+      '000000000150000' +
+      ' '.repeat(37) +
+      '12345678000199 ' +
+      'CLIENTE RESILIENTE                      ' +
+      ' '.repeat(10) +
+      '00000000000350 ' // 213 chars apenas, sem os 27 espaços finais
+
+    const segU =
+      '0010001300002U 06' +
+      '000000000000000' +
+      '000000000000000' +
+      '000000000000000' +
+      ' '.repeat(15) +
+      '000000000150000' +
+      '000000000150000' +
+      ' '.repeat(30) +
+      '15042026' +
+      '16042026' // sem os 87 espaços finais
+
+    // Inclui trailer de lote (tipo 5) e trailer de arquivo (tipo 9) que ocorrem em bancos reais
+    const trailerLote = '00100015' + ' '.repeat(50)
+    const trailerArquivo = '00199999' + ' '.repeat(50)
+
+    const retContent = `${h0}\r\n${segT}\r\n${segU}\r\n${trailerLote}\r\n${trailerArquivo}`
+    const result = parseCnabRetorno(retContent)
+
+    expect(result.layout).toBe('CNAB240')
+    expect(result.totalTransacoes).toBe(1)
+    expect(result.transacoes[0].valor).toBe(1500)
+    expect(result.transacoes[0].pagadorNome).toBe('CLIENTE RESILIENTE')
+  })
+
+  it('tolera segmentos desconhecidos (A, B, Z) e trailers sem quebrar importação', () => {
+    const h0 = ('00100000' + ' '.repeat(140) + '15042026').padEnd(240, ' ')
+    // Segmento A desconhecido (extrato de conta corrente / débito)
+    const segA = ('0010001300001A' + ' '.repeat(100)).padEnd(240, ' ')
+    // Segmento T e U legítimos
+    const segT = (
+      '0010001300002T 06' +
+      ' '.repeat(20) +
+      '00000000009999999999' +
+      'DOC-999        ' +
+      '10052026' +
+      '000000000300000'
+    ).padEnd(240, ' ')
+    const segU = (
+      '0010001300003U 06' +
+      ' '.repeat(60) +
+      '000000000300000' +
+      '000000000300000' +
+      ' '.repeat(30) +
+      '10052026' +
+      '11052026'
+    ).padEnd(240, ' ')
+    const trailer = ('00199999' + ' '.repeat(200)).padEnd(240, ' ')
+
+    const content = [h0, segA, segT, segU, trailer].join('\n')
+    const result = parseCnabRetorno(content)
+
+    expect(result.layout).toBe('CNAB240')
+    expect(result.totalTransacoes).toBe(1)
+    expect(result.transacoes[0].valor).toBe(3000)
+    expect(result.transacoes[0].data).toBe('2026-05-11')
+    expect(result.avisos.length).toBeGreaterThan(0)
+    expect(result.avisos[0].mensagem).toContain("Segmento 'A'")
+  })
+
+  it('tolera CNAB 400 com linhas com trailing spaces cortados e registros complementares', () => {
+    const h0 =
+      '02RETORNO01COBRANCA       1234123456789       EMPRESA XYZ                   237BRADESCO       100526'.padEnd(
+        400,
+        ' ',
+      )
+    // Registro complementar tipo 2 ou 3 ignorado graciosamente
+    const d2 = '2' + ' '.repeat(100)
+    // Registro 1 legítimo (Bradesco, sem os 100 espaços finais)
+    const d1 =
+      '1' +
+      ' '.repeat(69) +
+      '000000004321' +
+      ' '.repeat(26) +
+      '06' +
+      '100526' +
+      'REF-DOC-123    ' +
+      ' '.repeat(15) +
+      '100526' +
+      '0000000050000' +
+      ' '.repeat(87) +
+      '0000000050000' +
+      ' '.repeat(29) +
+      '110526' // cortado com ~270 posições
+    const trailer9 = '9' + ' '.repeat(50)
+
+    const retContent = `${h0}\r\n${d2}\r\n${d1}\r\n${trailer9}`
+    const result = parseCnabRetorno(retContent)
+
+    expect(result.layout).toBe('CNAB400')
+    expect(result.bancoCodigo).toBe('237')
+    expect(result.bancoNome).toBe('Bradesco')
+    expect(result.totalTransacoes).toBe(1)
+    expect(result.transacoes[0].valor).toBe(500)
+    expect(result.transacoes[0].data).toBe('2026-05-11')
+  })
+
+  it('lida com UTF-8 BOM e caracteres acentuados sem lançar exceção', () => {
+    const bom = '\uFEFF'
+    const h0 = (
+      '00100000' +
+      ' '.repeat(64) +
+      'AEROCAD CONSULTORIA TÉCNICA LTDA' +
+      ' '.repeat(20) +
+      'BANCO DO BRASIL S.A.          ' +
+      ' '.repeat(11) +
+      '15042026'
+    ).padEnd(240, ' ')
+    const segT = (
+      '0010001300001T 06' +
+      ' '.repeat(20) +
+      '00000000001234567890' +
+      'DOC-TÉCNICO    ' +
+      '15042026' +
+      '000000000120000' +
+      ' '.repeat(37) +
+      '12345678000199 ' +
+      'JOÃO DA SILVA & CIA LTDA - AVIAÇÃO       '
+    ).padEnd(240, ' ')
+    const segU = (
+      '0010001300002U 06' +
+      ' '.repeat(60) +
+      '000000000120000' +
+      '000000000120000' +
+      ' '.repeat(30) +
+      '15042026' +
+      '16042026'
+    ).padEnd(240, ' ')
+
+    const result = parseCnabRetorno(`${bom}${h0}\n${segT}\n${segU}`)
+    expect(result.empresaNome).toContain('AEROCAD')
+    expect(result.transacoes[0].pagadorNome).toContain('JOÃO DA SILVA')
+    expect(result.transacoes[0].valor).toBe(1200)
+  })
 })

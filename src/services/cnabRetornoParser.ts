@@ -233,26 +233,24 @@ function parseCnab240(lines: string[]): CnabRetornoParsed {
   const segmentosTPendentes = new Map<string, SegmentoTPendente>()
 
   for (let idx = 0; idx < lines.length; idx++) {
-    const linha = lines[idx]
+    const linhaBruta = lines[idx]
     const linhaNum = idx + 1
-    if (linha.length < 200) {
-      if (linha.trim().length > 0) {
-        avisos.push({
-          linha: linhaNum,
-          mensagem: `Linha menor que 240 posições (${linha.length} caracteres). Ignorada.`,
-          conteudoLinha: linha.slice(0, 40),
-        })
-      }
+
+    if (linhaBruta.trim().length < 15) {
+      // Linha vazia ou lixo residual no final do arquivo
       continue
     }
+
+    // Normaliza para 240 posições caso o banco tenha removido espaços finais em branco
+    const linha = normalizarTamanhoLinha(linhaBruta, 240)
 
     const bancoReg = linha.slice(0, 3)
     const lote = linha.slice(3, 7)
     const tipoRegistro = linha.charAt(7)
 
-    // Tipo 0: Header de Arquivo
+    // Tipo 0: Header de Arquivo CNAB 240
     if (tipoRegistro === '0') {
-      bancoCodigo = bancoReg
+      bancoCodigo = bancoReg || bancoCodigo
       bancoNome = BANCOS_BRASIL[bancoCodigo] || linha.slice(102, 132).trim() || 'Banco Comercial'
       empresaNome = linha.slice(72, 102).trim()
       agencia = linha.slice(52, 57).trim()
@@ -271,10 +269,27 @@ function parseCnab240(lines: string[]): CnabRetornoParsed {
       continue
     }
 
-    // Tipo 3: Segmento de Detalhe
+    // Tipo 5: Trailer de Lote
+    // Tipo 9: Trailer de Arquivo
+    if (tipoRegistro === '5' || tipoRegistro === '9') {
+      // Registros normais de encerramento do CNAB 240 - ignorar graciosamente
+      continue
+    }
+
+    // Tipo 3: Segmento de Detalhe CNAB 240
     if (tipoRegistro === '3') {
       const segmento = linha.charAt(13).toUpperCase()
       const sequencial = linha.slice(8, 13).trim()
+
+      // Segmentos comuns não-financeiros no CNAB 240 (ex: A/B de extrato/débito ou Z de autenticação)
+      if (segmento !== 'T' && segmento !== 'U') {
+        avisos.push({
+          linha: linhaNum,
+          mensagem: `Segmento '${segmento}' do lote ${lote} ignorado graciosamente.`,
+          conteudoLinha: linha.slice(0, 40),
+        })
+        continue
+      }
 
       if (segmento === 'T') {
         // Segmento T: Dados do Título (Cobrança)
@@ -476,30 +491,33 @@ function parseCnab400(lines: string[]): CnabRetornoParsed {
   const transacoes: CnabTransacaoParsed[] = []
 
   for (let idx = 0; idx < lines.length; idx++) {
-    const linha = lines[idx]
+    const linhaBruta = lines[idx]
     const linhaNum = idx + 1
-    if (linha.length < 350) {
-      if (linha.trim().length > 0) {
-        avisos.push({
-          linha: linhaNum,
-          mensagem: `Linha com ${linha.length} caracteres (esperado ~400). Ignorada.`,
-          conteudoLinha: linha.slice(0, 40),
-        })
-      }
+
+    if (linhaBruta.trim().length < 15) {
+      // Linha vazia ou lixo residual
       continue
     }
+
+    // Normaliza para 400 posições caso espaços à direita tenham sido podados
+    const linha = normalizarTamanhoLinha(linhaBruta, 400)
 
     const tipoRegistro = linha.charAt(0)
 
     // Tipo 0: Header CNAB 400
     if (tipoRegistro === '0') {
-      bancoCodigo = linha.slice(76, 79).trim() || linha.slice(0, 3).trim()
+      bancoCodigo = linha.slice(76, 79).trim() || linha.slice(0, 3).trim() || bancoCodigo
       bancoNome = BANCOS_BRASIL[bancoCodigo] || linha.slice(79, 94).trim() || 'Banco Comercial'
       empresaNome = linha.slice(46, 76).trim()
       agencia = linha.slice(26, 30).trim()
       conta = linha.slice(30, 38).trim()
       contaDigito = linha.slice(38, 39).trim()
       dataGeracao = parseCnabData(linha.slice(94, 100))
+      continue
+    }
+
+    // Tipo 9: Trailer de Arquivo CNAB 400 - ignorar graciosamente sem erro
+    if (tipoRegistro === '9') {
       continue
     }
 
@@ -602,6 +620,16 @@ function parseCnab400(lines: string[]): CnabRetornoParsed {
         linhaNumero: linhaNum,
         layout: 'CNAB400',
         bancoCodigo,
+      })
+      continue
+    }
+
+    // Registros não reconhecidos no CNAB 400 (ex: tipos 2, 3, 4, 7 ou complementares)
+    if (tipoRegistro !== '0' && tipoRegistro !== '1' && tipoRegistro !== '9') {
+      avisos.push({
+        linha: linhaNum,
+        mensagem: `Registro tipo '${tipoRegistro}' não é detalhe de cobrança. Ignorado.`,
+        conteudoLinha: linha.slice(0, 40),
       })
     }
   }
@@ -711,40 +739,85 @@ function compilarResultado(
  * Função principal: detecta automaticamente o layout pelo tamanho do header (240 ou 400)
  * e decodifica o arquivo .ret com tolerância a quebras CRLF / LF.
  */
+/**
+ * Normaliza uma linha CNAB para um tamanho alvo mínimo (240 ou 400),
+ * preenchendo com espaços à direita caso o banco tenha gerado com trailing spaces removidos.
+ */
+function normalizarTamanhoLinha(linha: string, tamanhoAlvo: number): string {
+  if (linha.length >= tamanhoAlvo) return linha
+  return linha.padEnd(tamanhoAlvo, ' ')
+}
+
+/**
+ * Normaliza o conteúdo bruto de texto do arquivo .ret,
+ * removendo BOM UTF-8 e tratando quebras de linha de forma consistente.
+ */
+function prepararLinhasCnab(retContent: string): string[] {
+  // Remove BOM (\uFEFF) se presente
+  const limpo = retContent.replace(/^\uFEFF/, '')
+  const rawLines = limpo.split(/\r?\n/)
+  // Preserva espaços internos, faz rtrim de espaços em branco vazios só se a linha estiver totalmente em branco
+  return rawLines.map((l) => l.replace(/[\r\n]/g, '')).filter((l) => l.trim().length > 0)
+}
+
+/**
+ * Detecta o layout CNAB inspecionando tanto os comprimentos das linhas
+ * quanto as assinaturas estruturais do registro Header.
+ */
+function detectarLayoutCnab(lines: string[]): 'CNAB240' | 'CNAB400' {
+  const primeira = lines[0] || ''
+
+  // 1. Assinatura de Header CNAB 240 FEBRABAN:
+  // - 8 primeiros caracteres: código do banco (3 dígitos), lote '0000', tipo de registro '0'
+  // - ou posições 142-143 contêm código de remessa/retorno '2' e posições 7-8 é '0'
+  if (/^\d{3}00000/.test(primeira)) {
+    return 'CNAB240'
+  }
+
+  // 2. Assinatura de Header CNAB 400:
+  // - Inicia com '02RETORNO' ou '01REMESSA' ou '02' no início
+  if (
+    /^02RETORNO/i.test(primeira) ||
+    /^01REMESSA/i.test(primeira) ||
+    (/^0[12]/.test(primeira) && primeira.length > 300)
+  ) {
+    return 'CNAB400'
+  }
+
+  // 3. Checagem por faixas de comprimento
+  const tamPrimeira = primeira.length
+  if (tamPrimeira >= 230 && tamPrimeira <= 260) {
+    return 'CNAB240'
+  }
+  if (tamPrimeira >= 370 && tamPrimeira <= 430) {
+    return 'CNAB400'
+  }
+
+  // 4. Heurística pela média dos comprimentos das 15 primeiras linhas
+  const amostra = lines.slice(0, 15).map((l) => l.length)
+  const media = amostra.reduce((a, b) => a + b, 0) / (amostra.length || 1)
+
+  return media < 320 ? 'CNAB240' : 'CNAB400'
+}
+
+/**
+ * Função principal: detecta automaticamente o layout pelo header e estrutura
+ * e decodifica o arquivo .ret com alta tolerância a variações de bancos reais.
+ */
 export function parseCnabRetorno(retContent: string): CnabRetornoParsed {
   if (!retContent || typeof retContent !== 'string') {
     throw new Error('Conteúdo do arquivo .ret vazio ou inválido.')
   }
 
-  // Divide em linhas removendo linhas totalmente vazias do final
-  const rawLines = retContent.split(/\r?\n/)
-  const lines = rawLines.map((l) => l.replace(/[\r\n]/g, '')).filter((l) => l.length > 0)
+  const lines = prepararLinhasCnab(retContent)
 
   if (lines.length === 0) {
     throw new Error('O arquivo .ret não contém linhas válidas.')
   }
 
-  // Detecta pelo primeiro registro header
-  const primeiraLinha = lines[0]
-  const tamPrimeira = primeiraLinha.length
-
-  // CNAB 240 tem 240 caracteres no header
-  if (tamPrimeira === 240 || (tamPrimeira >= 235 && tamPrimeira <= 245)) {
+  const layout = detectarLayoutCnab(lines)
+  if (layout === 'CNAB240') {
     return parseCnab240(lines)
   }
-
-  // CNAB 400 tem 400 caracteres no header
-  if (tamPrimeira === 400 || (tamPrimeira >= 380 && tamPrimeira <= 410)) {
-    return parseCnab400(lines)
-  }
-
-  // Se a primeira linha tiver tamanho diferente, busca o tamanho mediano das linhas
-  const comprimentos = lines.slice(0, 10).map((l) => l.length)
-  const media = comprimentos.reduce((a, b) => a + b, 0) / comprimentos.length
-
-  if (media < 300) {
-    return parseCnab240(lines)
-  } else {
-    return parseCnab400(lines)
-  }
+  return parseCnab400(lines)
 }
