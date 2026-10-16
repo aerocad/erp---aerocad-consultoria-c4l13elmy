@@ -67,6 +67,7 @@ interface CapturaComprovanteModalProps {
   credores?: CredorRecord[]
   isMobile: boolean
   contaEdicao?: ContaPagarRecord | null
+  arquivoInicial?: File | null
   onSuccess: () => Promise<void> | void
 }
 
@@ -78,6 +79,7 @@ export function CapturaComprovanteModal({
   credores = [],
   isMobile,
   contaEdicao = null,
+  arquivoInicial = null,
   onSuccess,
 }: CapturaComprovanteModalProps) {
   const { user } = useAuth()
@@ -197,8 +199,11 @@ export function CapturaComprovanteModal({
       setEtapa('conferencia')
       setModoEssencialAtivo(false)
       setAvisoExtracao(null)
+    } else if (arquivoInicial) {
+      // Se veio com um arquivo já capturado (ex: transição da Captura Rápida para Conferência Completa)
+      void handleFileChosen(arquivoInicial)
     }
-  }, [open, contaEdicao])
+  }, [open, contaEdicao, arquivoInicial])
 
   // Trata a seleção do arquivo (câmera, galeria ou desktop)
   async function handleFileChosen(file: File) {

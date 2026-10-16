@@ -80,6 +80,7 @@ import type {
 } from '@/types/crm'
 import { ContasPagarTab } from '@/components/financeiro/ContasPagarTab'
 import { CapturaComprovanteModal } from '@/components/financeiro/CapturaComprovanteModal'
+import { CapturaRapidaMobileModal } from '@/components/financeiro/CapturaRapidaMobileModal'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { CredoresTab } from '@/components/financeiro/CredoresTab'
 import { ContasBancariasTab } from '@/components/financeiro/ContasBancariasTab'
@@ -147,6 +148,10 @@ export function FinancePage() {
   const isMobile = useIsMobile()
   const [activeTab, setActiveTab] = useState<FinanceTabKey>('contas_pagar')
   const [capturaMobileOpen, setCapturaMobileOpen] = useState(false)
+  const [capturaRapidaMobileOpen, setCapturaRapidaMobileOpen] = useState(false)
+  const [arquivoParaConferenciaCompleta, setArquivoParaConferenciaCompleta] = useState<File | null>(
+    null,
+  )
   const [importNfseOpen, setImportNfseOpen] = useState(false)
   const [duplicadasModalOpen, setDuplicadasModalOpen] = useState(false)
   const [extrairProjetosModalOpen, setExtrairProjetosModalOpen] = useState(false)
@@ -970,9 +975,9 @@ export function FinancePage() {
         <div className="md:hidden mb-4">
           <button
             type="button"
-            onClick={() => setCapturaMobileOpen(true)}
+            onClick={() => setCapturaRapidaMobileOpen(true)}
             className="w-full flex items-center justify-between gap-3 p-3.5 rounded-xl bg-[#FF6A13] hover:bg-[#E85B06] active:scale-[0.99] text-white shadow-md shadow-orange-500/20 transition-all border border-[#FF6A13]"
-            title="Fotografar comprovante fiscal (cupom, nota, recibo) com IA"
+            title="Fotografar comprovante fiscal (cupom, nota, recibo) com captura rápida"
           >
             <div className="flex items-center gap-3 min-w-0">
               <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-white/20 text-white backdrop-blur-sm">
@@ -983,7 +988,7 @@ export function FinancePage() {
                   Fotografar...
                 </span>
                 <span className="block text-xs text-orange-100 font-medium truncate">
-                  Cupom fiscal, recibo ou DANFE via IA
+                  Captura rápida: foto, valor, credor e data
                 </span>
               </div>
             </div>
@@ -2920,15 +2925,38 @@ export function FinancePage() {
         }}
       />
 
-      {/* Modal de Captura de Comprovante acionado diretamente via destaque Mobile */}
+      {/* Modal de Captura Rápida Mobile (Item 1, 2, 3 do pedido) */}
+      <CapturaRapidaMobileModal
+        open={capturaRapidaMobileOpen}
+        onOpenChange={setCapturaRapidaMobileOpen}
+        projetos={projects.data}
+        contasBancarias={contasBancarias.data}
+        credores={credores.data ?? []}
+        onSuccess={async () => {
+          void contasPagar.reload()
+          void credores.reload()
+        }}
+        onAbrirConferenciaCompleta={(arquivo) => {
+          setArquivoParaConferenciaCompleta(arquivo)
+          setCapturaMobileOpen(true)
+        }}
+      />
+
+      {/* Modal de Captura de Comprovante (Fluxo Completo de Conferência / Desktop) */}
       <CapturaComprovanteModal
         open={capturaMobileOpen}
-        onOpenChange={setCapturaMobileOpen}
+        onOpenChange={(aberto) => {
+          setCapturaMobileOpen(aberto)
+          if (!aberto) {
+            setArquivoParaConferenciaCompleta(null)
+          }
+        }}
         projetos={projects.data}
         contasBancarias={contasBancarias.data}
         credores={credores.data ?? []}
         isMobile={isMobile}
         contaEdicao={null}
+        arquivoInicial={arquivoParaConferenciaCompleta}
         onSuccess={async () => {
           void contasPagar.reload()
           void credores.reload()
