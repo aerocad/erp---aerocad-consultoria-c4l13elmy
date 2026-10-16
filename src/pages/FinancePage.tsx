@@ -5,6 +5,7 @@ import {
   Building2,
   Calendar,
   CalendarClock,
+  Camera,
   Check,
   CheckCircle2,
   CheckSquare,
@@ -78,6 +79,8 @@ import type {
   CredorRecord,
 } from '@/types/crm'
 import { ContasPagarTab } from '@/components/financeiro/ContasPagarTab'
+import { CapturaComprovanteModal } from '@/components/financeiro/CapturaComprovanteModal'
+import { useIsMobile } from '@/hooks/use-mobile'
 import { CredoresTab } from '@/components/financeiro/CredoresTab'
 import { ContasBancariasTab } from '@/components/financeiro/ContasBancariasTab'
 import { ContasReceberTab } from '@/components/financeiro/ContasReceberTab'
@@ -141,7 +144,9 @@ export function FinancePage() {
   const [status, setStatus] = useState(params.get('status') || 'todos')
   const [month, setMonth] = useState('todos')
   const [projectFilter, setProjectFilter] = useState(params.get('projeto') || 'todos')
+  const isMobile = useIsMobile()
   const [activeTab, setActiveTab] = useState<FinanceTabKey>('contas_pagar')
+  const [capturaMobileOpen, setCapturaMobileOpen] = useState(false)
   const [importNfseOpen, setImportNfseOpen] = useState(false)
   const [duplicadasModalOpen, setDuplicadasModalOpen] = useState(false)
   const [extrairProjetosModalOpen, setExtrairProjetosModalOpen] = useState(false)
@@ -960,6 +965,36 @@ export function FinancePage() {
 
   return (
     <div>
+      {/* 0. Mobile: Botão de ação destacado no topo para Fotografar Comprovante */}
+      {canWrite && (
+        <div className="md:hidden mb-4">
+          <button
+            type="button"
+            onClick={() => setCapturaMobileOpen(true)}
+            className="w-full flex items-center justify-between gap-3 p-3.5 rounded-xl bg-[#FF6A13] hover:bg-[#E85B06] active:scale-[0.99] text-white shadow-md shadow-orange-500/20 transition-all border border-[#FF6A13]"
+            title="Fotografar comprovante fiscal (cupom, nota, recibo) com IA"
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-white/20 text-white backdrop-blur-sm">
+                <Camera className="h-6 w-6" />
+              </span>
+              <div className="text-left min-w-0">
+                <span className="block font-bold text-base leading-tight tracking-tight text-white">
+                  Fotografar...
+                </span>
+                <span className="block text-xs text-orange-100 font-medium truncate">
+                  Cupom fiscal, recibo ou DANFE via IA
+                </span>
+              </div>
+            </div>
+            <span className="flex items-center gap-1 shrink-0 rounded-lg bg-white px-2.5 py-1 text-xs font-bold text-[#FF6A13] shadow-sm">
+              <Sparkles className="h-3.5 w-3.5 text-[#FF6A13]" />
+              Escanear
+            </span>
+          </button>
+        </div>
+      )}
+
       <SectionHeader
         eyebrow="GESTÃO FINANCEIRA"
         title="Financeiro"
@@ -2882,6 +2917,21 @@ export function FinancePage() {
             })
             setActiveTab('orfas')
           }
+        }}
+      />
+
+      {/* Modal de Captura de Comprovante acionado diretamente via destaque Mobile */}
+      <CapturaComprovanteModal
+        open={capturaMobileOpen}
+        onOpenChange={setCapturaMobileOpen}
+        projetos={projects.data}
+        contasBancarias={contasBancarias.data}
+        credores={credores.data ?? []}
+        isMobile={isMobile}
+        contaEdicao={null}
+        onSuccess={async () => {
+          void contasPagar.reload()
+          void credores.reload()
         }}
       />
     </div>
