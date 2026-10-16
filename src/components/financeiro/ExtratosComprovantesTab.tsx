@@ -117,6 +117,15 @@ export function ExtratosComprovantesTab({
   const { user } = useAuth()
   const isMobile = useIsMobile()
 
+  // Garantia defensiva para listas recebidas via props
+  const listaExtratos = Array.isArray(extratos) ? extratos : []
+  const listaTransacoes = Array.isArray(transacoes) ? transacoes : []
+  const listaParcelas = Array.isArray(parcelas) ? parcelas : []
+  const listaContasPagar = Array.isArray(contasPagar) ? contasPagar : []
+  const listaContasReceber = Array.isArray(contasReceber) ? contasReceber : []
+  const listaProjetos = Array.isArray(projetos) ? projetos : []
+  const listaCredores = Array.isArray(credores) ? credores : []
+
   // Permissão de exclusão de extratos: restrita exclusivamente ao Administrador (admin)
   const podeExcluirExtratos = Boolean(canWrite && user?.role === 'admin')
 
@@ -207,14 +216,15 @@ export function ExtratosComprovantesTab({
     // Escopo respeita o extrato selecionado caso não seja "todos"
     const txBase =
       extratoSelecionadoId === 'todos'
-        ? transacoes
-        : transacoes.filter((t) => t.extrato === extratoSelecionadoId)
+        ? listaTransacoes
+        : listaTransacoes.filter((t) => t && t.extrato === extratoSelecionadoId)
 
     let confirmadas = 0
     let pendentes = 0
     let ignoradas = 0
 
     for (const t of txBase) {
+      if (!t) continue
       if (t.status_conciliacao === 'conciliado') {
         confirmadas++
       } else if (t.status_conciliacao === 'ignorado') {
@@ -234,12 +244,15 @@ export function ExtratosComprovantesTab({
 
   // Transações filtradas
   const transacoesFiltradas = useMemo(() => {
-    return transacoes.filter((tx) => {
-      const extratoPai = extratos.find((e) => e.id === tx.extrato)
+    const termoBusca = (busca || '').toLowerCase().trim()
+    return listaTransacoes.filter((tx) => {
+      if (!tx) return false
+      const extratoPai = listaExtratos.find((e) => e && e.id === tx.extrato)
       const matchExtrato = extratoSelecionadoId === 'todos' || tx.extrato === extratoSelecionadoId
+      const descLower = (tx.descricao || '').toLowerCase()
+      const docRefLower = (tx.documento_ref || '').toLowerCase()
       const matchBusca =
-        tx.descricao.toLowerCase().includes(busca.toLowerCase()) ||
-        (tx.documento_ref && tx.documento_ref.toLowerCase().includes(busca.toLowerCase()))
+        !termoBusca || descLower.includes(termoBusca) || docRefLower.includes(termoBusca)
       const matchStatus = filtroStatus === 'todos' || tx.status_conciliacao === filtroStatus
       const matchTipo = filtroTipo === 'todos' || tx.tipo === filtroTipo
 
@@ -252,8 +265,8 @@ export function ExtratosComprovantesTab({
       return matchExtrato && matchBusca && matchStatus && matchTipo && matchConta
     })
   }, [
-    transacoes,
-    extratos,
+    listaTransacoes,
+    listaExtratos,
     extratoSelecionadoId,
     busca,
     filtroStatus,
@@ -264,16 +277,21 @@ export function ExtratosComprovantesTab({
   // Sugestões para o item em conciliação
   const sugestoesAtuais = useMemo<SugestaoConciliacao[]>(() => {
     if (!transacaoParaConciliar) return []
-    return encontrarSugestoesConciliacao(
-      transacaoParaConciliar,
-      {
-        parcelas,
-        contasPagar,
-        contasReceber,
-      },
-      7, // tolerância de até 7 dias
-    )
-  }, [transacaoParaConciliar, parcelas, contasPagar, contasReceber])
+    try {
+      return encontrarSugestoesConciliacao(
+        transacaoParaConciliar,
+        {
+          parcelas: listaParcelas,
+          contasPagar: listaContasPagar,
+          contasReceber: listaContasReceber,
+        },
+        7, // tolerância de até 7 dias
+      )
+    } catch (err) {
+      console.warn('Erro ao calcular sugestões de conciliação:', err)
+      return []
+    }
+  }, [transacaoParaConciliar, listaParcelas, listaContasPagar, listaContasReceber])
 
   // Seleção de sugestões no modal individual de conciliação
   const [sugestaoSelecionadaModal, setSugestaoSelecionadaModal] =
@@ -823,12 +841,12 @@ export function ExtratosComprovantesTab({
 
   // Ações de seleção de transações para lote
   const transacoesPendentesVisiveis = useMemo(() => {
-    return transacoesFiltradas.filter((t) => t.status_conciliacao === 'pendente')
+    return transacoesFiltradas.filter((t) => t && t.status_conciliacao === 'pendente')
   }, [transacoesFiltradas])
 
   const todasPendentesVisiveisSelecionadas = useMemo(() => {
     if (transacoesPendentesVisiveis.length === 0) return false
-    return transacoesPendentesVisiveis.every((t) => selectedTxIds.includes(t.id))
+    return transacoesPendentesVisiveis.every((t) => t && selectedTxIds.includes(t.id))
   }, [transacoesPendentesVisiveis, selectedTxIds])
 
   function alternarSelecaoTodasPendentesVisiveis() {
@@ -836,7 +854,7 @@ export function ExtratosComprovantesTab({
       const idsPendentesVisiveis = new Set(transacoesPendentesVisiveis.map((t) => t.id))
       setSelectedTxIds((prev) => prev.filter((id) => !idsPendentesVisiveis.has(id)))
     } else {
-      const idsToAdd = transacoesPendentesVisiveis.map((t) => t.id)
+      const idsToAdd = transacoesPendentesVisiveis.filter((t) => Boolean(t?.id)).map((t) => t.id)
       setSelectedTxIds((prev) => Array.from(new Set([...prev, ...idsToAdd])))
     }
   }
@@ -1057,10 +1075,10 @@ export function ExtratosComprovantesTab({
         </div>
       </div>
       {/* Seção de Extratos Importados */}
-      {extratos.length > 0 && (
+      {listaExtratos.length > 0 && (
         <div className="crm-card p-3 space-y-2">
           <div className="flex items-center justify-between text-xs font-semibold text-neutral-700">
-            <span>Extratos no Sistema ({extratos.length})</span>
+            <span>Extratos no Sistema ({listaExtratos.length})</span>
             {extratoSelecionadoId !== 'todos' && (
               <button
                 onClick={() => setExtratoSelecionadoId('todos')}
@@ -1083,13 +1101,18 @@ export function ExtratosComprovantesTab({
               Todos os Extratos
             </button>
 
-            {extratos.map((ex) => {
+            {listaExtratos.map((ex) => {
+              if (!ex) return null
               const isSelected = extratoSelecionadoId === ex.id
               const hashEncurtado =
                 typeof ex.hash_arquivo === 'string' && ex.hash_arquivo.length > 14
                   ? `${ex.hash_arquivo.slice(0, 8)}...${ex.hash_arquivo.slice(-6)}`
                   : null
               const dataImportacao = ex.created ? formatDateBrasilia(ex.created) : null
+              const fileUrl =
+                ex.arquivo && typeof pb?.files?.getURL === 'function'
+                  ? pb.files.getURL(ex, ex.arquivo)
+                  : null
 
               return (
                 <div
@@ -1103,9 +1126,9 @@ export function ExtratosComprovantesTab({
                   <button
                     onClick={() => setExtratoSelecionadoId(ex.id)}
                     className="font-medium text-left truncate max-w-[240px]"
-                    title={ex.nome_arquivo}
+                    title={ex.nome_arquivo || 'Extrato'}
                   >
-                    <span className="block truncate">{ex.nome_arquivo}</span>
+                    <span className="block truncate">{ex.nome_arquivo || 'Extrato sem nome'}</span>
                     <span className="flex items-center gap-1 text-[10px] text-neutral-400 font-normal">
                       <span>({ex.total_transacoes || 0} tx)</span>
                       {dataImportacao && <span>· {dataImportacao}</span>}
@@ -1126,9 +1149,9 @@ export function ExtratosComprovantesTab({
                     </span>
                   )}
 
-                  {ex.arquivo && (
+                  {fileUrl && (
                     <a
-                      href={pb.files.getURL(ex, ex.arquivo)}
+                      href={fileUrl}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-neutral-400 hover:text-[#FF6A13] ml-1"
@@ -1370,10 +1393,10 @@ export function ExtratosComprovantesTab({
                                         numeroDocumento: tx.documento_ref,
                                         fornecedorOuCliente: tx.descricao,
                                       },
-                                      contasPagar.map((c) => ({
+                                      listaContasPagar.map((c) => ({
                                         id: c.id,
-                                        valor: c.valor,
-                                        data: c.data_pagamento || c.data_vencimento,
+                                        valor: c.valor || 0,
+                                        data: c.data_pagamento || c.data_vencimento || '',
                                         numero_documento: c.numero_documento,
                                         fornecedorOuCliente: c.fornecedor,
                                         descricao: c.descricao,
@@ -1389,12 +1412,12 @@ export function ExtratosComprovantesTab({
                                         numeroDocumento: tx.documento_ref,
                                         fornecedorOuCliente: tx.descricao,
                                       },
-                                      contasReceber.map((c) => ({
+                                      listaContasReceber.map((c) => ({
                                         id: c.id,
-                                        valor: c.valor,
-                                        data: c.data_recebimento || c.data_vencimento,
+                                        valor: c.valor || 0,
+                                        data: c.data_recebimento || c.data_vencimento || '',
                                         numero_documento: c.numero_documento,
-                                        fornecedorOuCliente: c.cliente_nome,
+                                        fornecedorOuCliente: c.cliente_nome || '',
                                         descricao: c.descricao,
                                       })),
                                     )
@@ -1721,14 +1744,16 @@ export function ExtratosComprovantesTab({
                 </SelectTrigger>
                 <SelectContent>
                   {destinoComprovanteTipo === 'conta_pagar'
-                    ? contasPagar.map((cp) => (
+                    ? listaContasPagar.map((cp) => (
                         <SelectItem key={cp.id} value={cp.id}>
-                          {cp.fornecedor} — {cp.descricao} ({formatCurrency(cp.valor)})
+                          {cp.fornecedor || 'Fornecedor'} — {cp.descricao || ''} (
+                          {formatCurrency(cp.valor || 0)})
                         </SelectItem>
                       ))
-                    : contasReceber.map((cr) => (
+                    : listaContasReceber.map((cr) => (
                         <SelectItem key={cr.id} value={cr.id}>
-                          {cr.cliente_nome} — {cr.descricao} ({formatCurrency(cr.valor)})
+                          {cr.cliente_nome || 'Cliente'} — {cr.descricao || ''} (
+                          {formatCurrency(cr.valor || 0)})
                         </SelectItem>
                       ))}
                 </SelectContent>
@@ -2118,18 +2143,18 @@ export function ExtratosComprovantesTab({
               movimentações bancárias selecionadas:
             </p>
             <div className="p-3 bg-neutral-50 rounded-lg border text-[11px] space-y-1.5 max-h-48 overflow-y-auto">
-              {transacoes
-                .filter((t) => selectedTxIds.includes(t.id))
+              {listaTransacoes
+                .filter((t) => t && selectedTxIds.includes(t.id))
                 .map((t) => (
                   <div
                     key={t.id}
                     className="flex justify-between items-center py-1 border-b last:border-0 border-neutral-200"
                   >
                     <span className="truncate max-w-[240px] font-medium text-neutral-800">
-                      {t.descricao}
+                      {t.descricao || 'Movimentação sem descrição'}
                     </span>
                     <span className="font-mono font-bold text-neutral-900 shrink-0">
-                      {formatCurrency(t.valor)}
+                      {formatCurrency(t.valor || 0)}
                     </span>
                   </div>
                 ))}
@@ -2239,9 +2264,9 @@ export function ExtratosComprovantesTab({
       <CapturaComprovanteModal
         open={modalCapturaIaAberto}
         onOpenChange={setModalCapturaIaAberto}
-        projetos={projetos}
-        contasBancarias={contasBancarias}
-        credores={credores}
+        projetos={listaProjetos}
+        contasBancarias={contasBancarias || []}
+        credores={listaCredores}
         isMobile={isMobile}
         onSuccess={async () => {
           await onReloadContasPagar()

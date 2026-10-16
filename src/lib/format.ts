@@ -93,13 +93,18 @@ export function formatDate(value?: string | Date | null) {
 /**
  * Formata a data atual em formato de Brasília (America/Sao_Paulo) para exibição simples (ex.: 24/02/2026).
  */
-export function formatDateBrasilia(value: Date = new Date()) {
+export function formatDateBrasilia(value?: string | Date | number | null) {
+  if (value === null || value === undefined || value === '') {
+    value = new Date()
+  }
+  const date = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(date.getTime())) return '—'
   return new Intl.DateTimeFormat('pt-BR', {
     timeZone: FUSO_HORARIO_BRASILIA,
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
-  }).format(value)
+  }).format(date)
 }
 
 /**
@@ -107,14 +112,19 @@ export function formatDateBrasilia(value: Date = new Date()) {
  * garantindo que usuários em outros fusos vejam o dia correto de Brasília.
  * Exemplo: "segunda-feira, 24 de fevereiro de 2026"
  */
-export function formatDateLong(value: Date = new Date()) {
+export function formatDateLong(value?: string | Date | number | null) {
+  if (value === null || value === undefined || value === '') {
+    value = new Date()
+  }
+  const date = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(date.getTime())) return '—'
   return new Intl.DateTimeFormat('pt-BR', {
     timeZone: FUSO_HORARIO_BRASILIA,
     weekday: 'long',
     day: '2-digit',
     month: 'long',
     year: 'numeric',
-  }).format(value)
+  }).format(date)
 }
 
 export function toInputDate(value?: string | Date | null) {

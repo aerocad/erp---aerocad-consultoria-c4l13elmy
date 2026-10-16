@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { Component, useMemo, useState, type ErrorInfo, type FormEvent, type ReactNode } from 'react'
 import {
   Banknote,
   BarChart3,
@@ -28,6 +28,55 @@ import {
   TriangleAlert,
   Scale,
 } from 'lucide-react'
+
+class TabErrorBoundary extends Component<
+  { children: ReactNode; tabName: string },
+  { hasError: boolean; error: Error | null }
+> {
+  constructor(props: { children: ReactNode; tabName: string }) {
+    super(props)
+    this.state = { hasError: false, error: null }
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error }
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error(
+      `[FinancePage TabErrorBoundary] Erro na aba ${this.props.tabName}:`,
+      error,
+      errorInfo,
+    )
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="crm-card p-6 my-4 border-rose-200 bg-rose-50/40 text-neutral-800 space-y-3">
+          <div className="flex items-center gap-2 text-rose-700 font-semibold text-sm">
+            <TriangleAlert className="h-5 w-5" />
+            <span>
+              Ocorreu uma instabilidade temporária ao carregar a aba {this.props.tabName}.
+            </span>
+          </div>
+          <p className="text-xs text-neutral-600">
+            {this.state.error?.message || 'Falha de renderização no componente.'}
+          </p>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => this.setState({ hasError: false, error: null })}
+            className="text-xs border-rose-300 text-rose-700 hover:bg-rose-100"
+          >
+            Tentar recarregar aba
+          </Button>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
 import { Link, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
@@ -1568,32 +1617,34 @@ export function FinancePage() {
         </div>
       ) : activeTab === 'extratos' ? (
         <div className="mt-5">
-          <ExtratosComprovantesTab
-            extratos={extratos.data}
-            transacoes={extratosTransacoes.data}
-            parcelas={installments.data}
-            contasPagar={contasPagar.data}
-            contasReceber={contasReceber.data}
-            contasBancarias={contasBancarias.data}
-            projetos={projects.data}
-            credores={credores.data}
-            canWrite={canWrite}
-            onReloadExtratos={async () => {
-              void extratos.reload()
-            }}
-            onReloadTransacoes={async () => {
-              void extratosTransacoes.reload()
-            }}
-            onReloadParcelas={async () => {
-              void installments.reload()
-            }}
-            onReloadContasPagar={async () => {
-              void contasPagar.reload()
-            }}
-            onReloadContasReceber={async () => {
-              void contasReceber.reload()
-            }}
-          />
+          <TabErrorBoundary tabName="Extratos e Comprovantes">
+            <ExtratosComprovantesTab
+              extratos={extratos.data || []}
+              transacoes={extratosTransacoes.data || []}
+              parcelas={installments.data || []}
+              contasPagar={contasPagar.data || []}
+              contasReceber={contasReceber.data || []}
+              contasBancarias={contasBancarias.data || []}
+              projetos={projects.data || []}
+              credores={credores.data || []}
+              canWrite={canWrite}
+              onReloadExtratos={async () => {
+                void extratos.reload()
+              }}
+              onReloadTransacoes={async () => {
+                void extratosTransacoes.reload()
+              }}
+              onReloadParcelas={async () => {
+                void installments.reload()
+              }}
+              onReloadContasPagar={async () => {
+                void contasPagar.reload()
+              }}
+              onReloadContasReceber={async () => {
+                void contasReceber.reload()
+              }}
+            />
+          </TabErrorBoundary>
         </div>
       ) : activeTab === 'balancetes' ? (
         <div className="mt-5">

@@ -396,19 +396,24 @@ export function CapturaComprovanteModal({
     }
 
     // Tentar vincular automaticamente a um credor existente por CNPJ/CPF ou Razão Social
-    if (credores.length > 0) {
+    const listaCredores = Array.isArray(credores) ? credores : []
+    if (listaCredores.length > 0) {
       const matchDoc = docLimpo
-        ? credores.find(
-            (c) => c.cpf_cnpj && c.cpf_cnpj.replace(/\D/g, '') === docLimpo.replace(/\D/g, ''),
-          )
+        ? listaCredores.find((c) => {
+            if (!c) return false
+            const doc = c.cpf_cnpj || c.cnpj_cpf
+            return doc && doc.replace(/\D/g, '') === docLimpo.replace(/\D/g, '')
+          })
         : null
 
       if (matchDoc) {
         setCredorId(matchDoc.id)
       } else if (forn) {
-        const matchNome = credores.find(
-          (c) => c.nome.toLowerCase().trim() === forn.toLowerCase().trim(),
-        )
+        const matchNome = listaCredores.find((c) => {
+          if (!c) return false
+          const nomeCredor = c.nome || c.nome_razao_social || ''
+          return nomeCredor.toLowerCase().trim() === forn.toLowerCase().trim()
+        })
         if (matchNome) {
           setCredorId(matchNome.id)
         } else {
@@ -990,7 +995,7 @@ export function CapturaComprovanteModal({
                   </div>
 
                   {/* Vínculo de Credor */}
-                  {credores.length > 0 && (
+                  {Array.isArray(credores) && credores.length > 0 && (
                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pt-1 text-[11px]">
                       <div className="flex-1 w-full sm:w-auto">
                         <Select
@@ -1004,11 +1009,16 @@ export function CapturaComprovanteModal({
                             <SelectItem value="nenhum">
                               Nenhum (usar apenas nome do estabelecimento)
                             </SelectItem>
-                            {credores.map((c) => (
-                              <SelectItem key={c.id} value={c.id}>
-                                {c.nome} {c.cpf_cnpj ? `(${c.cpf_cnpj})` : ''}
-                              </SelectItem>
-                            ))}
+                            {credores.map((c) => {
+                              if (!c) return null
+                              const nome = c.nome || c.nome_razao_social || 'Credor'
+                              const doc = c.cpf_cnpj || c.cnpj_cpf || ''
+                              return (
+                                <SelectItem key={c.id} value={c.id}>
+                                  {nome} {doc ? `(${doc})` : ''}
+                                </SelectItem>
+                              )
+                            })}
                           </SelectContent>
                         </Select>
                       </div>
