@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-16T06:46:43.763Z",
+  "generatedAt": "2026-10-16T14:01:00.605Z",
   "collections": [
     {
       "name": "users",
@@ -2822,7 +2822,7 @@
           "type": "select",
           "required": true,
           "system": false,
-          "selectValues": ["ofx", "csv", "xlsx"]
+          "selectValues": ["ofx", "csv", "xlsx", "ret"]
         },
         {
           "name": "banco",

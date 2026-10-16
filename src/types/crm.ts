@@ -758,7 +758,7 @@ export interface ContaReceberRecord extends RecordModel {
   }
 }
 
-export type ExtratoFormato = 'ofx' | 'csv' | 'xlsx'
+export type ExtratoFormato = 'ofx' | 'csv' | 'xlsx' | 'ret'
 
 export interface ExtratoRecord extends RecordModel {
   nome_arquivo: string

@@ -19,6 +19,8 @@ export const ALLOWED_EXTENSIONS = [
   'xlsx',
   'xls',
   'csv',
+  'ofx',
+  'ret',
   'dwg',
   'dxf',
   'kml',

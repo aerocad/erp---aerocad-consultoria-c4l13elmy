@@ -55,6 +55,11 @@ import {
 } from '@/services/conciliacaoMotor'
 import { parseOfxString } from '@/services/extratoOfxParser'
 import { parsePlanilhaExtrato } from '@/services/extratoPlanilhaParser'
+import {
+  parseCnabRetorno,
+  type CnabRetornoParsed,
+  type CnabTransacaoParsed,
+} from '@/services/cnabRetornoParser'
 import type {
   ContaPagarRecord,
   ContaReceberRecord,
@@ -139,6 +144,12 @@ export function ExtratosComprovantesTab({
   // Modais
   const [modalUploadAberto, setModalUploadAberto] = useState(false)
   const [isProcessandoUpload, setIsProcessandoUpload] = useState(false)
+  const [resumoRetornoModal, setResumoRetornoModal] = useState<{
+    file: File
+    parsed: CnabRetornoParsed
+    contaBancariaId: string
+  } | null>(null)
+  const [isGravandoRetorno, setIsGravandoRetorno] = useState(false)
   const [transacaoParaConciliar, setTransacaoParaConciliar] =
     useState<ExtratoTransacaoRecord | null>(null)
   const [isConciliando, setIsConciliando] = useState(false)
@@ -198,6 +209,82 @@ export function ExtratosComprovantesTab({
     )
   }, [transacaoParaConciliar, parcelas, contasPagar, contasReceber])
 
+  // Confirma e grava retorno .RET previamente analisado
+  async function handleConfirmarGravacaoRetorno() {
+    if (!resumoRetornoModal) return
+    setIsGravandoRetorno(true)
+
+    const { file, parsed, contaBancariaId } = resumoRetornoModal
+    const contaBancariaAlvo = contasBancarias.find((c) => c.id === contaBancariaId)
+
+    try {
+      // 1. Cria extrato com anexo do arquivo .ret disponível para download
+      const formData = new FormData()
+      formData.append('nome_arquivo', file.name)
+      formData.append('formato', 'ret')
+      formData.append(
+        'banco',
+        contaBancariaAlvo
+          ? `${contaBancariaAlvo.banco_nome} (${contaBancariaAlvo.apelido})`
+          : parsed.bancoNome || 'Banco Comercial',
+      )
+      formData.append('conta', contaBancariaAlvo?.numero_conta || parsed.conta || '')
+      if (contaBancariaId) {
+        formData.append('conta_bancaria', contaBancariaId)
+      }
+      if (parsed.dataInicio) {
+        formData.append('data_inicio', `${parsed.dataInicio} 12:00:00.000Z`)
+      }
+      if (parsed.dataFim) {
+        formData.append('data_fim', `${parsed.dataFim} 12:00:00.000Z`)
+      }
+      formData.append('total_transacoes', String(parsed.transacoes.length))
+      formData.append('total_entradas', String(parsed.totalEntradas))
+      formData.append('total_saidas', String(parsed.totalSaidas))
+      formData.append('saldo_final', String(parsed.totalEntradas - parsed.totalSaidas))
+      if (user?.id) {
+        formData.append('usuario', user.id)
+      }
+      formData.append('arquivo', file)
+
+      const extratoRecord = await pb.collection('extratos').create<ExtratoRecord>(formData)
+
+      // 2. Cria as linhas de transação
+      let salvas = 0
+      for (const t of parsed.transacoes) {
+        try {
+          await createOne('extratos_transacoes', {
+            extrato: extratoRecord.id,
+            data: `${t.data} 12:00:00.000Z`,
+            descricao: t.descricao,
+            valor: t.valor,
+            tipo: t.tipo,
+            documento_ref: t.documentoRef || t.nossoNumero || '',
+            fitid: t.fitid,
+            status_conciliacao: 'pendente',
+            observacoes: `[${t.layout}] Ocorrência ${t.codigoOcorrencia} - ${t.ocorrenciaDescricao}`,
+          })
+          salvas++
+        } catch {
+          /* continua importando as demais */
+        }
+      }
+
+      toast.success(
+        `Retorno bancário ${parsed.layout} importado com sucesso! ${salvas} lançamentos registrados para conciliação.`,
+      )
+      setResumoRetornoModal(null)
+      setExtratoSelecionadoId(extratoRecord.id)
+      await onReloadExtratos()
+      await onReloadTransacoes()
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      toast.error(`Falha ao gravar arquivo .ret: ${msg}`)
+    } finally {
+      setIsGravandoRetorno(false)
+    }
+  }
+
   // Handler de importação de arquivos de extrato (suporta múltiplos extratos de uma vez)
   async function handleFileSelected(e: ChangeEvent<HTMLInputElement>) {
     const fileList = e.target.files
@@ -214,6 +301,28 @@ export function ExtratosComprovantesTab({
     try {
       for (const file of files) {
         const ext = file.name.split('.').pop()?.toLowerCase() || ''
+
+        // Intercepta arquivos .RET (CNAB 240 / 400) para exibir tela de conferência detalhada
+        if (ext === 'ret') {
+          const text = await file.text()
+          const parsedCnab = parseCnabRetorno(text)
+
+          if (!parsedCnab.transacoes.length) {
+            toast.warning(`Arquivo .ret "${file.name}" não continha lançamentos válidos.`)
+            continue
+          }
+
+          // Abre modal de resumo pré-gravação do .RET com as ocorrências e totais
+          setResumoRetornoModal({
+            file,
+            parsed: parsedCnab,
+            contaBancariaId: contaBancariaSelecionadaUpload,
+          })
+          setModalUploadAberto(false)
+          setIsProcessandoUpload(false)
+          return
+        }
+
         let parsed = null
         let formato: 'ofx' | 'csv' | 'xlsx' = 'ofx'
 
@@ -226,7 +335,7 @@ export function ExtratosComprovantesTab({
           parsed = await parsePlanilhaExtrato(file)
         } else {
           toast.error(
-            `Arquivo "${file.name}" ignorado: formato não suportado (use OFX, CSV ou XLSX).`,
+            `Arquivo "${file.name}" ignorado: formato não suportado (use OFX, RET, CSV ou XLSX).`,
           )
           continue
         }
@@ -474,10 +583,12 @@ export function ExtratosComprovantesTab({
       {/* Topo com ações de Extrato e Comprovante */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 crm-card p-4">
         <div>
-          <h3 className="font-bold text-neutral-900 text-sm">Extratos Bancários & Conciliação</h3>
+          <h3 className="font-bold text-neutral-900 text-sm">
+            Extratos Bancários & Conciliação (.RET / OFX)
+          </h3>
           <p className="text-xs text-neutral-500">
-            Importe extratos OFX/CSV/XLSX e faça a conciliação automática com contas e parcelas do
-            CRM.
+            Importe arquivos de retorno CNAB (.ret) e extratos (OFX/CSV/XLSX) com conciliação
+            automática de parcelas e despesas.
           </p>
         </div>
 
@@ -521,7 +632,7 @@ export function ExtratosComprovantesTab({
                 className="border-neutral-300 text-neutral-700 h-8 text-xs hover:border-[#FF6A13]"
               >
                 <FileUp className="mr-1.5 h-3.5 w-3.5 text-[#FF6A13]" />
-                Subir Extrato (OFX / CSV / XLSX)
+                Importar Extrato / Retorno (.RET / OFX / Planilhas)
               </Button>
             </>
           )}
@@ -574,7 +685,24 @@ export function ExtratosComprovantesTab({
                     <span className="ml-1 text-[10px] text-neutral-400">
                       ({ex.total_transacoes || 0})
                     </span>
+                    {ex.formato === 'ret' && (
+                      <span className="ml-1 px-1 py-0.2 bg-blue-100 text-blue-800 text-[9px] font-semibold rounded uppercase">
+                        CNAB
+                      </span>
+                    )}
                   </button>
+
+                  {ex.arquivo && (
+                    <a
+                      href={pb.files.getURL(ex, ex.arquivo)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-neutral-400 hover:text-[#FF6A13] ml-1"
+                      title="Baixar arquivo original importado"
+                    >
+                      <FileUp className="h-3 w-3 rotate-180" />
+                    </a>
+                  )}
 
                   {canWrite && (
                     <button
@@ -652,7 +780,7 @@ export function ExtratosComprovantesTab({
           title="Nenhuma transação de extrato encontrada"
           description={
             extratos.length === 0
-              ? 'Suba o extrato bancário da sua conta (.OFX, .CSV ou .XLSX) para iniciar a conciliação.'
+              ? 'Suba o extrato bancário ou arquivo de retorno da sua conta (.RET, .OFX, .CSV ou .XLSX) para iniciar a conciliação.'
               : 'Nenhuma transação corresponde aos filtros selecionados.'
           }
         />
@@ -821,7 +949,7 @@ export function ExtratosComprovantesTab({
       <Dialog open={modalUploadAberto} onOpenChange={setModalUploadAberto}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Importar Extrato Bancário</DialogTitle>
+            <DialogTitle>Importar Extrato / Retorno Bancário</DialogTitle>
           </DialogHeader>
 
           <div className="space-y-4 text-xs">
@@ -847,8 +975,11 @@ export function ExtratosComprovantesTab({
             <div className="p-3 bg-amber-50 rounded-lg border border-amber-200 text-amber-900 space-y-1">
               <p className="font-semibold">Formatos Suportados:</p>
               <p>
-                • <strong>OFX</strong>: Arquivo padrão de Internet Banking de todos os bancos
-                brasileiros.
+                • <strong>.RET (CNAB 240 / 400)</strong>: Retorno bancário de cobrança e conciliação
+                (BB, Itaú, Caixa, Santander, Bradesco, Sicoob etc.).
+              </p>
+              <p>
+                • <strong>OFX</strong>: Extrato bancário de Internet Banking dos bancos brasileiros.
               </p>
               <p>
                 • <strong>CSV / XLSX</strong>: Planilhas de extrato bancário com colunas de data,
@@ -859,15 +990,15 @@ export function ExtratosComprovantesTab({
             <div className="border-2 border-dashed border-neutral-300 rounded-xl p-6 text-center hover:border-[#FF6A13] transition cursor-pointer relative bg-neutral-50/50">
               <FileUp className="mx-auto h-8 w-8 text-[#FF6A13] mb-2" />
               <p className="font-semibold text-neutral-800">
-                Clique para selecionar ou arraste um ou mais extratos simultaneamente
+                Clique para selecionar ou arraste arquivos de extrato / retorno
               </p>
               <p className="text-[11px] text-neutral-500 mt-0.5">
-                OFX, CSV ou XLSX (seleção múltipla permitida)
+                .RET (CNAB 240/400), OFX, CSV ou XLSX
               </p>
               <input
                 type="file"
                 multiple
-                accept=".ofx,.csv,.xlsx,.xls"
+                accept=".ret,.ofx,.csv,.xlsx,.xls"
                 onChange={handleFileSelected}
                 disabled={isProcessandoUpload}
                 className="absolute inset-0 opacity-0 cursor-pointer"
@@ -1092,6 +1223,201 @@ export function ExtratosComprovantesTab({
               className="bg-[#FF6A13] hover:bg-[#E85B06] text-white"
             >
               {isUploadingComprovante ? 'Enviando...' : 'Salvar Comprovante'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {/* Modal de Análise e Resumo Pré-Gravação do Retorno CNAB (.RET) */}
+      <Dialog
+        open={!!resumoRetornoModal}
+        onOpenChange={(open) => {
+          if (!open && !isGravandoRetorno) setResumoRetornoModal(null)
+        }}
+      >
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-sm font-bold text-neutral-900">
+              <FileUp className="h-4 w-4 text-[#FF6A13]" />
+              Resumo da Conciliação de Retorno Bancário (.RET)
+            </DialogTitle>
+          </DialogHeader>
+
+          {resumoRetornoModal && (
+            <div className="space-y-4 text-xs">
+              {/* Cabeçalho do arquivo decodificado */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-3 bg-neutral-50 rounded-lg border">
+                <div>
+                  <span className="text-[10px] text-neutral-400 block uppercase font-semibold">
+                    Arquivo
+                  </span>
+                  <span className="font-semibold text-neutral-800 truncate block">
+                    {resumoRetornoModal.file.name}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-neutral-400 block uppercase font-semibold">
+                    Layout Detectado
+                  </span>
+                  <span className="font-bold text-[#FF6A13]">
+                    {resumoRetornoModal.parsed.layout} ({resumoRetornoModal.parsed.bancoNome})
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-neutral-400 block uppercase font-semibold">
+                    Conta PJ Destino
+                  </span>
+                  <span className="font-semibold text-neutral-800 truncate block">
+                    {contasBancarias.find((c) => c.id === resumoRetornoModal.contaBancariaId)
+                      ?.apelido || 'Não associada'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-neutral-400 block uppercase font-semibold">
+                    Período Coberto
+                  </span>
+                  <span className="font-mono text-neutral-700">
+                    {resumoRetornoModal.parsed.dataInicio
+                      ? formatDate(resumoRetornoModal.parsed.dataInicio)
+                      : '—'}{' '}
+                    a{' '}
+                    {resumoRetornoModal.parsed.dataFim
+                      ? formatDate(resumoRetornoModal.parsed.dataFim)
+                      : '—'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Totais de lançamentos */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div className="p-3 bg-emerald-50/50 border border-emerald-200 rounded-lg">
+                  <span className="text-[10px] font-semibold text-emerald-800 uppercase block">
+                    Créditos / Liquidações
+                  </span>
+                  <p className="text-base font-bold text-emerald-700 mt-1">
+                    {formatCurrency(resumoRetornoModal.parsed.totalEntradas)}
+                  </p>
+                  <span className="text-[10px] text-emerald-600">
+                    {resumoRetornoModal.parsed.qtdEntradas} título(s) recebido(s)
+                  </span>
+                </div>
+
+                <div className="p-3 bg-rose-50/50 border border-rose-200 rounded-lg">
+                  <span className="text-[10px] font-semibold text-rose-800 uppercase block">
+                    Débitos / Tarifas
+                  </span>
+                  <p className="text-base font-bold text-rose-700 mt-1">
+                    {formatCurrency(resumoRetornoModal.parsed.totalSaidas)}
+                  </p>
+                  <span className="text-[10px] text-rose-600">
+                    {resumoRetornoModal.parsed.qtdSaidas} débito(s)
+                  </span>
+                </div>
+
+                <div className="p-3 bg-neutral-50 border rounded-lg">
+                  <span className="text-[10px] font-semibold text-neutral-600 uppercase block">
+                    Total de Registros
+                  </span>
+                  <p className="text-base font-bold text-neutral-800 mt-1">
+                    {resumoRetornoModal.parsed.totalTransacoes} transações
+                  </p>
+                  <span className="text-[10px] text-neutral-500">
+                    {resumoRetornoModal.parsed.totalRegistros} linhas processadas
+                  </span>
+                </div>
+              </div>
+
+              {/* Resumo dos códigos de ocorrência encontrados */}
+              <div>
+                <p className="font-semibold text-neutral-800 mb-1.5 flex items-center gap-1.5">
+                  <Check className="h-3.5 w-3.5 text-emerald-600" />
+                  Códigos de Ocorrência Encontrados no Arquivo:
+                </p>
+                <div className="border rounded-lg overflow-hidden divide-y bg-white">
+                  {resumoRetornoModal.parsed.ocorrenciasResumo.map((oc) => (
+                    <div
+                      key={oc.codigo}
+                      className="px-3 py-2 flex items-center justify-between text-xs"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-bold bg-neutral-100 text-neutral-700 px-1.5 py-0.5 rounded text-[11px]">
+                          Cód. {oc.codigo}
+                        </span>
+                        <span className="font-medium text-neutral-800">{oc.descricao}</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-neutral-500 font-medium mr-2">
+                          {oc.quantidade} reg.
+                        </span>
+                        <span className="font-mono font-semibold text-neutral-900">
+                          {formatCurrency(oc.valorTotal)}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Avisos se houver linhas não interpretadas */}
+              {resumoRetornoModal.parsed.avisos.length > 0 && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-900 space-y-1">
+                  <p className="font-bold flex items-center gap-1.5 text-xs text-amber-800">
+                    <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
+                    Avisos de Processamento ({resumoRetornoModal.parsed.avisos.length}):
+                  </p>
+                  <div className="max-h-24 overflow-y-auto space-y-1 text-[11px] text-amber-800 pr-1">
+                    {resumoRetornoModal.parsed.avisos.map((av, idx) => (
+                      <div key={idx}>
+                        • Linha {av.linha}: {av.mensagem}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Prévia das primeiras transações */}
+              <div>
+                <p className="font-semibold text-neutral-800 mb-1.5">
+                  Prévia dos Lançamentos (primeiros{' '}
+                  {Math.min(5, resumoRetornoModal.parsed.transacoes.length)} de{' '}
+                  {resumoRetornoModal.parsed.transacoes.length}):
+                </p>
+                <div className="border rounded-lg overflow-hidden divide-y bg-white text-[11px]">
+                  {resumoRetornoModal.parsed.transacoes.slice(0, 5).map((t, i) => (
+                    <div key={i} className="p-2.5 flex items-center justify-between">
+                      <div>
+                        <p className="font-semibold text-neutral-900">{t.descricao}</p>
+                        <p className="text-neutral-400">
+                          Data: {formatDate(t.data)} · Ref: {t.documentoRef || t.nossoNumero || '—'}
+                        </p>
+                      </div>
+                      <span
+                        className={`font-mono font-bold ${
+                          t.tipo === 'entrada' ? 'text-emerald-700' : 'text-rose-700'
+                        }`}
+                      >
+                        {t.tipo === 'entrada' ? '+' : '-'} {formatCurrency(t.valor)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="mt-4 gap-2">
+            <Button
+              variant="outline"
+              disabled={isGravandoRetorno}
+              onClick={() => setResumoRetornoModal(null)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleConfirmarGravacaoRetorno}
+              disabled={isGravandoRetorno}
+              className="bg-[#FF6A13] hover:bg-[#E85B06] text-white font-semibold"
+            >
+              {isGravandoRetorno ? 'Gravando e Alimentando Fluxo...' : 'Confirmar e Gravar no CRM'}
             </Button>
           </DialogFooter>
         </DialogContent>
