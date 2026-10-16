@@ -19,6 +19,8 @@ export const TIPO_PESSOA_LABELS: Record<TipoPessoaCredor, string> = {
   pf: 'Pessoa Física (PF)',
 }
 
+import type { SocioItemCredor } from '@/types/crm'
+
 export interface CredorFormData {
   nome_razao_social: string
   nome_fantasia?: string
@@ -35,6 +37,11 @@ export interface CredorFormData {
   chave_pix?: string
   status: 'ativo' | 'inativo'
   observacoes?: string
+  capital_social?: number
+  socios?: SocioItemCredor[]
+  cnae_principal?: string
+  objeto_social?: string
+  data_constituicao?: string
 }
 
 export interface ImpactoExclusaoCredor {
@@ -126,6 +133,11 @@ export async function salvarCredor(
     chave_pix: dados.chave_pix?.trim() || '',
     status: dados.status,
     observacoes: dados.observacoes?.trim() || '',
+    capital_social: typeof dados.capital_social === 'number' ? dados.capital_social : 0,
+    socios: Array.isArray(dados.socios) ? dados.socios : [],
+    cnae_principal: dados.cnae_principal?.trim() || '',
+    objeto_social: dados.objeto_social?.trim() || '',
+    data_constituicao: dados.data_constituicao?.trim() || '',
   }
 
   let credor: CredorRecord
@@ -136,7 +148,7 @@ export async function salvarCredor(
     credor = await pb.collection('credores').create<CredorRecord>(payload)
   }
 
-  // Upload de anexos caso enviados
+  // Upload de anexos gerais caso enviados
   if (arquivosAnexos && arquivosAnexos.length > 0 && credor.id) {
     const formData = new FormData()
     for (const f of arquivosAnexos) {
@@ -146,6 +158,25 @@ export async function salvarCredor(
   }
 
   return credor
+}
+
+/**
+ * Salva ou atualiza um credor com anexo de contrato social e metadados societários
+ */
+export async function salvarCredorComContratoSocial(
+  dados: CredorFormData,
+  id?: string,
+  arquivoContratoSocial?: File | null,
+): Promise<CredorRecord> {
+  const credorSalvo = await salvarCredor(dados, id)
+
+  if (arquivoContratoSocial && credorSalvo.id) {
+    const formData = new FormData()
+    formData.append('contrato_social', arquivoContratoSocial)
+    return await pb.collection('credores').update<CredorRecord>(credorSalvo.id, formData)
+  }
+
+  return credorSalvo
 }
 
 /**

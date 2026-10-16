@@ -2300,3 +2300,211 @@ DIRETRIZES DE EXTRAÇÃO:
   },
   $apis.requireAuth(),
 )
+
+// 5. EXTRAÇÃO DE CONTRATO SOCIAL E ALTERAÇÕES CONTRATUAIS VIA IA
+routerAdd(
+  'POST',
+  '/backend/v1/contrato-social/extrair',
+  (e) => {
+    try {
+      const authUser = e.auth
+      if (!authUser || !authUser.id) {
+        return e.unauthorizedError('Autenticação necessária')
+      }
+
+      const role = authUser.getString('role')
+      if (role !== 'admin' && role !== 'financeiro') {
+        return e.forbiddenError(
+          'Apenas administradores e equipe financeira podem realizar extração de contrato social',
+        )
+      }
+
+      const files = e.findUploadedFiles('arquivo')
+      if (!files || files.length === 0) {
+        return e.badRequestError('Nenhum arquivo de contrato social enviado')
+      }
+
+      const file = files[0]
+      const fileName = file.originalName || 'contrato_social.pdf'
+      const ext = fileName.split('.').pop().toLowerCase()
+      const isPdf = ext === 'pdf'
+      const isImage = ['jpg', 'jpeg', 'png', 'webp'].includes(ext)
+
+      if (!isPdf && !isImage) {
+        return e.badRequestError(
+          'O contrato social deve ser um arquivo em formato PDF ou imagem (JPG/PNG).',
+        )
+      }
+
+      let markdownContent = ''
+      if (isPdf) {
+        try {
+          const docRes = $documents.toMarkdown({ file: file })
+          if (docRes && docRes.markdown) {
+            markdownContent = docRes.markdown
+          }
+        } catch (docErr) {
+          console.log('toMarkdown falhou para contrato social:', docErr.message)
+        }
+      }
+
+      const promptSystem = `Você é o Auditor Societário, Jurídico e Contábil da AEROCAD Consultoria.
+Sua missão é extrair dados cadastrais e societários completos deste Contrato Social, Requerimento de Empresário, Estatuto Social ou Alteração Contratual.
+
+DIRETRIZES DE EXTRAÇÃO:
+1. IDENTIFICAÇÃO DA EMPRESA:
+   - "razao_social": Nome empresarial oficial completo (ex: "AEROCAD CONSULTORIA AEROPORTUÁRIA LTDA").
+   - "nome_fantasia": Título do estabelecimento / nome fantasia se mencionado, senão string vazia.
+   - "cnpj": CNPJ com pontuação (XX.XXX.XXX/XXXX-XX) se encontrado, senão string vazia.
+   - "data_constituicao": Data de fundação/registro da sociedade (formato AAAA-MM-DD se possível, ou DD/MM/AAAA).
+   - "capital_social": Valor numérico do capital social total em reais (float/number, ex: 50000.00).
+
+2. QUADRO SOCIETÁRIO (SÓCIOS E ADMINISTRADORES):
+   - "socios": Array de objetos representando cada sócio, titular ou administrador:
+     [
+       {
+         "nome": "Nome completo da pessoa física ou razão social da PJ sócia",
+         "cpf_cnpj": "CPF ou CNPJ formatado se constar",
+         "qualificacao": "Sócio Administrador", "Sócio", "Titular" ou "Administrador",
+         "percentual_participacao": 60.0 (número de 0 a 100),
+         "cotas": 30000 (número de cotas se mencionado, ou null),
+         "valor_participacao": 30000.00 (valor da cota em reais se mencionado, ou null)
+       }
+     ]
+
+3. ATIVIDADE, ENDEREÇO E CNAE:
+   - "endereco_completo": Logradouro, número, complemento, bairro, CEP.
+   - "cidade_uf": Cidade e Estado (ex: "Belo Horizonte / MG").
+   - "cnae_principal": Código e/ou descrição da atividade econômica principal se identificado.
+   - "objeto_social": Descrição sucinta ou resumo das atividades do objeto social da empresa.
+
+4. DIRETRIZES DE RETORNO:
+   - Retorne EXCLUSIVAMENTE um objeto JSON válido, sem texto introdutório ou markdown externo.
+   - Todos os campos devem ser sempre preenchidos ou vazios (nunca null nos campos de texto).
+   - Se o documento estiver escaneado ou ilegível em partes, extraia o máximo possível e marque confianca = "baixa" ou "media", apontando em "aviso".
+
+FORMATO JSON ESPERADO:
+{
+  "sucesso": true,
+  "razao_social": "...",
+  "nome_fantasia": "...",
+  "cnpj": "...",
+  "capital_social": 0.0,
+  "data_constituicao": "AAAA-MM-DD",
+  "socios": [
+    {
+      "nome": "...",
+      "cpf_cnpj": "...",
+      "qualificacao": "Sócio Administrador",
+      "percentual_participacao": 100.0,
+      "cotas": 1000,
+      "valor_participacao": 10000.0
+    }
+  ],
+  "endereco_completo": "...",
+  "cidade_uf": "...",
+  "cnae_principal": "...",
+  "objeto_social": "...",
+  "confianca": "alta" | "media" | "baixa",
+  "aviso": null
+}`
+
+      let userText = `Arquivo: ${fileName}\n\n`
+      if (markdownContent && markdownContent.trim().length > 0) {
+        userText += `TEXTO EXTRAÍDO DO CONTRATO SOCIAL:\n${markdownContent.slice(0, 16000)}`
+      } else {
+        userText += `DOCUMENTO DE CONTRATO SOCIAL (ANEXO/IMAGEM). Analise a imagem/conteúdo para extrair razão social, CNPJ, sócios, capital social, endereço, cnae e objeto social.`
+      }
+
+      const aiReply = $ai.chat({
+        model: 'fast',
+        messages: [
+          { role: 'system', content: promptSystem },
+          { role: 'user', content: userText },
+        ],
+      })
+
+      let extracted = null
+      if (aiReply && aiReply.choices && aiReply.choices[0]) {
+        const text = aiReply.choices[0].message.content.trim()
+        const match = text.match(/\{[\s\S]*\}/)
+        if (match) {
+          try {
+            extracted = JSON.parse(match[0])
+          } catch (pErr) {
+            console.log('Falha ao interpretar JSON do contrato social:', pErr.message)
+          }
+        }
+      }
+
+      if (!extracted) {
+        extracted = {
+          sucesso: false,
+          razao_social: fileName.replace(/\.[^/.]+$/, ''),
+          nome_fantasia: '',
+          cnpj: '',
+          capital_social: 0,
+          data_constituicao: '',
+          socios: [],
+          endereco_completo: '',
+          cidade_uf: '',
+          cnae_principal: '',
+          objeto_social: '',
+          confianca: 'baixa',
+          aviso:
+            'A leitura automática pelo agente retornou parcial ou não encontrou a camada de texto. Você pode revisar e preencher os campos manualmente ao lado.',
+        }
+      }
+
+      // Higienizar valores
+      if (typeof extracted.capital_social !== 'number') {
+        const capNum = parseFloat(
+          String(extracted.capital_social || '0')
+            .replace(/[^\d.,]/g, '')
+            .replace(',', '.'),
+        )
+        extracted.capital_social = isNaN(capNum) ? 0 : capNum
+      }
+
+      if (!Array.isArray(extracted.socios)) {
+        extracted.socios = []
+      } else {
+        extracted.socios = extracted.socios.map((s) => ({
+          nome: String(s.nome || '').trim(),
+          cpf_cnpj: String(s.cpf_cnpj || '').trim(),
+          qualificacao: String(s.qualificacao || 'Sócio').trim(),
+          percentual_participacao:
+            typeof s.percentual_participacao === 'number'
+              ? s.percentual_participacao
+              : parseFloat(
+                  String(s.percentual_participacao || '0')
+                    .replace(/[^\d.,]/g, '')
+                    .replace(',', '.'),
+                ) || 0,
+          cotas: typeof s.cotas === 'number' ? s.cotas : null,
+          valor_participacao:
+            typeof s.valor_participacao === 'number' ? s.valor_participacao : null,
+        }))
+      }
+
+      const leituraIncompleta =
+        !extracted.razao_social || !extracted.cnpj || extracted.socios.length === 0
+
+      return e.json(200, {
+        sucesso: extracted.sucesso !== false,
+        aviso:
+          extracted.aviso ||
+          (leituraIncompleta
+            ? 'Alguns dados do contrato social não foram identificados com 100% de certeza. Confira e complete os campos ao lado antes de salvar.'
+            : null),
+        dados: extracted,
+      })
+    } catch (err) {
+      console.log('Erro no endpoint /backend/v1/contrato-social/extrair:', err.message)
+      return e.json(500, {
+        error: 'Erro ao processar contrato social: ' + (err.message || 'desconhecido'),
+      })
+    }
+  },
+  $apis.requireAuth(),
+)

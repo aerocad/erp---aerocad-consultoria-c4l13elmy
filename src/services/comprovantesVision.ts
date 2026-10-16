@@ -161,6 +161,38 @@ export interface ExtracaoContratoResponse {
   aviso?: string
 }
 
+export interface SocioContratoSocialExtraido {
+  nome: string
+  cpf_cnpj?: string
+  qualificacao?: string
+  percentual_participacao?: number
+  cotas?: number | null
+  valor_participacao?: number | null
+}
+
+export interface ContratoSocialExtraido {
+  sucesso: boolean
+  razao_social: string
+  nome_fantasia: string
+  cnpj: string
+  capital_social: number
+  data_constituicao: string
+  socios: SocioContratoSocialExtraido[]
+  endereco_completo: string
+  cidade_uf: string
+  cnae_principal: string
+  objeto_social: string
+  confianca?: 'alta' | 'media' | 'baixa'
+  aviso?: string | null
+  erro?: string
+}
+
+export interface ExtracaoContratoSocialResponse {
+  sucesso: boolean
+  dados: ContratoSocialExtraido
+  aviso?: string | null
+}
+
 export const TIPO_DOC_LABELS: Record<TipoDocumentoFiscal, string> = {
   nfe: 'NF-e (Nota de Produtos)',
   nfse: 'NFS-e (Nota de Serviços)',
@@ -356,6 +388,42 @@ export async function extrairDadosBoleto(
   }
 
   return dados
+}
+
+/**
+ * Envia arquivo de contrato social (PDF ou imagem) para o backend extrair via IA Skip Cloud
+ */
+export async function extrairDadosContratoSocial(
+  file: File,
+  opcoesPreprocessamento?: PreprocessamentoOpcoes,
+): Promise<ContratoSocialExtraido> {
+  // Pré-processa imagem se não for PDF
+  const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
+  let arquivoEnvio = file
+  if (!isPdf) {
+    const { fileOtimizado } = await preProcessarImagemDocumento(file, opcoesPreprocessamento)
+    arquivoEnvio = fileOtimizado
+  }
+
+  const formData = new FormData()
+  formData.append('arquivo', arquivoEnvio)
+
+  const baseUrl = import.meta.env.VITE_POCKETBASE_URL
+  const res = await fetch(`${baseUrl}/backend/v1/contrato-social/extrair`, {
+    method: 'POST',
+    headers: {
+      Authorization: pb.authStore.token,
+    },
+    body: formData,
+  })
+
+  if (!res.ok) {
+    const errorBody = await res.json().catch(() => ({}))
+    throw new Error(errorBody?.error || `Falha ao processar contrato social (status ${res.status})`)
+  }
+
+  const json: ExtracaoContratoSocialResponse = await res.json()
+  return json.dados
 }
 
 /**

@@ -5,6 +5,7 @@ import {
   Filter,
   Building2,
   User,
+  Users,
   CreditCard,
   Edit2,
   Trash2,
@@ -12,6 +13,7 @@ import {
   Mail,
   MapPin,
   Paperclip,
+  FileText,
   CheckCircle2,
   AlertTriangle,
   History,
@@ -55,6 +57,7 @@ import {
 } from '@/services/credores'
 import { SalvarCredorComprovanteModal } from '@/components/financeiro/SalvarCredorComprovanteModal'
 import { VincularCredoresLoteModal } from '@/components/financeiro/VincularCredoresLoteModal'
+import { ExtracaoContratoSocialModal } from '@/components/financeiro/ExtracaoContratoSocialModal'
 
 interface CredoresTabProps {
   credores: CredorRecord[]
@@ -110,6 +113,12 @@ export function CredoresTab({
   const [modalIndividualComprovanteOpen, setModalIndividualComprovanteOpen] = useState(false)
   const [contaSelecionadaComprovante, setContaSelecionadaComprovante] =
     useState<ContaPagarRecord | null>(null)
+
+  // Modal de Extração de Contrato Social por IA
+  const [modalContratoSocialOpen, setModalContratoSocialOpen] = useState(false)
+  const [credorParaContratoSocial, setCredorParaContratoSocial] = useState<CredorRecord | null>(
+    null,
+  )
 
   // Modal de Exclusão com verificação de impacto
   const [modalExcluirOpen, setModalExcluirOpen] = useState(false)
@@ -413,6 +422,22 @@ export function CredoresTab({
 
           {canWrite && (
             <Button
+              type="button"
+              onClick={() => {
+                setCredorParaContratoSocial(null)
+                setModalContratoSocialOpen(true)
+              }}
+              variant="outline"
+              className="border-orange-300 text-[#FF6A13] hover:bg-orange-50 h-9 text-xs font-semibold shrink-0"
+              title="Carregar Contrato Social / Alteração Contratual para extrair dados da empresa e sócios via IA"
+            >
+              <FileText className="mr-1.5 h-4 w-4" />
+              Extrair Contrato Social (IA)
+            </Button>
+          )}
+
+          {canWrite && (
+            <Button
               onClick={handleOpenCreate}
               className="bg-[#FF6A13] hover:bg-[#E85B06] text-white h-9 text-xs font-semibold shrink-0"
             >
@@ -471,11 +496,29 @@ export function CredoresTab({
                             {credor.tipo_pessoa === 'pj' ? 'PJ' : 'PF'}
                           </span>
                           <div>
-                            <div className="font-bold text-neutral-900">
-                              {credor.nome_razao_social}
+                            <div className="font-bold text-neutral-900 flex items-center gap-1.5">
+                              <span>{credor.nome_razao_social}</span>
+                              {credor.contrato_social && (
+                                <span
+                                  className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-semibold bg-orange-100 text-[#FF6A13]"
+                                  title="Contrato Social arquivado e auditado"
+                                >
+                                  <FileText className="h-2.5 w-2.5" />
+                                  Contrato
+                                </span>
+                              )}
+                              {Array.isArray(credor.socios) && credor.socios.length > 0 && (
+                                <span
+                                  className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-semibold bg-neutral-100 text-neutral-700"
+                                  title={`${credor.socios.length} sócio(s) cadastrado(s)`}
+                                >
+                                  <Users className="h-2.5 w-2.5 text-neutral-500" />
+                                  {credor.socios.length}
+                                </span>
+                              )}
                             </div>
                             {credor.nome_fantasia && (
-                              <span className="text-[11px] text-neutral-500 font-normal">
+                              <span className="text-[11px] text-neutral-500 font-normal block">
                                 {credor.nome_fantasia}
                               </span>
                             )}
@@ -483,6 +526,14 @@ export function CredoresTab({
                               <div className="flex items-center gap-1 text-[10px] text-neutral-400 mt-0.5">
                                 <MapPin className="h-3 w-3" />
                                 {credor.cidade_uf}
+                              </div>
+                            )}
+                            {credor.cnae_principal && (
+                              <div
+                                className="text-[10px] text-neutral-500 truncate max-w-xs mt-0.5"
+                                title={credor.cnae_principal}
+                              >
+                                CNAE: {credor.cnae_principal}
                               </div>
                             )}
                           </div>
@@ -569,6 +620,21 @@ export function CredoresTab({
 
                       <td className="px-4 py-3 text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-1">
+                          {canWrite && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => {
+                                setCredorParaContratoSocial(credor)
+                                setModalContratoSocialOpen(true)
+                              }}
+                              className="h-8 w-8 text-neutral-500 hover:text-[#FF6A13]"
+                              title="Extrair / Vincular Contrato Social por IA"
+                            >
+                              <FileText className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+
                           {canWrite && (
                             <Button
                               variant="ghost"
@@ -1158,6 +1224,20 @@ export function CredoresTab({
         credores={credores}
         usuarioId={pb.authStore.record?.id}
         onSuccess={async () => {
+          await onReload()
+        }}
+      />
+
+      {/* Modal Extração de Contrato Social por IA */}
+      <ExtracaoContratoSocialModal
+        open={modalContratoSocialOpen}
+        onOpenChange={(aberto) => {
+          setModalContratoSocialOpen(aberto)
+          if (!aberto) setCredorParaContratoSocial(null)
+        }}
+        credorExistente={credorParaContratoSocial}
+        credores={credores}
+        onSalvo={async () => {
           await onReload()
         }}
       />

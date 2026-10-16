@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-16T21:36:02.274Z",
+  "generatedAt": "2026-10-16T21:43:05.375Z",
   "collections": [
     {
       "name": "users",
@@ -3976,6 +3976,42 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "contrato_social",
+          "type": "file",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "capital_social",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "socios",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "cnae_principal",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "objeto_social",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "data_constituicao",
+          "type": "text",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [

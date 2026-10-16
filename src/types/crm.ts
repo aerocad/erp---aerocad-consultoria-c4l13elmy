@@ -537,6 +537,15 @@ export type CategoriaCredor =
   | 'contador'
   | 'outros'
 
+export interface SocioItemCredor {
+  nome: string
+  cpf_cnpj?: string
+  qualificacao?: string
+  percentual_participacao?: number
+  cotas?: number | null
+  valor_participacao?: number | null
+}
+
 export interface CredorRecord extends RecordModel {
   nome_razao_social: string
   nome_fantasia?: string
@@ -555,6 +564,13 @@ export interface CredorRecord extends RecordModel {
   observacoes?: string
   anexos?: string[]
   criado_por?: string
+  // Dados do Contrato Social & Quadro Societário
+  contrato_social?: string | string[]
+  capital_social?: number
+  socios?: SocioItemCredor[]
+  cnae_principal?: string
+  objeto_social?: string
+  data_constituicao?: string
   expand?: {
     criado_por?: UserRecord
   }
