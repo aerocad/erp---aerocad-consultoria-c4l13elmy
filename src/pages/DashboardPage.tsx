@@ -40,7 +40,6 @@ import type {
   OrdemServicoRecord,
   ParcelaRecord,
   ProjetoRecord,
-  PropostaRecord,
 } from '@/types/crm'
 
 export default function DashboardPage() {
@@ -68,10 +67,6 @@ export default function DashboardPage() {
     sort: '-created',
     realtime: true,
   })
-  const proposals = useCrmData<PropostaRecord>('propostas', {
-    sort: '-created',
-    realtime: true,
-  })
   const activities = useCrmData<AtividadeRecord>('atividades', {
     expand: 'usuario',
     sort: '-created',
@@ -87,7 +82,6 @@ export default function DashboardPage() {
     requirements.loading ||
     installments.loading ||
     projects.loading ||
-    proposals.loading ||
     ordensServico.loading ||
     activities.loading
   const error = opportunities.error || requirements.error || projects.error
@@ -99,7 +93,6 @@ export default function DashboardPage() {
       void requirements.reload()
       void installments.reload()
       void projects.reload()
-      void proposals.reload()
       void ordensServico.reload()
       void activities.reload()
       reloadAlertas()
@@ -128,7 +121,6 @@ export default function DashboardPage() {
     requirements,
     installments,
     projects,
-    proposals,
     ordensServico,
     activities,
     reloadAlertas,
@@ -154,7 +146,9 @@ export default function DashboardPage() {
     )
   })
   const monthReceivable = thisMonth.reduce((sum, item) => sum + item.valor, 0)
-  const sentProposals = proposals.data.filter((item) => item.status === 'enviada').length
+  const sentProposalsOpps = opportunities.data.filter((item) => item.etapa === 'proposta_enviada')
+  const sentProposalsCount = sentProposalsOpps.length
+  const sentProposalsValue = sentProposalsOpps.reduce((sum, item) => sum + item.valor_estimado, 0)
   const maxStage = Math.max(
     1,
     ...Object.keys(stageLabels).map(
@@ -226,8 +220,11 @@ export default function DashboardPage() {
       },
       {
         label: 'Propostas enviadas',
-        value: String(sentProposals),
-        sub: 'aguardando retorno',
+        value: String(sentProposalsCount),
+        sub:
+          sentProposalsValue > 0
+            ? `${formatCurrency(sentProposalsValue)} · aguardando retorno`
+            : 'aguardando retorno',
         icon: FileCheck2,
         tone: 'gray',
       },
@@ -249,7 +246,8 @@ export default function DashboardPage() {
     [
       openOpps.length,
       openValue,
-      sentProposals,
+      sentProposalsCount,
+      sentProposalsValue,
       dueRequirements,
       monthReceivable,
       thisMonth.length,
@@ -282,8 +280,8 @@ export default function DashboardPage() {
           dispensados={dispensados}
           onReload={() => {
             reloadAlertas()
+            void opportunities.reload()
             void requirements.reload()
-            void proposals.reload()
             void ordensServico.reload()
             void installments.reload()
           }}
