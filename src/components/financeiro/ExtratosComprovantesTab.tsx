@@ -6,6 +6,7 @@ import {
   Camera,
   Check,
   CheckCircle2,
+  CheckSquare,
   Clock,
   Eye,
   FileSpreadsheet,
@@ -13,10 +14,12 @@ import {
   FileUp,
   Filter,
   Link as LinkIcon,
+  Loader2,
   Paperclip,
   RefreshCw,
   Search,
   Sparkles,
+  Square,
   Trash2,
   Upload,
 } from 'lucide-react'
@@ -44,7 +47,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useAuth } from '@/contexts/AuthContext'
-import { formatCurrency, formatDate } from '@/lib/format'
+import { formatCurrency, formatDate, formatDateBrasilia } from '@/lib/format'
 import pb from '@/lib/pocketbase/client'
 import { createOne, deleteOne, updateOne } from '@/services/api'
 import {
@@ -114,11 +117,23 @@ export function ExtratosComprovantesTab({
   const { user } = useAuth()
   const isMobile = useIsMobile()
 
+  // Permissão de exclusão de extratos: restrita a admin/financeiro
+  const podeExcluirExtratos = Boolean(
+    canWrite && (user?.role === 'admin' || user?.role === 'financeiro')
+  )
+
   // Modal de Captura Fotográfica & Visão IA
   const [modalCapturaIaAberto, setModalCapturaIaAberto] = useState(false)
 
   // Estados de navegação
   const [extratoSelecionadoId, setExtratoSelecionadoId] = useState<string>('todos')
+  const [selectedTxIds, setSelectedTxIds] = useState<string[]>([])
+  const [isConciliandoLote, setIsConciliandoLote] = useState(false)
+  const [nomeConfirmacaoExclusao, setNomeConfirmacaoExclusao] = useState('')
+  const [isExcluindoExtrato, setIsExcluindoExtrato] = useState(false)
+  const [transacaoParaExcluir, setTransacaoParaExcluir] =
+    useState<ExtratoTransacaoRecord | null>(null)
+  const [isExcluindoTransacao, setIsExcluindoTransacao] = useState(false)
   const [busca, setBusca] = useState('')
   const [filtroStatus, setFiltroStatus] = useState<string>('todos')
   const [filtroTipo, setFiltroTipo] = useState<string>('todos')
@@ -187,6 +202,36 @@ export function ExtratosComprovantesTab({
   const [destinoComprovanteId, setDestinoComprovanteId] = useState('')
   const [arquivoComprovanteAvulso, setArquivoComprovanteAvulso] = useState<File | null>(null)
   const [isUploadingComprovante, setIsUploadingComprovante] = useState(false)
+
+  // Contadores de status (Confirmadas / Pendentes / Ignoradas) lendo t.status_conciliacao
+  const contadoresStatus = useMemo(() => {
+    // Escopo respeita o extrato selecionado caso não seja "todos"
+    const txBase =
+      extratoSelecionadoId === 'todos'
+        ? transacoes
+        : transacoes.filter((t) => t.extrato === extratoSelecionadoId)
+
+    let confirmadas = 0
+    let pendentes = 0
+    let ignoradas = 0
+
+    for (const t of txBase) {
+      if (t.status_conciliacao === 'conciliado') {
+        confirmadas++
+      } else if (t.status_conciliacao === 'ignorado') {
+        ignoradas++
+      } else {
+        pendentes++
+      }
+    }
+
+    return {
+      total: txBase.length,
+      confirmadas,
+      pendentes,
+      ignoradas,
+    }
+  }, [transacoes, extratoSelecionadoId])
 
   // Transações filtradas
   const transacoesFiltradas = useMemo(() => {
@@ -703,18 +748,189 @@ export function ExtratosComprovantesTab({
     }
   }
 
-  // Excluir extrato completo
+  // Excluir extrato completo e todas as suas transações vinculadas
   async function handleExcluirExtrato() {
     if (!modalExcluirExtrato) return
+    if (nomeConfirmacaoExclusao.trim() !== modalExcluirExtrato.nome_arquivo) {
+      toast.error('O nome digitado não confere exatamente com o nome do arquivo.')
+      return
+    }
+
+    setIsExcluindoExtrato(true)
     try {
-      await deleteOne('extratos', modalExcluirExtrato.id)
-      toast.success('Extrato bancário e transações excluídos com sucesso.')
+      const extratoId = modalExcluirExtrato.id
+      // 1. Busca e deleta todas as extratos_transacoes vinculadas
+      const txsVinculadas = transacoes.filter((t) => t.extrato === extratoId)
+      for (const t of txsVinculadas) {
+        try {
+          await deleteOne('extratos_transacoes', t.id)
+        } catch {
+          // prossegue
+        }
+      }
+
+      // 2. Deleta o extrato pai
+      await deleteOne('extratos', extratoId)
+
+      toast.success(
+        `Extrato "${modalExcluirExtrato.nome_arquivo}" e suas ${txsVinculadas.length} movimentações foram excluídos.`,
+      )
       setModalExcluirExtrato(null)
+      setNomeConfirmacaoExclusao('')
       setExtratoSelecionadoId('todos')
+      setSelectedTxIds([])
       await onReloadExtratos()
       await onReloadTransacoes()
-    } catch {
-      toast.error('Erro ao excluir extrato')
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      toast.error(`Erro ao excluir extrato: ${msg}`)
+    } finally {
+      setIsExcluindoExtrato(false)
+    }
+  }
+
+  // Exclusão individual de transação com confirmação simples
+  async function handleExcluirTransacaoIndividual() {
+    if (!transacaoParaExcluir) return
+    setIsExcluindoTransacao(true)
+    try {
+      await deleteOne('extratos_transacoes', transacaoParaExcluir.id)
+      toast.success('Lançamento do extrato removido com sucesso.')
+      setSelectedTxIds((prev) => prev.filter((id) => id !== transacaoParaExcluir.id))
+      setTransacaoParaExcluir(null)
+      await onReloadTransacoes()
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      toast.error(`Falha ao remover lançamento: ${msg}`)
+    } finally {
+      setIsExcluindoTransacao(false)
+    }
+  }
+
+  // Ações de seleção de transações para lote
+  const transacoesPendentesVisiveis = useMemo(() => {
+    return transacoesFiltradas.filter((t) => t.status_conciliacao === 'pendente')
+  }, [transacoesFiltradas])
+
+  const todasPendentesVisiveisSelecionadas = useMemo(() => {
+    if (transacoesPendentesVisiveis.length === 0) return false
+    return transacoesPendentesVisiveis.every((t) => selectedTxIds.includes(t.id))
+  }, [transacoesPendentesVisiveis, selectedTxIds])
+
+  function alternarSelecaoTodasPendentesVisiveis() {
+    if (todasPendentesVisiveisSelecionadas) {
+      const idsPendentesVisiveis = new Set(transacoesPendentesVisiveis.map((t) => t.id))
+      setSelectedTxIds((prev) => prev.filter((id) => !idsPendentesVisiveis.has(id)))
+    } else {
+      const idsToAdd = transacoesPendentesVisiveis.map((t) => t.id)
+      setSelectedTxIds((prev) => Array.from(new Set([...prev, ...idsToAdd])))
+    }
+  }
+
+  function alternarSelecaoTx(txId: string) {
+    setSelectedTxIds((prev) =>
+      prev.includes(txId) ? prev.filter((id) => id !== txId) : [...prev, txId],
+    )
+  }
+
+  // Conciliação em lote das transações selecionadas
+  async function handleConfirmarEmLote() {
+    if (selectedTxIds.length === 0) return
+    setIsConciliandoLote(true)
+
+    const itensParaConciliar = transacoes.filter(
+      (t) => selectedTxIds.includes(t.id) && t.status_conciliacao === 'pendente',
+    )
+
+    let totalConciliadas = 0
+    let totalContasPagarBaixadas = 0
+    let totalParcelasQuitadas = 0
+    let totalReceitasQuitadas = 0
+
+    try {
+      for (const tx of itensParaConciliar) {
+        const sugestoes = encontrarSugestoesConciliacao(
+          tx,
+          {
+            parcelas,
+            contasPagar,
+            contasReceber,
+          },
+          10,
+        )
+
+        const melhorSugestao = sugestoes[0]
+        const dataExtrato = tx.data.slice(0, 10)
+
+        if (melhorSugestao) {
+          if (melhorSugestao.tipo === 'parcela') {
+            const p = parcelas.find((item) => item.id === melhorSugestao.id)
+            if (p) {
+              await updateOne('parcelas', p.id, {
+                status: 'paga',
+                data_pagamento: `${dataExtrato} 12:00:00.000Z`,
+                valor_recebido: tx.valor,
+                status_pagamento: 'Conciliado Extrato Lote',
+              })
+              totalParcelasQuitadas++
+            }
+          } else if (melhorSugestao.tipo === 'conta_pagar') {
+            const cp = contasPagar.find((item) => item.id === melhorSugestao.id)
+            if (cp) {
+              await updateOne('contas_pagar', cp.id, {
+                status: 'pago',
+                data_pagamento: `${dataExtrato} 12:00:00.000Z`,
+              })
+              totalContasPagarBaixadas++
+            }
+          } else if (melhorSugestao.tipo === 'conta_receber') {
+            const cr = contasReceber.find((item) => item.id === melhorSugestao.id)
+            if (cr) {
+              await updateOne('contas_receber', cr.id, {
+                status: 'recebido',
+                data_recebimento: `${dataExtrato} 12:00:00.000Z`,
+                valor_recebido: tx.valor,
+              })
+              totalReceitasQuitadas++
+            }
+          }
+
+          await updateOne('extratos_transacoes', tx.id, {
+            status_conciliacao: 'conciliado',
+            vinculo_tipo: melhorSugestao.tipo,
+            vinculo_id: melhorSugestao.id,
+            data_conciliacao: new Date().toISOString(),
+            observacoes: `Conciliado em lote com ${melhorSugestao.titulo} (${melhorSugestao.tipo})`,
+          })
+        } else {
+          // Sem sugestão direta: marca como conciliada diretamente no extrato
+          await updateOne('extratos_transacoes', tx.id, {
+            status_conciliacao: 'conciliado',
+            data_conciliacao: new Date().toISOString(),
+            observacoes: 'Conciliado em lote pelo operador',
+          })
+        }
+
+        totalConciliadas++
+      }
+
+      toast.success(
+        `Lote concluído: ${totalConciliadas} movimentações conciliadas! ` +
+          `(${totalContasPagarBaixadas} despesas pagas, ${totalParcelasQuitadas} parcelas e ${totalReceitasQuitadas} recebíveis quitados).`,
+      )
+
+      setSelectedTxIds([])
+      await Promise.all([
+        onReloadTransacoes(),
+        onReloadParcelas(),
+        onReloadContasPagar(),
+        onReloadContasReceber(),
+      ])
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      toast.error(`Erro ao conciliar lote: ${msg}`)
+    } finally {
+      setIsConciliandoLote(false)
     }
   }
 
@@ -778,6 +994,55 @@ export function ExtratosComprovantesTab({
           )}
         </div>
       </div>
+      {/* Cards de Contadores no Topo */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="crm-card p-3 border-emerald-200 bg-emerald-50/40">
+          <div className="flex items-center justify-between text-[11px] font-semibold text-emerald-800 uppercase tracking-wide">
+            <span>Confirmadas</span>
+            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+          </div>
+          <p className="mt-1 text-2xl font-bold font-mono text-emerald-700">
+            {contadoresStatus.confirmadas}
+          </p>
+          <span className="text-[10px] text-emerald-600">Conciliadas com sucesso</span>
+        </div>
+
+        <div className="crm-card p-3 border-orange-200 bg-orange-50/40">
+          <div className="flex items-center justify-between text-[11px] font-semibold text-[#FF6A13] uppercase tracking-wide">
+            <span>Pendentes</span>
+            <Clock className="h-4 w-4 text-[#FF6A13]" />
+          </div>
+          <p className="mt-1 text-2xl font-bold font-mono text-[#FF6A13]">
+            {contadoresStatus.pendentes}
+          </p>
+          <span className="text-[10px] text-neutral-500">Aguardando conciliação</span>
+        </div>
+
+        <div className="crm-card p-3 border-neutral-200 bg-neutral-50">
+          <div className="flex items-center justify-between text-[11px] font-semibold text-neutral-600 uppercase tracking-wide">
+            <span>Ignoradas</span>
+            <Filter className="h-4 w-4 text-neutral-400" />
+          </div>
+          <p className="mt-1 text-2xl font-bold font-mono text-neutral-600">
+            {contadoresStatus.ignoradas}
+          </p>
+          <span className="text-[10px] text-neutral-400">Fora do escopo</span>
+        </div>
+
+        <div className="crm-card p-3 bg-white">
+          <div className="flex items-center justify-between text-[11px] font-semibold text-neutral-500 uppercase tracking-wide">
+            <span>Total Transações</span>
+            <FileSpreadsheet className="h-4 w-4 text-neutral-400" />
+          </div>
+          <p className="mt-1 text-2xl font-bold font-mono text-neutral-900">
+            {contadoresStatus.total}
+          </p>
+          <span className="text-[10px] text-neutral-400">
+            {extratoSelecionadoId === 'todos' ? 'Todos os extratos' : 'Extrato selecionado'}
+          </span>
+        </div>
+      </div>
+
       {/* Seção de Extratos Importados */}
       {extratos.length > 0 && (
         <div className="crm-card p-3 space-y-2">
@@ -807,6 +1072,11 @@ export function ExtratosComprovantesTab({
 
             {extratos.map((ex) => {
               const isSelected = extratoSelecionadoId === ex.id
+              const hashEncurtado = ex.hash_arquivo
+                ? `${ex.hash_arquivo.slice(0, 8)}...${ex.hash_arquivo.slice(-6)}`
+                : null
+              const dataImportacao = ex.created ? formatDateBrasilia(ex.created) : null
+
               return (
                 <div
                   key={ex.id}
@@ -818,19 +1088,29 @@ export function ExtratosComprovantesTab({
                 >
                   <button
                     onClick={() => setExtratoSelecionadoId(ex.id)}
-                    className="font-medium text-left truncate max-w-[200px]"
+                    className="font-medium text-left truncate max-w-[240px]"
                     title={ex.nome_arquivo}
                   >
-                    {ex.nome_arquivo}
-                    <span className="ml-1 text-[10px] text-neutral-400">
-                      ({ex.total_transacoes || 0})
+                    <span className="block truncate">{ex.nome_arquivo}</span>
+                    <span className="flex items-center gap-1 text-[10px] text-neutral-400 font-normal">
+                      <span>({ex.total_transacoes || 0} tx)</span>
+                      {dataImportacao && <span>· {dataImportacao}</span>}
                     </span>
-                    {ex.formato === 'ret' && (
-                      <span className="ml-1 px-1 py-0.2 bg-blue-100 text-blue-800 text-[9px] font-semibold rounded uppercase">
-                        CNAB
+                    {hashEncurtado && (
+                      <span
+                        className="block font-mono text-[9px] text-neutral-400"
+                        title={`SHA-256 completo: ${ex.hash_arquivo}`}
+                      >
+                        SHA: {hashEncurtado}
                       </span>
                     )}
                   </button>
+
+                  {ex.formato === 'ret' && (
+                    <span className="px-1 py-0.2 bg-blue-100 text-blue-800 text-[9px] font-semibold rounded uppercase">
+                      CNAB
+                    </span>
+                  )}
 
                   {ex.arquivo && (
                     <a
@@ -844,11 +1124,14 @@ export function ExtratosComprovantesTab({
                     </a>
                   )}
 
-                  {canWrite && (
+                  {podeExcluirExtratos && (
                     <button
-                      onClick={() => setModalExcluirExtrato(ex)}
+                      onClick={() => {
+                        setModalExcluirExtrato(ex)
+                        setNomeConfirmacaoExclusao('')
+                      }}
                       className="text-neutral-400 hover:text-rose-600 ml-1"
-                      title="Excluir este extrato"
+                      title="Excluir este extrato (Restrito a Admin/Financeiro)"
                     >
                       <Trash2 className="h-3 w-3" />
                     </button>
@@ -859,59 +1142,115 @@ export function ExtratosComprovantesTab({
           </div>
         </div>
       )}
-      {/* Filtros e Busca de Transações */}
-      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 crm-card p-3">
-        <div className="flex flex-1 items-center gap-2">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-neutral-400" />
-            <Input
-              value={busca}
-              onChange={(e) => setBusca(e.target.value)}
-              placeholder="Buscar por descrição da transação ou número do documento..."
-              className="pl-9 h-9 text-sm"
-            />
+
+      {/* Barra de Ações em Lote e Filtros de Transações */}
+      <div className="crm-card p-3 space-y-3">
+        {/* Barra superior de conciliação em lote quando houver pendentes */}
+        {canWrite && transacoesPendentesVisiveis.length > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-neutral-100">
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={alternarSelecaoTodasPendentesVisiveis}
+                className="h-8 text-xs font-medium border-neutral-300"
+              >
+                {todasPendentesVisiveisSelecionadas ? (
+                  <>
+                    <CheckSquare className="mr-1.5 h-3.5 w-3.5 text-[#FF6A13]" />
+                    Desmarcar visíveis
+                  </>
+                ) : (
+                  <>
+                    <Square className="mr-1.5 h-3.5 w-3.5 text-neutral-500" />
+                    Selecionar todas as pendentes visíveis ({transacoesPendentesVisiveis.length})
+                  </>
+                )}
+              </Button>
+              {selectedTxIds.length > 0 && (
+                <span className="text-xs text-neutral-600">
+                  <strong className="text-[#FF6A13] font-bold">{selectedTxIds.length}</strong>{' '}
+                  selecionada(s)
+                </span>
+              )}
+            </div>
+
+            {selectedTxIds.length > 0 && (
+              <Button
+                size="sm"
+                onClick={handleConfirmarEmLote}
+                disabled={isConciliandoLote}
+                className="bg-[#FF6A13] hover:bg-[#E85B06] text-white h-8 text-xs font-semibold shadow-sm"
+              >
+                {isConciliandoLote ? (
+                  <>
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    Conciliando Lote...
+                  </>
+                ) : (
+                  <>
+                    <Check className="mr-1.5 h-3.5 w-3.5" />
+                    Confirmar em lote ({selectedTxIds.length})
+                  </>
+                )}
+              </Button>
+            )}
           </div>
-        </div>
+        )}
 
-        <div className="flex flex-wrap items-center gap-2">
-          <Select value={filtroContaBancaria} onValueChange={setFiltroContaBancaria}>
-            <SelectTrigger className="w-[170px] h-9 text-xs">
-              <SelectValue placeholder="Conta Bancária PJ" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="todos">Todas contas PJ</SelectItem>
-              {contasBancarias.map((cb) => (
-                <SelectItem key={cb.id} value={cb.id}>
-                  {cb.apelido}
-                </SelectItem>
-              ))}
-              <SelectItem value="sem_conta">Não classificada</SelectItem>
-            </SelectContent>
-          </Select>
+        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+          <div className="flex flex-1 items-center gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-neutral-400" />
+              <Input
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+                placeholder="Buscar por descrição da transação ou número do documento..."
+                className="pl-9 h-9 text-sm"
+              />
+            </div>
+          </div>
 
-          <Select value={filtroTipo} onValueChange={setFiltroTipo}>
-            <SelectTrigger className="w-[130px] h-9 text-xs">
-              <SelectValue placeholder="Tipo" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="todos">Todos os tipos</SelectItem>
-              <SelectItem value="entrada">Entradas (+)</SelectItem>
-              <SelectItem value="saida">Saídas (-)</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="flex flex-wrap items-center gap-2">
+            <Select value={filtroContaBancaria} onValueChange={setFiltroContaBancaria}>
+              <SelectTrigger className="w-[170px] h-9 text-xs">
+                <SelectValue placeholder="Conta Bancária PJ" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todas contas PJ</SelectItem>
+                {contasBancarias.map((cb) => (
+                  <SelectItem key={cb.id} value={cb.id}>
+                    {cb.apelido}
+                  </SelectItem>
+                ))}
+                <SelectItem value="sem_conta">Não classificada</SelectItem>
+              </SelectContent>
+            </Select>
 
-          <Select value={filtroStatus} onValueChange={setFiltroStatus}>
-            <SelectTrigger className="w-[160px] h-9 text-xs">
-              <Filter className="mr-1.5 h-3.5 w-3.5 text-neutral-400" />
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="todos">Todos status</SelectItem>
-              <SelectItem value="pendente">Pendente de Conciliação</SelectItem>
-              <SelectItem value="conciliado">Conciliado</SelectItem>
-              <SelectItem value="ignorado">Ignorado</SelectItem>
-            </SelectContent>
-          </Select>
+            <Select value={filtroTipo} onValueChange={setFiltroTipo}>
+              <SelectTrigger className="w-[130px] h-9 text-xs">
+                <SelectValue placeholder="Tipo" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos os tipos</SelectItem>
+                <SelectItem value="entrada">Entradas (+)</SelectItem>
+                <SelectItem value="saida">Saídas (-)</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Select value={filtroStatus} onValueChange={setFiltroStatus}>
+              <SelectTrigger className="w-[160px] h-9 text-xs">
+                <Filter className="mr-1.5 h-3.5 w-3.5 text-neutral-400" />
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos status</SelectItem>
+                <SelectItem value="pendente">Pendente de Conciliação</SelectItem>
+                <SelectItem value="conciliado">Conciliado</SelectItem>
+                <SelectItem value="ignorado">Ignorado</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </div>
       {/* Tabela de Transações */}
@@ -930,6 +1269,7 @@ export function ExtratosComprovantesTab({
             <table className="w-full text-left text-xs">
               <thead className="bg-neutral-50 text-neutral-500 font-semibold border-b">
                 <tr>
+                  {canWrite && <th className="px-3 py-3 w-8 text-center">Sel.</th>}
                   <th className="px-4 py-3">Data</th>
                   <th className="px-4 py-3">Descrição da Movimentação</th>
                   <th className="px-4 py-3">Documento Ref.</th>
@@ -940,13 +1280,36 @@ export function ExtratosComprovantesTab({
               </thead>
               <tbody className="divide-y divide-neutral-200">
                 {transacoesFiltradas.map((tx) => {
+                  const isChecked = selectedTxIds.includes(tx.id)
+                  const isPendente = tx.status_conciliacao === 'pendente'
+
                   return (
                     <tr
                       key={tx.id}
                       className={`hover:bg-neutral-50/80 transition ${
-                        tx.status_conciliacao === 'conciliado' ? 'bg-emerald-50/20' : ''
+                        isChecked
+                          ? 'bg-orange-50/50'
+                          : tx.status_conciliacao === 'conciliado'
+                            ? 'bg-emerald-50/20'
+                            : ''
                       }`}
                     >
+                      {canWrite && (
+                        <td className="px-3 py-3 text-center">
+                          {isPendente ? (
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => alternarSelecaoTx(tx.id)}
+                              className="rounded border-neutral-300 text-[#FF6A13] focus:ring-[#FF6A13] h-4 w-4 cursor-pointer"
+                              title="Selecionar para conciliação em lote"
+                            />
+                          ) : (
+                            <span className="text-neutral-300">—</span>
+                          )}
+                        </td>
+                      )}
+
                       <td className="px-4 py-3 whitespace-nowrap font-mono text-neutral-800">
                         {formatDate(tx.data)}
                       </td>
@@ -1073,6 +1436,18 @@ export function ExtratosComprovantesTab({
                               className="h-7 text-xs text-neutral-600 hover:underline"
                             >
                               Reativar
+                            </Button>
+                          )}
+
+                          {canWrite && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setTransacaoParaExcluir(tx)}
+                              className="h-7 w-7 p-0 text-neutral-400 hover:text-rose-600 hover:bg-rose-50"
+                              title="Excluir este lançamento"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
                             </Button>
                           )}
                         </div>
@@ -1627,27 +2002,109 @@ export function ExtratosComprovantesTab({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      {/* Modal Excluir Extrato */}
-      <Dialog open={!!modalExcluirExtrato} onOpenChange={() => setModalExcluirExtrato(null)}>
+      {/* Modal Destrutivo de Excluir Extrato (Exige digitar o nome exato) */}
+      <Dialog
+        open={!!modalExcluirExtrato}
+        onOpenChange={(open) => {
+          if (!open && !isExcluindoExtrato) {
+            setModalExcluirExtrato(null)
+            setNomeConfirmacaoExclusao('')
+          }
+        }}
+      >
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-rose-600">Excluir Extrato Bancário</DialogTitle>
+            <DialogTitle className="text-rose-600 flex items-center gap-2">
+              <Trash2 className="h-5 w-5 text-rose-600" />
+              Exclusão Definitiva de Extrato Bancário
+            </DialogTitle>
           </DialogHeader>
           {modalExcluirExtrato && (
-            <p className="text-xs text-neutral-600">
-              Deseja realmente excluir o extrato <strong>{modalExcluirExtrato.nome_arquivo}</strong>{' '}
-              e todas as suas transações vinculadas?
-            </p>
+            <div className="space-y-3 text-xs">
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-rose-900 space-y-1">
+                <p className="font-bold">Ação irreversível restrita ao Financeiro e Administração:</p>
+                <p>
+                  A exclusão do extrato <strong>{modalExcluirExtrato.nome_arquivo}</strong> apagará{' '}
+                  <strong>todas as suas transações vinculadas</strong> do banco de dados e atualizará o
+                  Fluxo de Caixa automaticamente.
+                </p>
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-xs text-neutral-700">
+                  Para confirmar, digite exatamente o nome do arquivo:
+                </Label>
+                <p className="font-mono bg-neutral-100 p-1.5 rounded select-all font-semibold text-neutral-900">
+                  {modalExcluirExtrato.nome_arquivo}
+                </p>
+                <Input
+                  value={nomeConfirmacaoExclusao}
+                  onChange={(e) => setNomeConfirmacaoExclusao(e.target.value)}
+                  placeholder="Cole ou digite o nome exato aqui..."
+                  className="font-mono text-xs"
+                />
+              </div>
+            </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setModalExcluirExtrato(null)}>
+            <Button
+              variant="outline"
+              disabled={isExcluindoExtrato}
+              onClick={() => {
+                setModalExcluirExtrato(null)
+                setNomeConfirmacaoExclusao('')
+              }}
+            >
               Cancelar
             </Button>
             <Button
               onClick={handleExcluirExtrato}
-              className="bg-rose-600 hover:bg-rose-700 text-white"
+              disabled={
+                isExcluindoExtrato ||
+                !modalExcluirExtrato ||
+                nomeConfirmacaoExclusao.trim() !== modalExcluirExtrato.nome_arquivo
+              }
+              className="bg-rose-600 hover:bg-rose-700 text-white font-semibold"
             >
-              Excluir Extrato
+              {isExcluindoExtrato ? 'Excluindo...' : 'Confirmar Exclusão Destrutiva'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Excluir Transação Individual */}
+      <Dialog
+        open={!!transacaoParaExcluir}
+        onOpenChange={(open) => {
+          if (!open && !isExcluindoTransacao) setTransacaoParaExcluir(null)
+        }}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-rose-600 text-sm">Excluir Lançamento do Extrato</DialogTitle>
+          </DialogHeader>
+          {transacaoParaExcluir && (
+            <p className="text-xs text-neutral-600">
+              Deseja remover o lançamento <strong>"{transacaoParaExcluir.descricao}"</strong> no valor de{' '}
+              <strong>{formatCurrency(transacaoParaExcluir.valor)}</strong>?
+            </p>
+          )}
+          <DialogFooter className="mt-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={isExcluindoTransacao}
+              onClick={() => setTransacaoParaExcluir(null)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={isExcluindoTransacao}
+              onClick={handleExcluirTransacaoIndividual}
+            >
+              {isExcluindoTransacao ? 'Excluindo...' : 'Excluir'}
             </Button>
           </DialogFooter>
         </DialogContent>

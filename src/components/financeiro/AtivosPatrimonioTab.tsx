@@ -53,7 +53,8 @@ export const CATEGORIA_ATIVO_LABELS: Record<CategoriaAtivoPatrimonial, string> =
   drone_aeronave: 'Drone / Aeronave Remotamente Pilotada',
   computador_hardware: 'Hardware & Workstation CAD',
   software_licenca: 'Software / Licença Perpétua BIM/CAD',
-  veiculo: 'Veículo Operacional de Campo',
+  veiculo: 'Veículo / Frota Operacional',
+  terreno: 'Terreno / Imóvel (Patrimônio Fixo)',
   imovel: 'Bem Imóvel / Sede / Instalação',
   mobiliario: 'Mobiliário & Escritório',
   outro_ativo: 'Outro Ativo Permanente',
@@ -76,22 +77,31 @@ export const DEPRECIACAO_PADRAO: Record<
   drone_aeronave: { vidaUtilMeses: 60, taxaAnual: 20 },
   equipamento_topografico: { vidaUtilMeses: 120, taxaAnual: 10 }, // 10 anos = 10% ao ano
   veiculo: { vidaUtilMeses: 60, taxaAnual: 20 },
+  terreno: { vidaUtilMeses: 0, taxaAnual: 0 }, // Terrenos não sofrem depreciação (NBC TG 27)
   imovel: { vidaUtilMeses: 300, taxaAnual: 4 }, // 25 anos = 4% ao ano
   mobiliario: { vidaUtilMeses: 120, taxaAnual: 10 },
   outro_ativo: { vidaUtilMeses: 120, taxaAnual: 10 },
 }
 
 /**
- * Calcula o valor contábil líquido atual com depreciação linear mensal
+ * Calcula o valor contábil líquido atual com depreciação linear mensal.
+ * Se categoria for 'terreno' ou vidaUtilMeses for 0, retorna depreciacaoAcumulada 0
+ * e valorContabilAtual igual ao valor de aquisição (NBC TG 27 / CPC 27).
  */
 export function calcularDepreciacaoLinear(
   valorAquisicao: number,
   dataAquisicaoStr: string,
   vidaUtilMeses: number,
   valorResidual: number = 0,
+  categoria?: CategoriaAtivoPatrimonial,
 ): { mesesDecorridos: number; depreciacaoAcumulada: number; valorContabilAtual: number } {
   if (!valorAquisicao || valorAquisicao <= 0) {
     return { mesesDecorridos: 0, depreciacaoAcumulada: 0, valorContabilAtual: 0 }
+  }
+
+  // Regra NBC TG 27: Terrenos têm vida útil ilimitada e não sofrem depreciação
+  if (categoria === 'terreno' || vidaUtilMeses === 0) {
+    return { mesesDecorridos: 0, depreciacaoAcumulada: 0, valorContabilAtual: valorAquisicao }
   }
 
   const dataAq = new Date(dataAquisicaoStr.slice(0, 10))
@@ -117,20 +127,39 @@ export function calcularDepreciacaoLinear(
 export interface AtivosPatrimonioTabProps {
   canWrite: boolean
   fornecedores?: FornecedorRecord[]
+  credores?: import('@/types/crm').CredorRecord[]
 }
 
-export function AtivosPatrimonioTab({ canWrite, fornecedores = [] }: AtivosPatrimonioTabProps) {
+export function AtivosPatrimonioTab({
+  canWrite,
+  fornecedores = [],
+  credores: credoresProp = [],
+}: AtivosPatrimonioTabProps) {
   const [ativos, setAtivos] = useState<AtivoPatrimonioRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [busca, setBusca] = useState('')
   const [filtroCategoria, setFiltroCategoria] = useState<string>('todos')
   const [filtroStatus, setFiltroStatus] = useState<string>('todos')
 
+  // Credores disponíveis para seleção de fornecedor/vendedor
+  const [listaCredores, setListaCredores] = useState<import('@/types/crm').CredorRecord[]>(credoresProp)
+  const [buscaCredor, setBuscaCredor] = useState('')
+
   // Modais
   const [modalAberto, setModalAberto] = useState(false)
   const [editando, setEditando] = useState<AtivoPatrimonioRecord | null>(null)
   const [excluindo, setExcluindo] = useState<AtivoPatrimonioRecord | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  // Anexos múltiplos pendentes no modal
+  interface AnexoPendenteAtivo {
+    id: string
+    file: File
+    tipo: import('@/types/crm').TipoDocumentoAtivo
+    observacao: string
+  }
+  const [anexosPendentes, setAnexosPendentes] = useState<AnexoPendenteAtivo[]>([])
+  const [tipoAnexoAtual, setTipoAnexoAtual] = useState<import('@/types/crm').TipoDocumentoAtivo>('comprovante')
 
   // Form State
   const [formData, setFormData] = useState<{
@@ -146,6 +175,7 @@ export function AtivosPatrimonioTab({ canWrite, fornecedores = [] }: AtivosPatri
     numero_nf_registro: string
     fornecedor: string
     fornecedor_nome: string
+    credor: string
     localizacao_responsavel: string
     observacoes: string
     arquivoEvidencia: File | null
@@ -162,6 +192,7 @@ export function AtivosPatrimonioTab({ canWrite, fornecedores = [] }: AtivosPatri
     numero_nf_registro: '',
     fornecedor: '',
     fornecedor_nome: '',
+    credor: '',
     localizacao_responsavel: '',
     observacoes: '',
     arquivoEvidencia: null,
@@ -172,7 +203,7 @@ export function AtivosPatrimonioTab({ canWrite, fornecedores = [] }: AtivosPatri
       setLoading(true)
       const res = await pb.collection('ativos_patrimonio').getFullList<AtivoPatrimonioRecord>({
         sort: '-created',
-        expand: 'fornecedor,criado_por',
+        expand: 'fornecedor,credor,criado_por',
       })
       setAtivos(res)
     } catch (err) {
@@ -187,14 +218,31 @@ export function AtivosPatrimonioTab({ canWrite, fornecedores = [] }: AtivosPatri
     carregarAtivos()
   }, [])
 
+  useEffect(() => {
+    if (credoresProp.length > 0) {
+      setListaCredores(credoresProp)
+    } else {
+      pb.collection('credores')
+        .getFullList<import('@/types/crm').CredorRecord>({ sort: 'nome_razao_social' })
+        .then((res) => setListaCredores(res))
+        .catch(() => {})
+    }
+  }, [credoresProp])
+
   // Lista com cálculo dinâmico de depreciação contábil
   const ativosCalculados = useMemo(() => {
     return ativos.map((at) => {
+      const vidaUtilConfig =
+        at.categoria === 'terreno'
+          ? 0
+          : (at.vida_util_meses !== undefined ? at.vida_util_meses : DEPRECIACAO_PADRAO[at.categoria]?.vidaUtilMeses ?? 120)
+
       const calc = calcularDepreciacaoLinear(
         at.valor_aquisicao,
         at.data_aquisicao,
-        at.vida_util_meses || DEPRECIACAO_PADRAO[at.categoria]?.vidaUtilMeses || 120,
+        vidaUtilConfig,
         at.valor_residual || 0,
+        at.categoria,
       )
       return {
         ...at,
@@ -235,6 +283,8 @@ export function AtivosPatrimonioTab({ canWrite, fornecedores = [] }: AtivosPatri
 
   function abrirModalCriacao() {
     setEditando(null)
+    setAnexosPendentes([])
+    setBuscaCredor('')
     const padrao = DEPRECIACAO_PADRAO.equipamento_topografico
     setFormData({
       identificador_codigo: `ATV-${new Date().getFullYear()}-${String(ativos.length + 1).padStart(3, '0')}`,
@@ -249,6 +299,7 @@ export function AtivosPatrimonioTab({ canWrite, fornecedores = [] }: AtivosPatri
       numero_nf_registro: '',
       fornecedor: '',
       fornecedor_nome: '',
+      credor: '',
       localizacao_responsavel: '',
       observacoes: '',
       arquivoEvidencia: null,
@@ -258,23 +309,27 @@ export function AtivosPatrimonioTab({ canWrite, fornecedores = [] }: AtivosPatri
 
   function abrirModalEdicao(ativo: AtivoPatrimonioRecord) {
     setEditando(ativo)
+    setAnexosPendentes([])
+    setBuscaCredor(ativo.fornecedor_nome || '')
+    const ehTerreno = ativo.categoria === 'terreno'
     setFormData({
       identificador_codigo: ativo.identificador_codigo || '',
       descricao: ativo.descricao,
       categoria: ativo.categoria,
       data_aquisicao: ativo.data_aquisicao ? ativo.data_aquisicao.slice(0, 10) : '',
       valor_aquisicao: String(ativo.valor_aquisicao),
-      vida_util_meses: String(
-        ativo.vida_util_meses || DEPRECIACAO_PADRAO[ativo.categoria]?.vidaUtilMeses || 120,
-      ),
-      taxa_depreciacao_anual: String(
-        ativo.taxa_depreciacao_anual || DEPRECIACAO_PADRAO[ativo.categoria]?.taxaAnual || 10,
-      ),
+      vida_util_meses: ehTerreno
+        ? '0'
+        : String(ativo.vida_util_meses !== undefined ? ativo.vida_util_meses : DEPRECIACAO_PADRAO[ativo.categoria]?.vidaUtilMeses ?? 120),
+      taxa_depreciacao_anual: ehTerreno
+        ? '0'
+        : String(ativo.taxa_depreciacao_anual !== undefined ? ativo.taxa_depreciacao_anual : DEPRECIACAO_PADRAO[ativo.categoria]?.taxaAnual ?? 10),
       valor_residual: String(ativo.valor_residual || 0),
       status: ativo.status,
       numero_nf_registro: ativo.numero_nf_registro || '',
       fornecedor: ativo.fornecedor || '',
       fornecedor_nome: ativo.fornecedor_nome || '',
+      credor: ativo.credor || '',
       localizacao_responsavel: ativo.localizacao_responsavel || '',
       observacoes: ativo.observacoes || '',
       arquivoEvidencia: null,
@@ -292,6 +347,58 @@ export function AtivosPatrimonioTab({ canWrite, fornecedores = [] }: AtivosPatri
     }))
   }
 
+  // Filtragem de credores no seletor com busca
+  const credoresFiltradosBusca = useMemo(() => {
+    if (!buscaCredor.trim()) return listaCredores.slice(0, 8)
+    const termo = buscaCredor.toLowerCase()
+    return listaCredores
+      .filter(
+        (c) =>
+          c.nome_razao_social.toLowerCase().includes(termo) ||
+          (c.nome_fantasia && c.nome_fantasia.toLowerCase().includes(termo)) ||
+          c.cnpj_cpf.includes(termo),
+      )
+      .slice(0, 8)
+  }, [listaCredores, buscaCredor])
+
+  function handleSelecionarCredor(credorItem: import('@/types/crm').CredorRecord) {
+    setFormData((prev) => ({
+      ...prev,
+      credor: credorItem.id,
+      fornecedor_nome: credorItem.nome_fantasia || credorItem.nome_razao_social,
+    }))
+    setBuscaCredor(credorItem.nome_fantasia || credorItem.nome_razao_social)
+  }
+
+  function handleAdicionarArquivos(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files
+    if (!files || files.length === 0) return
+
+    const novos: AnexoPendenteAtivo[] = []
+    const MAX_MB = 30 * 1024 * 1024
+
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i]
+      if (f.size > MAX_MB) {
+        toast.error(`O arquivo "${f.name}" excede o limite máximo de 30MB.`)
+        continue
+      }
+      novos.push({
+        id: `${Date.now()}_${i}_${Math.random().toString(36).substring(2, 7)}`,
+        file: f,
+        tipo: tipoAnexoAtual,
+        observacao: '',
+      })
+    }
+
+    setAnexosPendentes((prev) => [...prev, ...novos])
+    e.target.value = ''
+  }
+
+  function removerAnexoPendente(id: string) {
+    setAnexosPendentes((prev) => prev.filter((a) => a.id !== id))
+  }
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     if (!formData.descricao || !formData.valor_aquisicao || !formData.data_aquisicao) {
@@ -303,7 +410,9 @@ export function AtivosPatrimonioTab({ canWrite, fornecedores = [] }: AtivosPatri
 
     try {
       const valAquisicao = Number(formData.valor_aquisicao)
-      const vidaUtil = Number(formData.vida_util_meses) || 120
+      const ehTerreno = formData.categoria === 'terreno'
+      const vidaUtil = ehTerreno ? 0 : Number(formData.vida_util_meses) || 120
+      const taxaAnual = ehTerreno ? 0 : Number(formData.taxa_depreciacao_anual) || 0
       const residual = Number(formData.valor_residual) || 0
 
       const calc = calcularDepreciacaoLinear(
@@ -311,51 +420,68 @@ export function AtivosPatrimonioTab({ canWrite, fornecedores = [] }: AtivosPatri
         formData.data_aquisicao,
         vidaUtil,
         residual,
+        formData.categoria,
       )
 
-      const payload: Record<string, unknown> = {
-        identificador_codigo: formData.identificador_codigo,
-        descricao: formData.descricao,
-        categoria: formData.categoria,
-        data_aquisicao: `${formData.data_aquisicao} 12:00:00.000Z`,
-        valor_aquisicao: valAquisicao,
-        vida_util_meses: vidaUtil,
-        taxa_depreciacao_anual: Number(formData.taxa_depreciacao_anual) || 0,
-        valor_residual: residual,
-        valor_contabil_atual: calc.valorContabilAtual,
-        status: formData.status,
-        numero_nf_registro: formData.numero_nf_registro,
-        fornecedor_nome: formData.fornecedor_nome,
-        localizacao_responsavel: formData.localizacao_responsavel,
-        observacoes: formData.observacoes,
-      }
+      // Metadados existentes + novos anexos
+      const metadadosExistentes = Array.isArray(editando?.anexos_metadados)
+        ? [...editando.anexos_metadados]
+        : []
+
+      const novosMetadados = anexosPendentes.map((ap) => ({
+        file: ap.file.name,
+        tipo: ap.tipo,
+        nome_original: ap.file.name,
+        tamanho: ap.file.size,
+        observacao: ap.observacao || '',
+      }))
+
+      const metadadosTotais = [...metadadosExistentes, ...novosMetadados]
+
+      // Se há anexos pendentes para enviar, usamos FormData para suportar multipart/form-data
+      const formDataUpload = new FormData()
+      formDataUpload.append('identificador_codigo', formData.identificador_codigo)
+      formDataUpload.append('descricao', formData.descricao)
+      formDataUpload.append('categoria', formData.categoria)
+      formDataUpload.append('data_aquisicao', `${formData.data_aquisicao} 12:00:00.000Z`)
+      formDataUpload.append('valor_aquisicao', String(valAquisicao))
+      formDataUpload.append('vida_util_meses', String(vidaUtil))
+      formDataUpload.append('taxa_depreciacao_anual', String(taxaAnual))
+      formDataUpload.append('valor_residual', String(residual))
+      formDataUpload.append('valor_contabil_atual', String(calc.valorContabilAtual))
+      formDataUpload.append('status', formData.status)
+      formDataUpload.append('numero_nf_registro', formData.numero_nf_registro || '')
+      formDataUpload.append('fornecedor_nome', formData.fornecedor_nome || '')
+      formDataUpload.append('localizacao_responsavel', formData.localizacao_responsavel || '')
+      formDataUpload.append('observacoes', formData.observacoes || '')
+      formDataUpload.append('credor', formData.credor || '')
+      formDataUpload.append('anexos_metadados', JSON.stringify(metadadosTotais))
 
       if (formData.fornecedor && formData.fornecedor !== 'nenhum') {
-        payload.fornecedor = formData.fornecedor
-      } else {
-        payload.fornecedor = null
+        formDataUpload.append('fornecedor', formData.fornecedor)
       }
 
-      let ativoId = editando?.id
+      if (formData.arquivoEvidencia) {
+        formDataUpload.append('documento_evidencia', formData.arquivoEvidencia)
+      }
+
+      for (const ap of anexosPendentes) {
+        formDataUpload.append('anexos', ap.file)
+      }
 
       if (editando) {
-        await updateOne('ativos_patrimonio', editando.id, payload)
+        await pb.collection('ativos_patrimonio').update(editando.id, formDataUpload)
         toast.success('Ativo patrimonial atualizado!')
       } else {
-        payload.criado_por = pb.authStore.record?.id || null
-        const created = await createOne<AtivoPatrimonioRecord>('ativos_patrimonio', payload)
-        ativoId = created.id
+        if (pb.authStore.record?.id) {
+          formDataUpload.append('criado_por', pb.authStore.record.id)
+        }
+        await pb.collection('ativos_patrimonio').create(formDataUpload)
         toast.success('Ativo patrimonial registrado no balanço da empresa!')
       }
 
-      // Se enviou documento/NF de evidência
-      if (formData.arquivoEvidencia && ativoId) {
-        const fileData = new FormData()
-        fileData.append('documento_evidencia', formData.arquivoEvidencia)
-        await pb.collection('ativos_patrimonio').update(ativoId, fileData)
-      }
-
       setModalAberto(false)
+      setAnexosPendentes([])
       await carregarAtivos()
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
@@ -584,20 +710,52 @@ export function AtivosPatrimonioTab({ canWrite, fornecedores = [] }: AtivosPatri
                     </td>
 
                     <td className="px-4 py-3 text-center whitespace-nowrap">
-                      {ativo.documento_evidencia ? (
-                        <a
-                          href={pb.files.getURL(ativo, ativo.documento_evidencia)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-[#FF6A13] hover:underline font-medium text-[11px]"
-                          title="Ver Evidência / NF Anexa"
-                        >
-                          <Paperclip className="h-3.5 w-3.5" />
-                          Evidência
-                        </a>
-                      ) : (
-                        <span className="text-neutral-300 text-xs">—</span>
-                      )}
+                      <div className="flex flex-col items-center gap-1">
+                        {ativo.documento_evidencia && (
+                          <a
+                            href={pb.files.getURL(ativo, ativo.documento_evidencia)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-[#FF6A13] hover:underline font-medium text-[11px]"
+                            title="Ver Evidência / NF Anexa"
+                          >
+                            <Paperclip className="h-3.5 w-3.5" />
+                            Evidência
+                          </a>
+                        )}
+
+                        {/* Chips dos múltiplos anexos clicáveis com tipo */}
+                        {Array.isArray(ativo.anexos) && ativo.anexos.length > 0 && (
+                          <div className="flex flex-wrap justify-center gap-1 max-w-[200px]">
+                            {ativo.anexos.map((anexoNome, idx) => {
+                              const meta = ativo.anexos_metadados?.find(
+                                (m) => m.file === anexoNome || m.nome_original === anexoNome,
+                              )
+                              const labelTipo = meta?.tipo ? meta.tipo.toUpperCase() : 'DOC'
+                              const url = pb.files.getURL(ativo, anexoNome)
+
+                              return (
+                                <a
+                                  key={idx}
+                                  href={url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-orange-50 text-[#FF6A13] border border-orange-200 hover:bg-orange-100 text-[10px] font-medium transition"
+                                  title={`Abrir anexo: ${meta?.nome_original || anexoNome}`}
+                                >
+                                  <Paperclip className="h-2.5 w-2.5" />
+                                  <span>{labelTipo}</span>
+                                </a>
+                              )
+                            })}
+                          </div>
+                        )}
+
+                        {!ativo.documento_evidencia &&
+                          (!ativo.anexos || ativo.anexos.length === 0) && (
+                            <span className="text-neutral-300 text-xs">—</span>
+                          )}
+                      </div>
                     </td>
 
                     <td className="px-4 py-3 text-right whitespace-nowrap">
@@ -752,32 +910,110 @@ export function AtivosPatrimonioTab({ canWrite, fornecedores = [] }: AtivosPatri
             <div className="p-3 rounded-lg border border-neutral-200 bg-neutral-50/70 space-y-2">
               <span className="text-xs font-semibold text-neutral-800 flex items-center gap-1.5">
                 <Calculator className="h-3.5 w-3.5 text-[#FF6A13]" />
-                Parâmetros Contábeis de Depreciação Linear (Receita Federal)
+                Parâmetros Contábeis de Depreciação Linear (Receita Federal / NBC TG 27)
               </span>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                <div className="space-y-1">
-                  <Label className="text-[11px] text-neutral-600">Vida Útil Estimada (Meses)</Label>
+
+              {formData.categoria === 'terreno' ? (
+                <div className="p-2.5 bg-blue-50 border border-blue-200 rounded text-blue-900 text-xs space-y-1">
+                  <p className="font-semibold flex items-center gap-1.5">
+                    <FileCheck className="h-4 w-4 text-blue-600" />
+                    Terrenos não se depreciam (NBC TG 27)
+                  </p>
+                  <p className="text-[11px] text-blue-800">
+                    Conforme o item 58 do Pronunciamento Técnico NBC TG 27 (CPC 27), terrenos têm
+                    vida útil ilimitada e não sofrem quotas de depreciação contábil, mantendo seu valor
+                    contábil integral no Ativo Imobilizado.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div className="space-y-1">
+                    <Label className="text-[11px] text-neutral-600">Vida Útil Estimada (Meses)</Label>
+                    <Input
+                      type="number"
+                      value={formData.vida_util_meses}
+                      onChange={(e) => setFormData({ ...formData, vida_util_meses: e.target.value })}
+                      className="h-8 text-xs font-mono"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[11px] text-neutral-600">
+                      Taxa de Depreciação Anual (%)
+                    </Label>
+                    <Input
+                      type="number"
+                      step="0.1"
+                      value={formData.taxa_depreciacao_anual}
+                      onChange={(e) =>
+                        setFormData({ ...formData, taxa_depreciacao_anual: e.target.value })
+                      }
+                      className="h-8 text-xs font-mono"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Seletor de Fornecedor / Vendedor com busca sobre a coleção credores */}
+            <div className="p-3 rounded-lg border border-neutral-200 bg-neutral-50/50 space-y-2">
+              <Label className="text-xs font-semibold text-neutral-800">
+                Fornecedor / Vendedor do Bem (Credor Cadastrado)
+              </Label>
+              <div className="space-y-1.5">
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-neutral-400" />
                   <Input
-                    type="number"
-                    value={formData.vida_util_meses}
-                    onChange={(e) => setFormData({ ...formData, vida_util_meses: e.target.value })}
-                    className="h-8 text-xs font-mono"
+                    value={buscaCredor}
+                    onChange={(e) => {
+                      setBuscaCredor(e.target.value)
+                      setFormData((prev) => ({
+                        ...prev,
+                        fornecedor_nome: e.target.value,
+                        credor: '',
+                      }))
+                    }}
+                    placeholder="Buscar credor por Razão Social, Fantasia ou CNPJ..."
+                    className="pl-8 h-8 text-xs"
                   />
                 </div>
-                <div className="space-y-1">
-                  <Label className="text-[11px] text-neutral-600">
-                    Taxa de Depreciação Anual (%)
-                  </Label>
-                  <Input
-                    type="number"
-                    step="0.1"
-                    value={formData.taxa_depreciacao_anual}
-                    onChange={(e) =>
-                      setFormData({ ...formData, taxa_depreciacao_anual: e.target.value })
-                    }
-                    className="h-8 text-xs font-mono"
-                  />
-                </div>
+
+                {buscaCredor.trim() && credoresFiltradosBusca.length > 0 && !formData.credor && (
+                  <div className="border rounded bg-white shadow-sm max-h-36 overflow-y-auto divide-y text-xs">
+                    {credoresFiltradosBusca.map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => handleSelecionarCredor(c)}
+                        className="w-full text-left px-2.5 py-1.5 hover:bg-orange-50 transition flex items-center justify-between"
+                      >
+                        <span className="font-semibold text-neutral-900 truncate">
+                          {c.nome_fantasia || c.nome_razao_social}
+                        </span>
+                        <span className="text-[10px] text-neutral-400 font-mono ml-2 shrink-0">
+                          {c.cnpj_cpf}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {formData.credor && (
+                  <div className="flex items-center justify-between p-1.5 bg-emerald-50 border border-emerald-200 rounded text-[11px] text-emerald-900 font-medium">
+                    <span>
+                      Credor vinculado: <strong>{formData.fornecedor_nome}</strong>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormData((prev) => ({ ...prev, credor: '', fornecedor_nome: '' }))
+                        setBuscaCredor('')
+                      }}
+                      className="text-emerald-700 hover:text-emerald-900 font-bold ml-2 underline text-[10px]"
+                    >
+                      Alterar
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -803,22 +1039,114 @@ export function AtivosPatrimonioTab({ canWrite, fornecedores = [] }: AtivosPatri
               </div>
             </div>
 
-            <div className="space-y-1">
-              <Label className="text-xs">
-                Documento de Evidência Contábil (NF ou Laudo em PDF/Imagem)
-              </Label>
-              <Input
-                type="file"
-                accept=".pdf,.png,.jpg,.jpeg,.webp"
-                onChange={(e) =>
-                  setFormData({ ...formData, arquivoEvidencia: e.target.files?.[0] || null })
-                }
-                className="text-xs file:bg-[#FF6A13] file:text-white file:border-0 file:rounded file:px-2 file:py-1 file:mr-2"
-              />
-              {editando?.documento_evidencia && !formData.arquivoEvidencia && (
-                <p className="text-[11px] text-emerald-700">
-                  Já possui documento anexado ({editando.documento_evidencia}).
-                </p>
+            {/* Upload Múltiplo de Anexos com Tipo de Documento */}
+            <div className="p-3 rounded-lg border border-neutral-200 bg-neutral-50/50 space-y-3">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-semibold text-neutral-800">
+                  Anexos e Documentos do Ativo (até 30MB)
+                </Label>
+                <span className="text-[10px] text-neutral-500">
+                  Comprovante, Contrato, Laudo, Matrícula
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div className="space-y-1 sm:col-span-1">
+                  <Label className="text-[11px] text-neutral-600">Tipo do Documento</Label>
+                  <Select
+                    value={tipoAnexoAtual}
+                    onValueChange={(val: import('@/types/crm').TipoDocumentoAtivo) =>
+                      setTipoAnexoAtual(val)
+                    }
+                  >
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="comprovante">Comprovante de Pagamento</SelectItem>
+                      <SelectItem value="contrato">Contrato de Aquisição / Compra</SelectItem>
+                      <SelectItem value="laudo">Laudo de Avaliação / Calibração</SelectItem>
+                      <SelectItem value="matricula">Matrícula Imobiliária / CRLV</SelectItem>
+                      <SelectItem value="outro">Outro Documento</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1 sm:col-span-2">
+                  <Label className="text-[11px] text-neutral-600">Selecionar Arquivos</Label>
+                  <Input
+                    type="file"
+                    multiple
+                    accept=".pdf,.png,.jpg,.jpeg,.webp,.docx,.xlsx"
+                    onChange={handleAdicionarArquivos}
+                    className="h-8 text-xs file:bg-[#FF6A13] file:text-white file:border-0 file:rounded file:px-2 file:py-0.5 file:mr-2"
+                  />
+                </div>
+              </div>
+
+              {/* Lista de Anexos Pendentes de Upload */}
+              {anexosPendentes.length > 0 && (
+                <div className="space-y-1.5 pt-1">
+                  <p className="text-[11px] font-semibold text-neutral-700">
+                    Documentos a anexar ({anexosPendentes.length}):
+                  </p>
+                  <div className="max-h-28 overflow-y-auto divide-y border rounded bg-white text-xs">
+                    {anexosPendentes.map((ap) => (
+                      <div
+                        key={ap.id}
+                        className="px-2.5 py-1.5 flex items-center justify-between gap-2"
+                      >
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="uppercase text-[9px] font-bold px-1 py-0.2 rounded bg-orange-100 text-[#FF6A13] shrink-0">
+                            {ap.tipo}
+                          </span>
+                          <span className="truncate text-neutral-800 font-medium">
+                            {ap.file.name}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removerAnexoPendente(ap.id)}
+                          className="text-neutral-400 hover:text-rose-600 shrink-0"
+                          title="Remover"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Anexos já gravados no registro em edição */}
+              {editando?.anexos && editando.anexos.length > 0 && (
+                <div className="space-y-1 pt-1">
+                  <p className="text-[10px] text-neutral-500 font-semibold uppercase">
+                    Anexos já salvos neste ativo:
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {editando.anexos.map((anexo, idx) => {
+                      const meta = editando.anexos_metadados?.find(
+                        (m) => m.file === anexo || m.nome_original === anexo,
+                      )
+                      return (
+                        <a
+                          key={idx}
+                          href={pb.files.getURL(editando, anexo)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] bg-neutral-100 text-neutral-800 hover:text-[#FF6A13] border border-neutral-200"
+                        >
+                          <Paperclip className="h-3 w-3" />
+                          <span className="font-semibold uppercase text-[9px] text-[#FF6A13]">
+                            {meta?.tipo || 'DOC'}
+                          </span>
+                          <span className="truncate max-w-[120px]">{meta?.nome_original || anexo}</span>
+                        </a>
+                      )
+                    })}
+                  </div>
+                </div>
               )}
             </div>
 

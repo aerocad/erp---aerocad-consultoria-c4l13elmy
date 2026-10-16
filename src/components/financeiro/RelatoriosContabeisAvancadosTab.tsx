@@ -21,6 +21,9 @@ import {
   Clock,
   Layers,
   Percent,
+  FileArchive,
+  Loader2,
+  FolderArchive,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -30,9 +33,27 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Dialog, DialogContent } from '@/components/ui/dialog'
-import { CrmBadge } from '@/components/common/CrmBadge'
-import { formatCurrency, formatDate, isValoresOcultos, VALOR_MASCARADO } from '@/lib/format'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog'
+import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
+import { Progress } from '@/components/ui/progress'
+import { toast } from '@/hooks/use-toast'
+import JSZip from 'jszip'
+import {
+  formatCurrency,
+  formatDate,
+  formatDateBrasilia,
+  isValoresOcultos,
+  VALOR_MASCARADO,
+} from '@/lib/format'
+import pb from '@/lib/pocketbase/client'
 import { exportarTabelaParaXlsx } from '@/services/aerocadXlsxExporter'
 import { AerocadRelatorioA4 } from '@/components/financeiro/AerocadRelatorioA4'
 import {
@@ -89,6 +110,19 @@ export function RelatoriosContabeisAvancadosTab({
 
   const [secaoAtiva, setSecaoAtiva] = useState<SecaoContabil>('balanco')
   const [modalA4Aberto, setModalA4Aberto] = useState(false)
+
+  // Modal e estado do Dossiê Contábil ZIP
+  const [modalDossieAberto, setModalDossieAberto] = useState(false)
+  const [tipoPeriodoDossie, setTipoPeriodoDossie] = useState<string>('ano')
+  const [anoDossie, setAnoDossie] = useState<string>('2026')
+  const [mesDossie, setMesDossie] = useState<string>('1')
+  const [semestreDossie, setSemestreDossie] = useState<string>('1')
+  const [trimestreDossie, setTrimestreDossie] = useState<string>('1')
+  const [dataInicioDossie, setDataInicioDossie] = useState<string>('')
+  const [dataFimDossie, setDataFimDossie] = useState<string>('')
+  const [gerandoDossie, setGerandoDossie] = useState(false)
+  const [etapaDossie, setEtapaDossie] = useState<string>('')
+  const [progressoDossie, setProgressoDossie] = useState<number>(0)
 
   // Filtros de período
   const [ano, setAno] = useState<string>('2026')
@@ -1047,8 +1081,18 @@ export function RelatoriosContabeisAvancadosTab({
           </Button>
         </div>
 
-        {/* Botões de Ação: Minuta A4 e XLSX */}
-        <div className="flex items-center gap-2 shrink-0">
+        {/* Botões de Ação: Minuta A4, XLSX e Dossiê Contábil */}
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <Button
+            size="sm"
+            onClick={() => setModalDossieAberto(true)}
+            className="bg-[#FF6A13] hover:bg-[#E85B06] text-white h-8 text-xs font-bold shadow-sm"
+            title="Empacotar Dossiê Contábil completo (.ZIP) com demonstrativos, comprovantes e extratos"
+          >
+            <Layers className="mr-1.5 h-3.5 w-3.5" />
+            Gerar Dossiê Contábil
+          </Button>
+
           <Button
             size="sm"
             variant="outline"
