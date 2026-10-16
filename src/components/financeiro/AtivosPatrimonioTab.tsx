@@ -46,8 +46,15 @@ import type {
   AtivoPatrimonioRecord,
   CategoriaAtivoPatrimonial,
   StatusAtivoPatrimonial,
+  FormaAquisicaoAtivo,
   FornecedorRecord,
 } from '@/types/crm'
+
+export const FORMA_AQUISICAO_LABELS: Record<FormaAquisicaoAtivo, string> = {
+  a_vista: 'À vista',
+  financiamento: 'Financiamento',
+  parcelamento: 'Parcelamento',
+}
 
 export const CATEGORIA_ATIVO_LABELS: Record<CategoriaAtivoPatrimonial, string> = {
   equipamento_topografico: 'Equipamento Topográfico / Geodésico',
@@ -175,6 +182,8 @@ export function AtivosPatrimonioTab({
     identificador_codigo: string
     descricao: string
     categoria: CategoriaAtivoPatrimonial
+    forma_aquisicao: FormaAquisicaoAtivo
+    quantidade_parcelas: string
     data_aquisicao: string
     valor_aquisicao: string
     vida_util_meses: string
@@ -192,6 +201,8 @@ export function AtivosPatrimonioTab({
     identificador_codigo: '',
     descricao: '',
     categoria: 'equipamento_topografico',
+    forma_aquisicao: 'a_vista',
+    quantidade_parcelas: '',
     data_aquisicao: new Date().toISOString().slice(0, 10),
     valor_aquisicao: '',
     vida_util_meses: '120',
@@ -309,6 +320,8 @@ export function AtivosPatrimonioTab({
       identificador_codigo: `ATV-${new Date().getFullYear()}-${String(ativos.length + 1).padStart(3, '0')}`,
       descricao: '',
       categoria: 'equipamento_topografico',
+      forma_aquisicao: 'a_vista',
+      quantidade_parcelas: '',
       data_aquisicao: new Date().toISOString().slice(0, 10),
       valor_aquisicao: '',
       vida_util_meses: String(padrao.vidaUtilMeses),
@@ -335,6 +348,8 @@ export function AtivosPatrimonioTab({
       identificador_codigo: ativo.identificador_codigo || '',
       descricao: ativo.descricao,
       categoria: ativo.categoria,
+      forma_aquisicao: ativo.forma_aquisicao || 'a_vista',
+      quantidade_parcelas: ativo.quantidade_parcelas ? String(ativo.quantidade_parcelas) : '',
       data_aquisicao: ativo.data_aquisicao ? ativo.data_aquisicao.slice(0, 10) : '',
       valor_aquisicao: String(ativo.valor_aquisicao),
       vida_util_meses: ehTerreno
@@ -433,6 +448,17 @@ export function AtivosPatrimonioTab({
       return
     }
 
+    if (
+      (formData.forma_aquisicao === 'financiamento' ||
+        formData.forma_aquisicao === 'parcelamento') &&
+      (!formData.quantidade_parcelas ||
+        Number(formData.quantidade_parcelas) < 1 ||
+        !Number.isInteger(Number(formData.quantidade_parcelas)))
+    ) {
+      toast.error('Informe a quantidade de parcelas (número inteiro maior ou igual a 1).')
+      return
+    }
+
     setIsSubmitting(true)
 
     try {
@@ -470,6 +496,19 @@ export function AtivosPatrimonioTab({
       formDataUpload.append('identificador_codigo', formData.identificador_codigo)
       formDataUpload.append('descricao', formData.descricao)
       formDataUpload.append('categoria', formData.categoria)
+      formDataUpload.append('forma_aquisicao', formData.forma_aquisicao || 'a_vista')
+      if (
+        (formData.forma_aquisicao === 'financiamento' ||
+          formData.forma_aquisicao === 'parcelamento') &&
+        formData.quantidade_parcelas
+      ) {
+        formDataUpload.append(
+          'quantidade_parcelas',
+          String(Math.round(Number(formData.quantidade_parcelas))),
+        )
+      } else {
+        formDataUpload.append('quantidade_parcelas', '')
+      }
       formDataUpload.append('data_aquisicao', `${formData.data_aquisicao} 12:00:00.000Z`)
       formDataUpload.append('valor_aquisicao', String(valAquisicao))
       formDataUpload.append('vida_util_meses', String(vidaUtil))
@@ -670,6 +709,7 @@ export function AtivosPatrimonioTab({
                   <th className="px-4 py-3">Descrição do Bem / Ativo</th>
                   <th className="px-4 py-3">Categoria</th>
                   <th className="px-4 py-3">Aquisição</th>
+                  <th className="px-4 py-3">Aquisição / Parcelas</th>
                   <th className="px-4 py-3">Custo Histórico</th>
                   <th className="px-4 py-3">Depreciação Acum.</th>
                   <th className="px-4 py-3">Valor Contábil Atual</th>
@@ -710,8 +750,33 @@ export function AtivosPatrimonioTab({
                     </td>
 
                     <td className="px-4 py-3 whitespace-nowrap text-neutral-700">
-                      {formatDate(ativo.data_aquisicao)}
-                      <p className="text-[10px] text-neutral-400">
+                      <div>{formatDate(ativo.data_aquisicao)}</div>
+                      <div className="mt-1">
+                        {(!ativo.forma_aquisicao || ativo.forma_aquisicao === 'a_vista') && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-neutral-100 text-neutral-600 border border-neutral-200">
+                            À vista
+                          </span>
+                        )}
+                        {ativo.forma_aquisicao === 'financiamento' && (
+                          <span
+                            className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold text-white"
+                            style={{ backgroundColor: '#0284C7' }}
+                          >
+                            Financiamento ·{' '}
+                            {ativo.quantidade_parcelas ? `${ativo.quantidade_parcelas}x` : '—'}
+                          </span>
+                        )}
+                        {ativo.forma_aquisicao === 'parcelamento' && (
+                          <span
+                            className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold text-white"
+                            style={{ backgroundColor: '#FF6A13' }}
+                          >
+                            Parcelamento ·{' '}
+                            {ativo.quantidade_parcelas ? `${ativo.quantidade_parcelas}x` : '—'}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-neutral-400 mt-0.5">
                         {ativo.mesesDecorridos} meses em uso
                       </p>
                     </td>
@@ -945,6 +1010,57 @@ export function AtivosPatrimonioTab({
                   className="font-mono text-neutral-600"
                 />
               </div>
+            </div>
+
+            {/* Forma de Aquisição e Parcelas */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 p-3 rounded-lg border border-neutral-200 bg-neutral-50/50">
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold text-neutral-800">
+                  Forma de Aquisição *
+                </Label>
+                <Select
+                  value={formData.forma_aquisicao}
+                  onValueChange={(val: FormaAquisicaoAtivo) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      forma_aquisicao: val,
+                      quantidade_parcelas:
+                        val === 'a_vista' ? '' : prev.quantidade_parcelas || '12',
+                    }))
+                  }
+                >
+                  <SelectTrigger className="h-9 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="a_vista">À vista</SelectItem>
+                    <SelectItem value="financiamento">Financiamento</SelectItem>
+                    <SelectItem value="parcelamento">Parcelamento</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {(formData.forma_aquisicao === 'financiamento' ||
+                formData.forma_aquisicao === 'parcelamento') && (
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold text-neutral-800">
+                    Quantidade de Parcelas (Nx) *
+                  </Label>
+                  <Input
+                    required
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={formData.quantidade_parcelas}
+                    onChange={(e) =>
+                      setFormData({ ...formData, quantidade_parcelas: e.target.value })
+                    }
+                    placeholder="Ex: 12, 24, 36, 48..."
+                    className="h-9 text-xs font-mono font-semibold"
+                  />
+                  <span className="text-[10px] text-neutral-400">Mínimo 1 parcela inteira</span>
+                </div>
+              )}
             </div>
 
             {/* Parâmetros de Depreciação Linear */}
@@ -1274,6 +1390,40 @@ export function AtivosPatrimonioTab({
                   <p className="font-mono font-bold text-neutral-900">
                     {formatCurrency(fichaAtivo.valor_aquisicao)}
                   </p>
+                </div>
+                <div>
+                  <span className="text-[10px] text-neutral-400 font-bold uppercase block">
+                    Forma de Aquisição
+                  </span>
+                  <div className="mt-1">
+                    {(!fichaAtivo.forma_aquisicao || fichaAtivo.forma_aquisicao === 'a_vista') && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-neutral-100 text-neutral-700 border border-neutral-200">
+                        À vista
+                      </span>
+                    )}
+                    {fichaAtivo.forma_aquisicao === 'financiamento' && (
+                      <span
+                        className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold text-white"
+                        style={{ backgroundColor: '#0284C7' }}
+                      >
+                        Financiamento ·{' '}
+                        {fichaAtivo.quantidade_parcelas
+                          ? `${fichaAtivo.quantidade_parcelas}x`
+                          : '—'}
+                      </span>
+                    )}
+                    {fichaAtivo.forma_aquisicao === 'parcelamento' && (
+                      <span
+                        className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold text-white"
+                        style={{ backgroundColor: '#FF6A13' }}
+                      >
+                        Parcelamento ·{' '}
+                        {fichaAtivo.quantidade_parcelas
+                          ? `${fichaAtivo.quantidade_parcelas}x`
+                          : '—'}
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <div>
                   <span className="text-[10px] text-neutral-400 font-bold uppercase block">

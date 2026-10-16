@@ -378,17 +378,17 @@ export function BalancetesTab({
         tipo: 'SEÇÃO',
         categoria: 'RECEITAS OPERACIONAIS DO MÊS',
         detalhe: '',
-        valor: dados.receitas.total,
+        valor: dados.receitas?.total ?? 0,
       })
 
-      for (const item of dados.receitas.itens) {
+      for (const item of dados.receitas?.itens ?? []) {
         linhas.push({
           tipo: 'Receita',
           categoria: item.clienteNome,
           detalhe: `${item.descricao}${item.projetoNumero ? ` (${item.projetoNumero})` : ''}${
             item.nfNumero ? ` [NFS-e ${item.nfNumero}]` : ''
           }`,
-          valor: item.valor,
+          valor: item.valor ?? 0,
         })
       }
 
@@ -397,24 +397,24 @@ export function BalancetesTab({
         tipo: 'SEÇÃO',
         categoria: 'DESPESAS OPERACIONAIS DO MÊS',
         detalhe: '',
-        valor: -dados.despesas.total,
+        valor: -(dados.despesas?.total ?? 0),
       })
 
-      for (const item of dados.despesas.itens) {
+      for (const item of dados.despesas?.itens ?? []) {
         linhas.push({
           tipo: 'Despesa',
           categoria: item.fornecedor,
           detalhe: `${item.descricao} - Cat: ${item.categoria}`,
-          valor: -item.valor,
+          valor: -(item.valor ?? 0),
         })
       }
 
       await exportarTabelaParaXlsx({
-        nomeArquivo: `balancete_aerocad_${bal.referencia}`,
-        tituloRelatorio: bal.titulo,
+        nomeArquivo: `balancete_aerocad_${bal.referencia || 'periodo'}`,
+        tituloRelatorio: bal.titulo || 'Balancete Mensal AEROCAD',
         subtitulo: `Saldo Líquido do Mês: ${formatCurrency(
-          bal.saldo_mes,
-        )} | Saldo Acumulado no Exercício: ${formatCurrency(bal.saldo_acumulado_ano)}`,
+          bal.saldo_mes ?? 0,
+        )} | Saldo Acumulado no Exercício: ${formatCurrency(bal.saldo_acumulado_ano ?? 0)}`,
         usuarioNome: bal.responsavel_emissao || user?.name,
         userRole: user?.role,
         colunas: [
@@ -425,7 +425,7 @@ export function BalancetesTab({
         ],
         linhas,
         totais: {
-          valor: bal.saldo_mes,
+          valor: bal.saldo_mes ?? 0,
         },
       })
       toast.success('Planilha XLSX do balancete exportada com sucesso!')
@@ -539,13 +539,18 @@ export function BalancetesTab({
         {loading ? (
           <div className="p-8 text-center text-xs text-neutral-500">Carregando balancetes...</div>
         ) : balancetes.length === 0 ? (
-          <div className="p-10 text-center space-y-2">
-            <FileText className="mx-auto h-10 w-10 text-neutral-300" />
-            <p className="text-sm font-semibold text-neutral-700">Nenhum balancete gerado ainda</p>
-            <p className="text-xs text-neutral-500 max-w-md mx-auto">
-              Utilize o botão acima para consolidar receitas e despesas e gerar o primeiro balancete
-              mensal oficial da AEROCAD.
-            </p>
+          <div className="p-8 sm:p-10 text-center rounded-xl border border-dashed border-[#FF6A13]/30 bg-gradient-to-b from-white to-[#FFFBF8] space-y-3">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-orange-100 text-[#FF6A13]">
+              <FileText className="h-6 w-6 stroke-[2]" />
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm font-bold text-neutral-800">
+                Nenhum balancete mensal emitido para o período selecionado.
+              </p>
+              <p className="text-xs text-neutral-500 max-w-lg mx-auto">
+                Utilize o botão acima para consolidar receitas, despesas e apurar o saldo oficial.
+              </p>
+            </div>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -565,26 +570,28 @@ export function BalancetesTab({
                 {balancetes.map((bal) => (
                   <tr key={bal.id} className="hover:bg-[#FFF6EC]/30 transition-colors">
                     <td className="px-4 py-3">
-                      <div className="font-bold text-neutral-900">{bal.titulo}</div>
+                      <div className="font-bold text-neutral-900">
+                        {bal.titulo || 'Balancete Mensal'}
+                      </div>
                       <div className="font-mono text-[11px] text-neutral-500">
-                        Ref: {bal.referencia} · Resp: {bal.responsavel_emissao || 'AEROCAD'}
+                        Ref: {bal.referencia || '—'} · Resp: {bal.responsavel_emissao || 'AEROCAD'}
                       </div>
                     </td>
                     <td className="px-4 py-3 text-right font-mono font-semibold text-emerald-700">
-                      {formatCurrency(bal.receita_total)}
+                      {formatCurrency(bal.receita_total ?? 0)}
                     </td>
                     <td className="px-4 py-3 text-right font-mono font-semibold text-rose-700">
-                      - {formatCurrency(bal.despesa_total)}
+                      - {formatCurrency(bal.despesa_total ?? 0)}
                     </td>
                     <td
                       className={`px-4 py-3 text-right font-mono font-bold ${
-                        bal.saldo_mes >= 0 ? 'text-emerald-700' : 'text-rose-700'
+                        (bal.saldo_mes ?? 0) >= 0 ? 'text-emerald-700' : 'text-rose-700'
                       }`}
                     >
-                      {formatCurrency(bal.saldo_mes)}
+                      {formatCurrency(bal.saldo_mes ?? 0)}
                     </td>
                     <td className="px-4 py-3 text-right font-mono font-bold text-[#D65100]">
-                      {formatCurrency(bal.saldo_acumulado_ano)}
+                      {formatCurrency(bal.saldo_acumulado_ano ?? 0)}
                     </td>
                     <td className="px-4 py-3 text-center font-mono text-neutral-600">
                       {bal.data_emissao ? formatDate(bal.data_emissao) : '—'}
@@ -670,23 +677,23 @@ export function BalancetesTab({
                   resumoKpis={[
                     {
                       rotulo: 'Receitas do Mês',
-                      valorFormatado: formatCurrency(balanceteAtivo.receita_total),
+                      valorFormatado: formatCurrency(balanceteAtivo.receita_total ?? 0),
                       cor: 'verde',
                     },
                     {
                       rotulo: 'Despesas do Mês',
-                      valorFormatado: formatCurrency(balanceteAtivo.despesa_total),
+                      valorFormatado: formatCurrency(balanceteAtivo.despesa_total ?? 0),
                       cor: 'vermelho',
                     },
                     {
                       rotulo: 'Saldo Líquido do Mês',
-                      valorFormatado: formatCurrency(balanceteAtivo.saldo_mes),
-                      cor: balanceteAtivo.saldo_mes >= 0 ? 'verde' : 'vermelho',
+                      valorFormatado: formatCurrency(balanceteAtivo.saldo_mes ?? 0),
+                      cor: (balanceteAtivo.saldo_mes ?? 0) >= 0 ? 'verde' : 'vermelho',
                       destaque: true,
                     },
                     {
                       rotulo: 'Acumulado no Ano',
-                      valorFormatado: formatCurrency(balanceteAtivo.saldo_acumulado_ano),
+                      valorFormatado: formatCurrency(balanceteAtivo.saldo_acumulado_ano ?? 0),
                       cor: 'laranja',
                       destaque: true,
                     },
@@ -706,26 +713,26 @@ export function BalancetesTab({
                             largura: '35%',
                           },
                         ],
-                        linhas: (balanceteAtivo.dados_consolidados?.receitas?.porCliente || []).map(
+                        linhas: (balanceteAtivo.dados_consolidados?.receitas?.porCliente ?? []).map(
                           (item) => [
                             { conteudo: item.clienteNome, destaque: true },
                             {
-                              conteudo: `${item.qtdLancamentos} nota(s)/parcela(s)`,
+                              conteudo: `${item.qtdLancamentos ?? 0} nota(s)/parcela(s)`,
                               alinhamento: 'center',
                             },
-                            { conteudo: formatCurrency(item.total), alinhamento: 'right' },
+                            { conteudo: formatCurrency(item.total ?? 0), alinhamento: 'right' },
                           ],
                         ),
                         linhaTotal: [
                           { conteudo: 'TOTAL DE RECEITAS DO MÊS' },
                           {
                             conteudo: `${
-                              balanceteAtivo.dados_consolidados?.receitas?.itens?.length || 0
+                              balanceteAtivo.dados_consolidados?.receitas?.itens?.length ?? 0
                             } itens`,
                             alinhamento: 'center',
                           },
                           {
-                            conteudo: formatCurrency(balanceteAtivo.receita_total),
+                            conteudo: formatCurrency(balanceteAtivo.receita_total ?? 0),
                             alinhamento: 'right',
                           },
                         ],
@@ -741,15 +748,18 @@ export function BalancetesTab({
                           { cabecalho: 'Total Pago (R$)', alinhamento: 'right', largura: '40%' },
                         ],
                         linhas: Object.entries(
-                          balanceteAtivo.dados_consolidados?.despesas?.porCategoria || {},
+                          balanceteAtivo.dados_consolidados?.despesas?.porCategoria ?? {},
                         ).map(([cat, val]) => [
                           { conteudo: cat.toUpperCase().replace(/_/g, ' ') },
-                          { conteudo: `- ${formatCurrency(val)}`, alinhamento: 'right' },
+                          {
+                            conteudo: `- ${formatCurrency(Number(val) || 0)}`,
+                            alinhamento: 'right',
+                          },
                         ]),
                         linhaTotal: [
                           { conteudo: 'TOTAL DE DESPESAS DO MÊS' },
                           {
-                            conteudo: `- ${formatCurrency(balanceteAtivo.despesa_total)}`,
+                            conteudo: `- ${formatCurrency(balanceteAtivo.despesa_total ?? 0)}`,
                             alinhamento: 'right',
                           },
                         ],
@@ -765,13 +775,16 @@ export function BalancetesTab({
                           { cabecalho: 'Despesas (R$)', alinhamento: 'right', largura: '25%' },
                           { cabecalho: 'Resultado (R$)', alinhamento: 'right', largura: '20%' },
                         ],
-                        linhas: (balanceteAtivo.dados_consolidados?.acumuladoAno?.meses || []).map(
+                        linhas: (balanceteAtivo.dados_consolidados?.acumuladoAno?.meses ?? []).map(
                           (m) => [
                             { conteudo: m.nomeMes, destaque: true },
-                            { conteudo: formatCurrency(m.receita), alinhamento: 'right' },
-                            { conteudo: `- ${formatCurrency(m.despesa)}`, alinhamento: 'right' },
+                            { conteudo: formatCurrency(m.receita ?? 0), alinhamento: 'right' },
                             {
-                              conteudo: formatCurrency(m.saldo),
+                              conteudo: `- ${formatCurrency(m.despesa ?? 0)}`,
+                              alinhamento: 'right',
+                            },
+                            {
+                              conteudo: formatCurrency(m.saldo ?? 0),
                               alinhamento: 'right',
                               destaque: true,
                             },
@@ -780,15 +793,15 @@ export function BalancetesTab({
                         linhaTotal: [
                           { conteudo: 'TOTAL ACUMULADO NO ANO' },
                           {
-                            conteudo: formatCurrency(balanceteAtivo.total_receitas_ano),
+                            conteudo: formatCurrency(balanceteAtivo.total_receitas_ano ?? 0),
                             alinhamento: 'right',
                           },
                           {
-                            conteudo: `- ${formatCurrency(balanceteAtivo.total_despesas_ano)}`,
+                            conteudo: `- ${formatCurrency(balanceteAtivo.total_despesas_ano ?? 0)}`,
                             alinhamento: 'right',
                           },
                           {
-                            conteudo: formatCurrency(balanceteAtivo.saldo_acumulado_ano),
+                            conteudo: formatCurrency(balanceteAtivo.saldo_acumulado_ano ?? 0),
                             alinhamento: 'right',
                           },
                         ],

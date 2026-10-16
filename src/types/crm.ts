@@ -481,6 +481,8 @@ export type StatusAtivoPatrimonial =
   | 'baixado_alienado'
   | 'totalmente_depreciado'
 
+export type FormaAquisicaoAtivo = 'a_vista' | 'financiamento' | 'parcelamento'
+
 export type TipoDocumentoAtivo = 'comprovante' | 'contrato' | 'laudo' | 'matricula' | 'outro'
 
 export interface AtivoDocumentoMetadado {
@@ -495,6 +497,8 @@ export interface AtivoPatrimonioRecord extends RecordModel {
   identificador_codigo?: string
   descricao: string
   categoria: CategoriaAtivoPatrimonial
+  forma_aquisicao?: FormaAquisicaoAtivo
+  quantidade_parcelas?: number
   data_aquisicao: string
   valor_aquisicao: number
   vida_util_meses?: number
