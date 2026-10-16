@@ -1319,6 +1319,7 @@ export function ContasPagarTab({
         open={modalComprovanteFiscalAberto}
         onOpenChange={setModalComprovanteFiscalAberto}
         projetos={projetos}
+        contasBancarias={contasBancarias}
         credores={credores ?? []}
         isMobile={isMobile}
         onSuccess={async () => {

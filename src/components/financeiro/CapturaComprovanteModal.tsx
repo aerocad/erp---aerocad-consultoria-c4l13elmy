@@ -52,13 +52,14 @@ import {
 import { useFinanceiroVisibilidade } from '@/contexts/FinanceiroVisibilidadeContext'
 import { salvarCredor } from '@/services/credores'
 import { PLANO_CONTAS_AEROCAD, sugerirPlanoContasPorCategoria } from '@/lib/planoContas'
-import type { ProjetoRecord, CredorRecord } from '@/types/crm'
+import type { ProjetoRecord, CredorRecord, ContaBancariaRecord } from '@/types/crm'
 import { Building2, Copy, Printer, Plus, CheckCircle2 } from 'lucide-react'
 
 interface CapturaComprovanteModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   projetos: ProjetoRecord[]
+  contasBancarias?: ContaBancariaRecord[]
   credores?: CredorRecord[]
   isMobile: boolean
   onSuccess: () => Promise<void> | void
@@ -68,6 +69,7 @@ export function CapturaComprovanteModal({
   open,
   onOpenChange,
   projetos,
+  contasBancarias = [],
   credores = [],
   isMobile,
   onSuccess,
@@ -94,9 +96,7 @@ export function CapturaComprovanteModal({
   const [salvandoCredorRapido, setSalvandoCredorRapido] = useState(false)
 
   // Dados fiscais adicionais (chave 44, série, etc.)
-  const [credorId, setCredorId] = useState<string>('')
-  const [mostrarCadastroCredor, setMostrarCadastroCredor] = useState(false)
-  const [salvandoCredorRapido, setSalvandoCredorRapido] = useState(false)
+  const [chaveAcesso, setChaveAcesso] = useState<string>('')
 
   // Campos essenciais enxutos (1: Estabelecimento, 2: CNPJ, 3: Data, 4: Valor Total, 5: Forma de Pagamento)
   const [tipoDoc, setTipoDoc] = useState<TipoDocumentoFiscal>('cupom_fiscal')
@@ -144,6 +144,7 @@ export function CapturaComprovanteModal({
       setIsPdf(false)
       setIsSubmitting(false)
       setAvisoExtracao(null)
+      setChaveAcesso('')
       setCredorId('')
       setMostrarCadastroCredor(false)
       setModoEssencialAtivo(false)
@@ -1191,12 +1192,35 @@ export function CapturaComprovanteModal({
                           <Label className="text-xs text-neutral-600">
                             Conta Bancária de Pagamento
                           </Label>
-                          <Input
-                            value={contaBancariaId}
-                            onChange={(e) => setContaBancariaId(e.target.value)}
-                            placeholder="Apelido da conta / banco..."
-                            className="h-8 text-xs"
-                          />
+                          {contasBancarias.length > 0 ? (
+                            <Select
+                              value={contaBancariaId || 'nenhuma'}
+                              onValueChange={(val) =>
+                                setContaBancariaId(val === 'nenhuma' ? '' : val)
+                              }
+                            >
+                              <SelectTrigger className="h-8 text-xs">
+                                <SelectValue placeholder="Selecione a conta bancária..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="nenhuma">Não associada / Outro</SelectItem>
+                                {contasBancarias
+                                  .filter((c) => c.ativo !== false)
+                                  .map((cb) => (
+                                    <SelectItem key={cb.id} value={cb.id}>
+                                      {cb.apelido} ({cb.banco_nome})
+                                    </SelectItem>
+                                  ))}
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <Input
+                              value={contaBancariaId}
+                              onChange={(e) => setContaBancariaId(e.target.value)}
+                              placeholder="Apelido da conta / banco..."
+                              className="h-8 text-xs"
+                            />
+                          )}
                         </div>
                       </div>
 

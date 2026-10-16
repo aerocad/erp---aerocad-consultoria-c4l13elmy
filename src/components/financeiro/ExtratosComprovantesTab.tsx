@@ -70,6 +70,7 @@ interface ExtratosComprovantesTabProps {
   parcelas: ParcelaRecord[]
   contasPagar: ContaPagarRecord[]
   contasReceber: ContaReceberRecord[]
+  contasBancarias?: ContaBancariaRecord[]
   projetos?: import('@/types/crm').ProjetoRecord[]
   credores?: import('@/types/crm').CredorRecord[]
   canWrite: boolean
@@ -86,6 +87,7 @@ export function ExtratosComprovantesTab({
   parcelas,
   contasPagar,
   contasReceber,
+  contasBancarias: contasBancariasProp = [],
   projetos = [],
   credores = [],
   canWrite,
@@ -108,19 +110,31 @@ export function ExtratosComprovantesTab({
   const [filtroTipo, setFiltroTipo] = useState<string>('todos')
 
   // Contas Bancárias PJ e Seleção no Upload do Extrato
-  const [contasBancarias, setContasBancarias] = useState<ContaBancariaRecord[]>([])
-  const [contaBancariaSelecionadaUpload, setContaBancariaSelecionadaUpload] = useState<string>('')
+  const [contasBancarias, setContasBancarias] = useState<ContaBancariaRecord[]>(contasBancariasProp)
+  const [contaBancariaSelecionadaUpload, setContaBancariaSelecionadaUpload] = useState<string>(
+    contasBancariasProp.length > 0 ? contasBancariasProp[0].id : '',
+  )
   const [filtroContaBancaria, setFiltroContaBancaria] = useState<string>('todos')
 
   useEffect(() => {
+    if (contasBancariasProp.length > 0) {
+      setContasBancarias(contasBancariasProp)
+      if (!contaBancariaSelecionadaUpload) {
+        setContaBancariaSelecionadaUpload(contasBancariasProp[0].id)
+      }
+      return
+    }
+
     pb.collection('contas_bancarias')
       .getFullList<ContaBancariaRecord>({ sort: 'apelido' })
       .then((res) => {
         setContasBancarias(res)
-        if (res.length > 0) setContaBancariaSelecionadaUpload(res[0].id)
+        if (res.length > 0 && !contaBancariaSelecionadaUpload) {
+          setContaBancariaSelecionadaUpload(res[0].id)
+        }
       })
       .catch((err) => console.log('Erro ao carregar contas bancárias PJ:', err))
-  }, [])
+  }, [contasBancariasProp, contaBancariaSelecionadaUpload])
 
   // Modais
   const [modalUploadAberto, setModalUploadAberto] = useState(false)
@@ -184,86 +198,111 @@ export function ExtratosComprovantesTab({
     )
   }, [transacaoParaConciliar, parcelas, contasPagar, contasReceber])
 
-  // Handler de importação de arquivo de extrato
+  // Handler de importação de arquivos de extrato (suporta múltiplos extratos de uma vez)
   async function handleFileSelected(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
+    const fileList = e.target.files
+    if (!fileList || fileList.length === 0) return
 
+    const files = Array.from(fileList)
     setIsProcessandoUpload(true)
+
+    const contaBancariaAlvo = contasBancarias.find((c) => c.id === contaBancariaSelecionadaUpload)
+    let totalExtratosImportados = 0
+    let totalTransacoesImportadas = 0
+    let ultimoExtratoIdCriado = ''
+
     try {
-      const ext = file.name.split('.').pop()?.toLowerCase() || ''
-      let parsed = null
-      let formato: 'ofx' | 'csv' | 'xlsx' = 'ofx'
+      for (const file of files) {
+        const ext = file.name.split('.').pop()?.toLowerCase() || ''
+        let parsed = null
+        let formato: 'ofx' | 'csv' | 'xlsx' = 'ofx'
 
-      if (ext === 'ofx') {
-        formato = 'ofx'
-        const text = await file.text()
-        parsed = parseOfxString(text)
-      } else if (ext === 'csv' || ext === 'xlsx' || ext === 'xls') {
-        formato = ext === 'csv' ? 'csv' : 'xlsx'
-        parsed = await parsePlanilhaExtrato(file)
-      } else {
-        throw new Error('Formato não suportado. Utilize arquivos .OFX, .CSV ou .XLSX.')
-      }
-
-      if (!parsed.transacoes.length) {
-        throw new Error('Nenhuma transação válida identificada no arquivo.')
-      }
-
-      // Calcula totais
-      const totalEntradas = parsed.transacoes
-        .filter((t) => t.tipo === 'entrada')
-        .reduce((acc, t) => acc + t.valor, 0)
-      const totalSaidas = parsed.transacoes
-        .filter((t) => t.tipo === 'saida')
-        .reduce((acc, t) => acc + t.valor, 0)
-
-      // 1. Cria o registro de Extrato no PB vinculado à conta bancária PJ escolhida
-      const extratoRecord = await createOne<ExtratoRecord>('extratos', {
-        nome_arquivo: file.name,
-        formato,
-        banco: parsed.banco || 'Banco Comercial',
-        conta: parsed.conta || '',
-        conta_bancaria: contaBancariaSelecionadaUpload || null,
-        data_inicio: parsed.dataInicio ? `${parsed.dataInicio} 12:00:00.000Z` : null,
-        data_fim: parsed.dataFim ? `${parsed.dataFim} 12:00:00.000Z` : null,
-        total_transacoes: parsed.transacoes.length,
-        total_entradas: totalEntradas,
-        total_saidas: totalSaidas,
-        saldo_final: parsed.saldoFinal || 0,
-        usuario: user?.id || null,
-      })
-
-      // 2. Cria as linhas de transação
-      let salvas = 0
-      for (const t of parsed.transacoes) {
-        try {
-          await createOne('extratos_transacoes', {
-            extrato: extratoRecord.id,
-            data: `${t.data} 12:00:00.000Z`,
-            descricao: t.descricao,
-            valor: t.valor,
-            tipo: t.tipo,
-            documento_ref: t.documentoRef || '',
-            fitid: t.fitid,
-            status_conciliacao: 'pendente',
-          })
-          salvas++
-        } catch {
-          /* continua importando as demais */
+        if (ext === 'ofx') {
+          formato = 'ofx'
+          const text = await file.text()
+          parsed = parseOfxString(text)
+        } else if (ext === 'csv' || ext === 'xlsx' || ext === 'xls') {
+          formato = ext === 'csv' ? 'csv' : 'xlsx'
+          parsed = await parsePlanilhaExtrato(file)
+        } else {
+          toast.error(
+            `Arquivo "${file.name}" ignorado: formato não suportado (use OFX, CSV ou XLSX).`,
+          )
+          continue
         }
+
+        if (!parsed.transacoes.length) {
+          toast.warning(`Extrato "${file.name}" não continha transações válidas.`)
+          continue
+        }
+
+        // Calcula totais
+        const totalEntradas = parsed.transacoes
+          .filter((t) => t.tipo === 'entrada')
+          .reduce((acc, t) => acc + t.valor, 0)
+        const totalSaidas = parsed.transacoes
+          .filter((t) => t.tipo === 'saida')
+          .reduce((acc, t) => acc + t.valor, 0)
+
+        // 1. Cria o registro de Extrato no PB vinculado à conta bancária PJ escolhida
+        const extratoRecord = await createOne<ExtratoRecord>('extratos', {
+          nome_arquivo: file.name,
+          formato,
+          banco: contaBancariaAlvo
+            ? `${contaBancariaAlvo.banco_nome} (${contaBancariaAlvo.apelido})`
+            : parsed.banco || 'Banco Comercial',
+          conta: contaBancariaAlvo?.numero_conta || parsed.conta || '',
+          conta_bancaria: contaBancariaSelecionadaUpload || null,
+          data_inicio: parsed.dataInicio ? `${parsed.dataInicio} 12:00:00.000Z` : null,
+          data_fim: parsed.dataFim ? `${parsed.dataFim} 12:00:00.000Z` : null,
+          total_transacoes: parsed.transacoes.length,
+          total_entradas: totalEntradas,
+          total_saidas: totalSaidas,
+          saldo_final: parsed.saldoFinal || 0,
+          usuario: user?.id || null,
+        })
+
+        ultimoExtratoIdCriado = extratoRecord.id
+        totalExtratosImportados++
+
+        // 2. Cria as linhas de transação
+        let salvas = 0
+        for (const t of parsed.transacoes) {
+          try {
+            await createOne('extratos_transacoes', {
+              extrato: extratoRecord.id,
+              data: `${t.data} 12:00:00.000Z`,
+              descricao: t.descricao,
+              valor: t.valor,
+              tipo: t.tipo,
+              documento_ref: t.documentoRef || '',
+              fitid: t.fitid,
+              status_conciliacao: 'pendente',
+            })
+            salvas++
+          } catch {
+            /* continua importando as demais */
+          }
+        }
+        totalTransacoesImportadas += salvas
       }
 
-      toast.success(
-        `Extrato "${file.name}" importado com sucesso! ${salvas} transações registradas para conciliação.`,
-      )
-      setModalUploadAberto(false)
-      setExtratoSelecionadoId(extratoRecord.id)
-      await onReloadExtratos()
-      await onReloadTransacoes()
+      if (totalExtratosImportados > 0) {
+        toast.success(
+          `${totalExtratosImportados} extrato(s) importado(s) com sucesso! ${totalTransacoesImportadas} transações alimentadas no Fluxo de Caixa e prontas para conciliação.`,
+        )
+        setModalUploadAberto(false)
+        if (totalExtratosImportados === 1 && ultimoExtratoIdCriado) {
+          setExtratoSelecionadoId(ultimoExtratoIdCriado)
+        } else {
+          setExtratoSelecionadoId('todos')
+        }
+        await onReloadExtratos()
+        await onReloadTransacoes()
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
-      toast.error(`Falha ao importar extrato: ${msg}`)
+      toast.error(`Falha ao importar extratos: ${msg}`)
     } finally {
       setIsProcessandoUpload(false)
       e.target.value = ''
@@ -820,11 +859,14 @@ export function ExtratosComprovantesTab({
             <div className="border-2 border-dashed border-neutral-300 rounded-xl p-6 text-center hover:border-[#FF6A13] transition cursor-pointer relative bg-neutral-50/50">
               <FileUp className="mx-auto h-8 w-8 text-[#FF6A13] mb-2" />
               <p className="font-semibold text-neutral-800">
-                Clique para selecionar ou arraste o extrato
+                Clique para selecionar ou arraste um ou mais extratos simultaneamente
               </p>
-              <p className="text-[11px] text-neutral-500 mt-0.5">OFX, CSV ou XLSX de até 25 MB</p>
+              <p className="text-[11px] text-neutral-500 mt-0.5">
+                OFX, CSV ou XLSX (seleção múltipla permitida)
+              </p>
               <input
                 type="file"
+                multiple
                 accept=".ofx,.csv,.xlsx,.xls"
                 onChange={handleFileSelected}
                 disabled={isProcessandoUpload}
@@ -1084,6 +1126,7 @@ export function ExtratosComprovantesTab({
         open={modalCapturaIaAberto}
         onOpenChange={setModalCapturaIaAberto}
         projetos={projetos}
+        contasBancarias={contasBancarias}
         credores={credores}
         isMobile={isMobile}
         onSuccess={async () => {

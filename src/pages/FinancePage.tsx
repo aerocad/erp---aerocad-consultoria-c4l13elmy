@@ -78,6 +78,7 @@ import type {
 } from '@/types/crm'
 import { ContasPagarTab } from '@/components/financeiro/ContasPagarTab'
 import { CredoresTab } from '@/components/financeiro/CredoresTab'
+import { ContasBancariasTab } from '@/components/financeiro/ContasBancariasTab'
 import { ContasReceberTab } from '@/components/financeiro/ContasReceberTab'
 import { FluxoCaixaTab } from '@/components/financeiro/FluxoCaixaTab'
 import { ExtratosComprovantesTab } from '@/components/financeiro/ExtratosComprovantesTab'
@@ -1181,6 +1182,9 @@ export function FinancePage() {
         totalReceberAberto={totalReceberAberto}
         qtdReceberAtrasadas={qtdReceberAtrasadas}
         totalCredoresAtivos={credores.data.filter((c) => c.status === 'ativo').length}
+        totalContasBancariasAtivas={
+          contasBancarias.data.filter((c: any) => c.ativo !== false).length
+        }
         saldoMesCorrente={saldoMesCorrente}
         mesCorrenteNome={mesCorrenteNome}
         qtdExtratosPendentes={qtdExtratosPendentes}
@@ -1306,6 +1310,23 @@ export function FinancePage() {
           {credores.data.length > 0 && (
             <span className="ml-1 rounded-full bg-orange-100 text-[#D65100] text-[10px] px-1.5 py-0.2 font-bold">
               {credores.data.length}
+            </span>
+          )}
+        </button>
+
+        <button
+          onClick={() => setActiveTab('contas_bancarias')}
+          className={`pb-3 px-3 text-xs sm:text-sm font-bold border-b-2 transition flex items-center gap-1.5 ${
+            activeTab === 'contas_bancarias'
+              ? 'border-[#FF6A13] text-[#FF6A13]'
+              : 'border-transparent text-[#737373] hover:text-[#333]'
+          }`}
+        >
+          <Landmark className="h-4 w-4" />
+          Contas Bancárias
+          {contasBancarias.data.length > 0 && (
+            <span className="ml-1 rounded-full bg-orange-100 text-[#D65100] text-[10px] px-1.5 py-0.2 font-bold">
+              {contasBancarias.data.filter((c: any) => c.ativo !== false).length}
             </span>
           )}
         </button>
@@ -1449,6 +1470,17 @@ export function FinancePage() {
             }}
           />
         </div>
+      ) : activeTab === 'contas_bancarias' ? (
+        <div className="mt-5">
+          <ContasBancariasTab
+            contas={contasBancarias.data}
+            canWrite={canWrite}
+            canDelete={user?.role === 'admin'}
+            onReload={async () => {
+              void contasBancarias.reload()
+            }}
+          />
+        </div>
       ) : activeTab === 'contas_receber' ? (
         <div className="mt-5">
           <ContasReceberTab
@@ -1471,6 +1503,7 @@ export function FinancePage() {
             parcelas={installments.data}
             contasPagar={contasPagar.data}
             contasReceber={contasReceber.data}
+            transacoesExtratos={extratosTransacoes.data}
           />
         </div>
       ) : activeTab === 'extratos' ? (
@@ -1481,6 +1514,7 @@ export function FinancePage() {
             parcelas={installments.data}
             contasPagar={contasPagar.data}
             contasReceber={contasReceber.data}
+            contasBancarias={contasBancarias.data}
             projetos={projects.data}
             credores={credores.data}
             canWrite={canWrite}

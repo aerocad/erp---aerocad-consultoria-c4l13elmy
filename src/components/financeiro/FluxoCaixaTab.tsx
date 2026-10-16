@@ -15,10 +15,13 @@ import { Button } from '@/components/ui/button'
 import { formatCurrency, formatDate } from '@/lib/format'
 import type { ContaPagarRecord, ContaReceberRecord, ParcelaRecord } from '@/types/crm'
 
-interface FluxoCaixaTabProps {
+import type { ExtratoTransacaoRecord } from '@/types/crm'
+
+export interface FluxoCaixaTabProps {
   parcelas: ParcelaRecord[]
   contasPagar: ContaPagarRecord[]
   contasReceber: ContaReceberRecord[]
+  transacoesExtratos?: ExtratoTransacaoRecord[]
 }
 
 interface ItemFluxoMes {
@@ -43,7 +46,12 @@ interface MesFluxo {
   itens: ItemFluxoMes[]
 }
 
-export function FluxoCaixaTab({ parcelas, contasPagar, contasReceber }: FluxoCaixaTabProps) {
+export function FluxoCaixaTab({
+  parcelas,
+  contasPagar,
+  contasReceber,
+  transacoesExtratos = [],
+}: FluxoCaixaTabProps) {
   // Ano de referência selecionado (padrão ano atual ou 2026/2025 conforme dados existentes)
   const [anoRef, setAnoRef] = useState<number>(() => {
     // Detecta ano com maior concentração de dados ou 2026
@@ -154,6 +162,56 @@ export function FluxoCaixaTab({ parcelas, contasPagar, contasReceber }: FluxoCai
       }
     }
 
+    // 4. Processa Lançamentos Reais Alimentados por Extratos Bancários (OFX / Planilhas)
+    // Se a transação do extrato não estiver vinculada a uma conta_pagar/parcela já contabilizada,
+    // ou for classificada no extrato, entra como movimento bancário real no fluxo de caixa.
+    const idsVinculadosSet = new Set<string>()
+    for (const tx of transacoesExtratos) {
+      if (tx.vinculo_id) idsVinculadosSet.add(tx.vinculo_id)
+    }
+
+    for (const tx of transacoesExtratos) {
+      if (tx.status_conciliacao === 'ignorado') continue
+      if (!tx.data) continue
+      const anoMes = tx.data.slice(0, 7)
+      const mesObj = mesesMap.get(anoMes)
+      if (!mesObj) continue
+
+      // Se a transação já foi conciliada com uma conta a pagar ou parcela já presente nos arrays acima,
+      // evitamos duplicar o montante no saldo realizado
+      const isConciliadoComItem = Boolean(tx.vinculo_id)
+      const bancoOrigem =
+        tx.expand?.extrato?.banco || tx.expand?.extrato?.nome_arquivo || 'Extrato Bancário'
+
+      if (tx.tipo === 'entrada') {
+        if (!isConciliadoComItem) {
+          mesObj.entradasRealizadas += tx.valor
+          mesObj.entradasPrevistas += tx.valor
+        }
+        mesObj.itens.push({
+          tipo: 'entrada',
+          descricao: `[Extrato] ${tx.descricao}`,
+          origem: `${bancoOrigem}${tx.status_conciliacao === 'conciliado' ? ' · Conciliado' : ''}`,
+          valor: tx.valor,
+          dataRef: tx.data.slice(0, 10),
+          status: 'realizado',
+        })
+      } else {
+        if (!isConciliadoComItem) {
+          mesObj.saidasRealizadas += tx.valor
+          mesObj.saidasPrevistas += tx.valor
+        }
+        mesObj.itens.push({
+          tipo: 'saida',
+          descricao: `[Extrato] ${tx.descricao}`,
+          origem: `${bancoOrigem}${tx.status_conciliacao === 'conciliado' ? ' · Conciliado' : ''}`,
+          valor: tx.valor,
+          dataRef: tx.data.slice(0, 10),
+          status: 'realizado',
+        })
+      }
+    }
+
     // Calcula resultados e saldo acumulado mês a mês
     const lista = Array.from(mesesMap.values())
     let saldoAcumuladoCorr = 0
@@ -169,7 +227,7 @@ export function FluxoCaixaTab({ parcelas, contasPagar, contasReceber }: FluxoCai
     }
 
     return lista
-  }, [anoRef, parcelas, contasPagar, contasReceber])
+  }, [anoRef, parcelas, contasPagar, contasReceber, transacoesExtratos])
 
   // Totalizadores anuais
   const totalEntradasPrevistasAno = fluxo12Meses.reduce((acc, m) => acc + m.entradasPrevistas, 0)

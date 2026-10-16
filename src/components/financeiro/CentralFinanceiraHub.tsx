@@ -21,6 +21,7 @@ export type FinanceTabKey =
   | 'contas_pagar'
   | 'contas_receber'
   | 'credores'
+  | 'contas_bancarias'
   | 'fluxo_caixa'
   | 'extratos'
   | 'balancetes'
@@ -42,6 +43,8 @@ export interface CentralFinanceiraHubProps {
   qtdReceberAtrasadas: number
   // Dados de Credores
   totalCredoresAtivos?: number
+  // Dados de Contas Bancárias PJ
+  totalContasBancariasAtivas?: number
   // Dados de Fluxo de Caixa
   saldoMesCorrente: number
   mesCorrenteNome: string
@@ -80,6 +83,7 @@ export function CentralFinanceiraHub({
   totalReceberAberto,
   qtdReceberAtrasadas,
   totalCredoresAtivos = 0,
+  totalContasBancariasAtivas = 0,
   saldoMesCorrente,
   mesCorrenteNome,
   qtdExtratosPendentes,
@@ -110,6 +114,29 @@ export function CentralFinanceiraHub({
         </span>
       ),
       statSubtext: 'Integração direta com Contas a Pagar',
+      visible: true,
+    },
+    {
+      id: 'contas_bancarias',
+      title: 'Contas Bancárias',
+      subtitle: 'Contas correntes PJ, poupanças e saldos iniciais',
+      icon: Building2,
+      accentColor: '#FF6A13',
+      iconBg: 'bg-amber-50 border-amber-200 text-[#FF6A13]',
+      iconColor: 'text-[#FF6A13]',
+      badge: (
+        <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-900 border border-amber-200">
+          PJ Aerocad
+        </span>
+      ),
+      statLabel: 'Contas ativas',
+      statValue: (
+        <span className="mono-value font-bold text-neutral-900">
+          {totalContasBancariasAtivas}{' '}
+          <span className="text-xs font-normal text-neutral-500">contas PJ</span>
+        </span>
+      ),
+      statSubtext: 'Alimentam lançamentos e extratos',
       visible: true,
     },
     {

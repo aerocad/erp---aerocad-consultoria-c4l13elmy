@@ -17,6 +17,7 @@ import { toast } from 'sonner'
 import { ImportacaoWizard } from '@/components/importacao/ImportacaoWizard'
 import { WhatsAppSettingsSection } from '@/components/settings/WhatsAppSettingsSection'
 import { ExportarDadosSection } from '@/components/settings/ExportarDadosSection'
+import { ContasBancariasTab } from '@/components/financeiro/ContasBancariasTab'
 
 import { CrmBadge } from '@/components/common/CrmBadge'
 import { ErrorState, PageLoading } from '@/components/common/States'
@@ -48,7 +49,14 @@ import { roleLabels } from '@/lib/crm'
 import { formatCurrency, initials } from '@/lib/format'
 import pb from '@/lib/pocketbase/client'
 import { createOne, updateOne } from '@/services/api'
-import type { ModeloRecord, Role, SequenciaRecord, ServiceRecord, UserRecord } from '@/types/crm'
+import type {
+  ContaBancariaRecord,
+  ModeloRecord,
+  Role,
+  SequenciaRecord,
+  ServiceRecord,
+  UserRecord,
+} from '@/types/crm'
 
 export default function SettingsPage() {
   const {
@@ -64,6 +72,7 @@ export default function SettingsPage() {
   const templates = useCrmData<ModeloRecord>('modelos_documentos', { sort: 'nome' })
   const services = useCrmData<ServiceRecord>('servicos_catalogo', { sort: 'codigo' })
   const sequences = useCrmData<SequenciaRecord>('sequencias', { sort: 'chave' })
+  const contasBancarias = useCrmData<ContaBancariaRecord>('contas_bancarias', { sort: 'apelido' })
   const isRealAdmin = rawUser?.role === 'admin'
   const isAdmin = user?.role === 'admin'
   const [templateOpen, setTemplateOpen] = useState(false)
@@ -182,6 +191,13 @@ export default function SettingsPage() {
           <TabsTrigger value="modelos">Modelos</TabsTrigger>
           <TabsTrigger value="servicos">Serviços e preços</TabsTrigger>
           <TabsTrigger value="numeracao">Numeração</TabsTrigger>
+          <TabsTrigger
+            value="contas_bancarias"
+            className="flex items-center gap-1.5 font-semibold text-[#D65100]"
+          >
+            <Shield className="h-3.5 w-3.5" />
+            Contas Bancárias PJ
+          </TabsTrigger>
           {isAdmin && (
             <>
               <TabsTrigger
@@ -502,6 +518,16 @@ export default function SettingsPage() {
               ))}
             </div>
           </section>
+        </TabsContent>
+        <TabsContent value="contas_bancarias">
+          <ContasBancariasTab
+            contas={contasBancarias.data}
+            canWrite={isRealAdmin || rawUser?.role === 'financeiro'}
+            canDelete={isRealAdmin}
+            onReload={async () => {
+              void contasBancarias.reload()
+            }}
+          />
         </TabsContent>
         {isAdmin && (
           <>
