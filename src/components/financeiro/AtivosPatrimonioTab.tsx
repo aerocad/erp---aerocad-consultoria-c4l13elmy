@@ -16,6 +16,7 @@ import {
   Calendar,
   Layers,
   FileCheck,
+  FileText,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -76,13 +77,12 @@ export const DEPRECIACAO_PADRAO: Record<
   software_licenca: { vidaUtilMeses: 60, taxaAnual: 20 },
   drone_aeronave: { vidaUtilMeses: 60, taxaAnual: 20 },
   equipamento_topografico: { vidaUtilMeses: 120, taxaAnual: 10 }, // 10 anos = 10% ao ano
-  veiculo: { vidaUtilMeses: 60, taxaAnual: 20 },
-  terreno: { vidaUtilMeses: 0, taxaAnual: 0 }, // Terrenos não sofrem depreciação (NBC TG 27)
+  veiculo: { vidaUtilMeses: 60, taxaAnual: 20 }, // 5 anos = 20% ao ano
+  terreno: { vidaUtilMeses: 0, taxaAnual: 0 }, // Terrenos não sofrem depreciação: taxa 0% (NBC TG 27)
   imovel: { vidaUtilMeses: 300, taxaAnual: 4 }, // 25 anos = 4% ao ano
   mobiliario: { vidaUtilMeses: 120, taxaAnual: 10 },
   outro_ativo: { vidaUtilMeses: 120, taxaAnual: 10 },
 }
-
 /**
  * Calcula o valor contábil líquido atual com depreciação linear mensal.
  * Se categoria for 'terreno' ou vidaUtilMeses for 0, retorna depreciacaoAcumulada 0
@@ -142,13 +142,15 @@ export function AtivosPatrimonioTab({
   const [filtroStatus, setFiltroStatus] = useState<string>('todos')
 
   // Credores disponíveis para seleção de fornecedor/vendedor
-  const [listaCredores, setListaCredores] = useState<import('@/types/crm').CredorRecord[]>(credoresProp)
+  const [listaCredores, setListaCredores] =
+    useState<import('@/types/crm').CredorRecord[]>(credoresProp)
   const [buscaCredor, setBuscaCredor] = useState('')
 
   // Modais
   const [modalAberto, setModalAberto] = useState(false)
   const [editando, setEditando] = useState<AtivoPatrimonioRecord | null>(null)
   const [excluindo, setExcluindo] = useState<AtivoPatrimonioRecord | null>(null)
+  const [fichaAtivo, setFichaAtivo] = useState<AtivoPatrimonioRecord | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   // Anexos múltiplos pendentes no modal
@@ -159,7 +161,8 @@ export function AtivosPatrimonioTab({
     observacao: string
   }
   const [anexosPendentes, setAnexosPendentes] = useState<AnexoPendenteAtivo[]>([])
-  const [tipoAnexoAtual, setTipoAnexoAtual] = useState<import('@/types/crm').TipoDocumentoAtivo>('comprovante')
+  const [tipoAnexoAtual, setTipoAnexoAtual] =
+    useState<import('@/types/crm').TipoDocumentoAtivo>('comprovante')
 
   // Form State
   const [formData, setFormData] = useState<{
@@ -235,7 +238,9 @@ export function AtivosPatrimonioTab({
       const vidaUtilConfig =
         at.categoria === 'terreno'
           ? 0
-          : (at.vida_util_meses !== undefined ? at.vida_util_meses : DEPRECIACAO_PADRAO[at.categoria]?.vidaUtilMeses ?? 120)
+          : at.vida_util_meses !== undefined
+            ? at.vida_util_meses
+            : (DEPRECIACAO_PADRAO[at.categoria]?.vidaUtilMeses ?? 120)
 
       const calc = calcularDepreciacaoLinear(
         at.valor_aquisicao,
@@ -320,10 +325,18 @@ export function AtivosPatrimonioTab({
       valor_aquisicao: String(ativo.valor_aquisicao),
       vida_util_meses: ehTerreno
         ? '0'
-        : String(ativo.vida_util_meses !== undefined ? ativo.vida_util_meses : DEPRECIACAO_PADRAO[ativo.categoria]?.vidaUtilMeses ?? 120),
+        : String(
+            ativo.vida_util_meses !== undefined
+              ? ativo.vida_util_meses
+              : (DEPRECIACAO_PADRAO[ativo.categoria]?.vidaUtilMeses ?? 120),
+          ),
       taxa_depreciacao_anual: ehTerreno
         ? '0'
-        : String(ativo.taxa_depreciacao_anual !== undefined ? ativo.taxa_depreciacao_anual : DEPRECIACAO_PADRAO[ativo.categoria]?.taxaAnual ?? 10),
+        : String(
+            ativo.taxa_depreciacao_anual !== undefined
+              ? ativo.taxa_depreciacao_anual
+              : (DEPRECIACAO_PADRAO[ativo.categoria]?.taxaAnual ?? 10),
+          ),
       valor_residual: String(ativo.valor_residual || 0),
       status: ativo.status,
       numero_nf_registro: ativo.numero_nf_registro || '',
@@ -759,27 +772,39 @@ export function AtivosPatrimonioTab({
                     </td>
 
                     <td className="px-4 py-3 text-right whitespace-nowrap">
-                      {canWrite && (
-                        <div className="flex items-center justify-end gap-1.5">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => abrirModalEdicao(ativo)}
-                            className="h-7 px-2 text-xs text-neutral-600 hover:text-neutral-900"
-                          >
-                            Editar
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => setExcluindo(ativo)}
-                            className="h-7 w-7 p-0 text-neutral-400 hover:text-rose-600 hover:bg-rose-50"
-                            title="Excluir ativo"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      )}
+                      <div className="flex items-center justify-end gap-1.5">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setFichaAtivo(ativo)}
+                          className="h-7 px-2 text-xs text-neutral-600 hover:text-[#FF6A13]"
+                          title="Abrir ficha cadastral completa e documentos agrupados por tipo"
+                        >
+                          <FileText className="mr-1 h-3.5 w-3.5 text-[#FF6A13]" />
+                          Ficha
+                        </Button>
+                        {canWrite && (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => abrirModalEdicao(ativo)}
+                              className="h-7 px-2 text-xs text-neutral-600 hover:text-neutral-900"
+                            >
+                              Editar
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setExcluindo(ativo)}
+                              className="h-7 w-7 p-0 text-neutral-400 hover:text-rose-600 hover:bg-rose-50"
+                              title="Excluir ativo"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -921,18 +946,22 @@ export function AtivosPatrimonioTab({
                   </p>
                   <p className="text-[11px] text-blue-800">
                     Conforme o item 58 do Pronunciamento Técnico NBC TG 27 (CPC 27), terrenos têm
-                    vida útil ilimitada e não sofrem quotas de depreciação contábil, mantendo seu valor
-                    contábil integral no Ativo Imobilizado.
+                    vida útil ilimitada e não sofrem quotas de depreciação contábil, mantendo seu
+                    valor contábil integral no Ativo Imobilizado.
                   </p>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   <div className="space-y-1">
-                    <Label className="text-[11px] text-neutral-600">Vida Útil Estimada (Meses)</Label>
+                    <Label className="text-[11px] text-neutral-600">
+                      Vida Útil Estimada (Meses)
+                    </Label>
                     <Input
                       type="number"
                       value={formData.vida_util_meses}
-                      onChange={(e) => setFormData({ ...formData, vida_util_meses: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, vida_util_meses: e.target.value })
+                      }
                       className="h-8 text-xs font-mono"
                     />
                   </div>
@@ -1141,7 +1170,9 @@ export function AtivosPatrimonioTab({
                           <span className="font-semibold uppercase text-[9px] text-[#FF6A13]">
                             {meta?.tipo || 'DOC'}
                           </span>
-                          <span className="truncate max-w-[120px]">{meta?.nome_original || anexo}</span>
+                          <span className="truncate max-w-[120px]">
+                            {meta?.nome_original || anexo}
+                          </span>
                         </a>
                       )
                     })}
@@ -1182,6 +1213,244 @@ export function AtivosPatrimonioTab({
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal / Ficha Cadastral do Bem com Anexos Agrupados por Tipo */}
+      <Dialog open={!!fichaAtivo} onOpenChange={(v) => !v && setFichaAtivo(null)}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-neutral-900">
+              <Building className="h-5 w-5 text-[#FF6A13]" />
+              Ficha Patrimonial: {fichaAtivo?.identificador_codigo || 'Ativo'}
+            </DialogTitle>
+          </DialogHeader>
+
+          {fichaAtivo && (
+            <div className="space-y-4 text-xs py-2">
+              <div className="p-3 bg-neutral-50 rounded-lg border border-neutral-200 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <span className="text-[10px] text-neutral-400 font-bold uppercase block">
+                    Descrição do Bem
+                  </span>
+                  <p className="text-sm font-bold text-neutral-900">{fichaAtivo.descricao}</p>
+                </div>
+                <div>
+                  <span className="text-[10px] text-neutral-400 font-bold uppercase block">
+                    Categoria Contábil
+                  </span>
+                  <p className="font-semibold text-neutral-800">
+                    {CATEGORIA_ATIVO_LABELS[fichaAtivo.categoria] || fichaAtivo.categoria}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-[10px] text-neutral-400 font-bold uppercase block">
+                    Data de Aquisição
+                  </span>
+                  <p className="font-semibold text-neutral-800">
+                    {formatDate(fichaAtivo.data_aquisicao)}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-[10px] text-neutral-400 font-bold uppercase block">
+                    Custo Histórico / Aquisição
+                  </span>
+                  <p className="font-mono font-bold text-neutral-900">
+                    {formatCurrency(fichaAtivo.valor_aquisicao)}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-[10px] text-neutral-400 font-bold uppercase block">
+                    Fornecedor / Credor Vendedor
+                  </span>
+                  <p className="font-semibold text-neutral-800">
+                    {fichaAtivo.fornecedor_nome ||
+                      fichaAtivo.expand?.credor?.nome_razao_social ||
+                      'Não informado'}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-[10px] text-neutral-400 font-bold uppercase block">
+                    Localização / Responsável
+                  </span>
+                  <p className="font-semibold text-neutral-800">
+                    {fichaAtivo.localizacao_responsavel || 'Não especificada'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Informação Contábil / NBC TG 27 */}
+              {fichaAtivo.categoria === 'terreno' ? (
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-blue-900 text-xs">
+                  <p className="font-bold flex items-center gap-1.5">
+                    <FileCheck className="h-4 w-4 text-blue-600" />
+                    Regra NBC TG 27 — Terreno não sujeito a quotas de depreciação
+                  </p>
+                  <p className="text-[11px] text-blue-800 mt-1">
+                    Conforme normas do Conselho Federal de Contabilidade (NBC TG 27 / CPC 27), bens
+                    da categoria Terreno possuem vida útil econômica indeterminada e permanecem com
+                    valor contábil integral no Ativo Imobilizado.
+                  </p>
+                </div>
+              ) : (
+                <div className="p-3 bg-neutral-50 border border-neutral-200 rounded-lg grid grid-cols-2 gap-2 font-mono text-[11px]">
+                  <div>
+                    <span className="text-neutral-500 block">Depreciação Acumulada:</span>
+                    <strong className="text-amber-700">
+                      -{' '}
+                      {formatCurrency(
+                        calcularDepreciacaoLinear(
+                          fichaAtivo.valor_aquisicao,
+                          fichaAtivo.data_aquisicao,
+                          fichaAtivo.vida_util_meses ||
+                            DEPRECIACAO_PADRAO[fichaAtivo.categoria]?.vidaUtilMeses ||
+                            120,
+                          fichaAtivo.valor_residual || 0,
+                          fichaAtivo.categoria,
+                        ).depreciacaoAcumulada,
+                      )}
+                    </strong>
+                  </div>
+                  <div>
+                    <span className="text-neutral-500 block">Valor Contábil Atual:</span>
+                    <strong className="text-emerald-700">
+                      {formatCurrency(
+                        calcularDepreciacaoLinear(
+                          fichaAtivo.valor_aquisicao,
+                          fichaAtivo.data_aquisicao,
+                          fichaAtivo.vida_util_meses ||
+                            DEPRECIACAO_PADRAO[fichaAtivo.categoria]?.vidaUtilMeses ||
+                            120,
+                          fichaAtivo.valor_residual || 0,
+                          fichaAtivo.categoria,
+                        ).valorContabilAtual,
+                      )}
+                    </strong>
+                  </div>
+                </div>
+              )}
+
+              {/* Anexos agrupados por tipo (comprovante, contrato, laudo, matrícula, outro) */}
+              <div className="space-y-3 pt-2">
+                <h4 className="text-xs font-bold text-neutral-800 uppercase tracking-wider flex items-center gap-1.5">
+                  <Paperclip className="h-3.5 w-3.5 text-[#FF6A13]" />
+                  Documentos & Evidências Vinculados (Agrupados por Tipo)
+                </h4>
+
+                {(!fichaAtivo.anexos || fichaAtivo.anexos.length === 0) &&
+                !fichaAtivo.documento_evidencia ? (
+                  <p className="text-neutral-400 italic py-2">
+                    Nenhum documento ou anexo vinculado a este bem.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {(['comprovante', 'contrato', 'laudo', 'matricula', 'outro'] as const).map(
+                      (tipoChave) => {
+                        const anexosDoTipo = (fichaAtivo.anexos || []).filter((nomeArq) => {
+                          const meta = fichaAtivo.anexos_metadados?.find(
+                            (m) => m.file === nomeArq || m.nome_original === nomeArq,
+                          )
+                          return meta?.tipo === tipoChave || (!meta?.tipo && tipoChave === 'outro')
+                        })
+
+                        if (anexosDoTipo.length === 0) return null
+
+                        const labelsSecao: Record<string, string> = {
+                          comprovante: 'Comprovantes de Pagamento & Quitação',
+                          contrato: 'Contratos de Aquisição & Termos de Compra',
+                          laudo: 'Laudos Técnicos, Calibração & Vistorias',
+                          matricula: 'Matrículas Imobiliárias / Registros CRLV',
+                          outro: 'Outros Documentos Técnicos',
+                        }
+
+                        return (
+                          <div key={tipoChave} className="space-y-1.5">
+                            <span className="text-[11px] font-bold text-neutral-700 block">
+                              • {labelsSecao[tipoChave] || tipoChave} ({anexosDoTipo.length})
+                            </span>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              {anexosDoTipo.map((anexoNome, idx) => {
+                                const meta = fichaAtivo.anexos_metadados?.find(
+                                  (m) => m.file === anexoNome || m.nome_original === anexoNome,
+                                )
+                                const url = pb.files.getURL(fichaAtivo, anexoNome)
+                                const nomeExibicao = meta?.nome_original || anexoNome
+
+                                return (
+                                  <div
+                                    key={idx}
+                                    className="p-2 rounded border bg-neutral-50/70 flex items-center justify-between gap-2"
+                                  >
+                                    <div className="min-w-0">
+                                      <p className="text-xs font-semibold text-neutral-900 truncate">
+                                        {nomeExibicao}
+                                      </p>
+                                      {meta?.tamanho && (
+                                        <span className="text-[10px] text-neutral-400 font-mono">
+                                          {(meta.tamanho / 1024).toFixed(1)} KB
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div className="flex items-center gap-1 shrink-0">
+                                      <a
+                                        href={url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="p-1 rounded text-neutral-600 hover:text-[#FF6A13] hover:bg-white"
+                                        title="Visualizar anexo"
+                                      >
+                                        <FileText className="h-3.5 w-3.5" />
+                                      </a>
+                                      <a
+                                        href={url}
+                                        download={nomeExibicao}
+                                        className="p-1 rounded text-neutral-600 hover:text-[#FF6A13] hover:bg-white"
+                                        title="Baixar arquivo"
+                                      >
+                                        <Download className="h-3.5 w-3.5" />
+                                      </a>
+                                    </div>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )
+                      },
+                    )}
+
+                    {fichaAtivo.documento_evidencia && (
+                      <div className="space-y-1.5 pt-1">
+                        <span className="text-[11px] font-bold text-neutral-700 block">
+                          • Documento de Evidência / NF Principal (Legado)
+                        </span>
+                        <div className="p-2 rounded border bg-orange-50/40 border-orange-200 flex items-center justify-between gap-2">
+                          <span className="text-xs font-semibold text-neutral-900 truncate">
+                            {fichaAtivo.documento_evidencia}
+                          </span>
+                          <a
+                            href={pb.files.getURL(fichaAtivo, fichaAtivo.documento_evidencia)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-[#FF6A13] text-xs font-bold hover:underline"
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                            Abrir / Baixar
+                          </a>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setFichaAtivo(null)}>
+              Fechar Ficha
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

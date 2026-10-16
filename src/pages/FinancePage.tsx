@@ -1595,6 +1595,7 @@ export function FinancePage() {
             clientes={clients.data}
             contasBancarias={contasBancarias.data}
             ativosPatrimonio={ativosPatrimonio.data}
+            extratos={extratos.data}
             userRole={user?.role}
             usuarioNome={user?.name || user?.email || 'Usuário AEROCAD'}
             onNavigateTab={(tab) => {

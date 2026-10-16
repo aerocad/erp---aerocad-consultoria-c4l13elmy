@@ -117,10 +117,8 @@ export function ExtratosComprovantesTab({
   const { user } = useAuth()
   const isMobile = useIsMobile()
 
-  // Permissão de exclusão de extratos: restrita a admin/financeiro
-  const podeExcluirExtratos = Boolean(
-    canWrite && (user?.role === 'admin' || user?.role === 'financeiro')
-  )
+  // Permissão de exclusão de extratos: restrita exclusivamente ao Administrador (admin)
+  const podeExcluirExtratos = Boolean(canWrite && user?.role === 'admin')
 
   // Modal de Captura Fotográfica & Visão IA
   const [modalCapturaIaAberto, setModalCapturaIaAberto] = useState(false)
@@ -131,8 +129,9 @@ export function ExtratosComprovantesTab({
   const [isConciliandoLote, setIsConciliandoLote] = useState(false)
   const [nomeConfirmacaoExclusao, setNomeConfirmacaoExclusao] = useState('')
   const [isExcluindoExtrato, setIsExcluindoExtrato] = useState(false)
-  const [transacaoParaExcluir, setTransacaoParaExcluir] =
-    useState<ExtratoTransacaoRecord | null>(null)
+  const [transacaoParaExcluir, setTransacaoParaExcluir] = useState<ExtratoTransacaoRecord | null>(
+    null,
+  )
   const [isExcluindoTransacao, setIsExcluindoTransacao] = useState(false)
   const [busca, setBusca] = useState('')
   const [filtroStatus, setFiltroStatus] = useState<string>('todos')
@@ -275,6 +274,18 @@ export function ExtratosComprovantesTab({
       7, // tolerância de até 7 dias
     )
   }, [transacaoParaConciliar, parcelas, contasPagar, contasReceber])
+
+  // Seleção de sugestões no modal individual de conciliação
+  const [sugestaoSelecionadaModal, setSugestaoSelecionadaModal] =
+    useState<SugestaoConciliacao | null>(null)
+
+  useEffect(() => {
+    if (sugestoesAtuais.length > 0) {
+      setSugestaoSelecionadaModal(sugestoesAtuais[0])
+    } else {
+      setSugestaoSelecionadaModal(null)
+    }
+  }, [sugestoesAtuais])
 
   // Utilitário para ler arquivo de texto com suporte automático a ISO-8859-1 (Latin1) e UTF-8
   async function lerArquivoTextoComFallback(file: File): Promise<string> {
@@ -807,6 +818,9 @@ export function ExtratosComprovantesTab({
     }
   }
 
+  // Modal de confirmação da baixa em lote
+  const [modalConfirmacaoLoteAberto, setModalConfirmacaoLoteAberto] = useState(false)
+
   // Ações de seleção de transações para lote
   const transacoesPendentesVisiveis = useMemo(() => {
     return transacoesFiltradas.filter((t) => t.status_conciliacao === 'pendente')
@@ -1042,7 +1056,6 @@ export function ExtratosComprovantesTab({
           </span>
         </div>
       </div>
-
       {/* Seção de Extratos Importados */}
       {extratos.length > 0 && (
         <div className="crm-card p-3 space-y-2">
@@ -1142,7 +1155,6 @@ export function ExtratosComprovantesTab({
           </div>
         </div>
       )}
-
       {/* Barra de Ações em Lote e Filtros de Transações */}
       <div className="crm-card p-3 space-y-3">
         {/* Barra superior de conciliação em lote quando houver pendentes */}
@@ -1178,21 +1190,12 @@ export function ExtratosComprovantesTab({
             {selectedTxIds.length > 0 && (
               <Button
                 size="sm"
-                onClick={handleConfirmarEmLote}
+                onClick={() => setModalConfirmacaoLoteAberto(true)}
                 disabled={isConciliandoLote}
                 className="bg-[#FF6A13] hover:bg-[#E85B06] text-white h-8 text-xs font-semibold shadow-sm"
               >
-                {isConciliandoLote ? (
-                  <>
-                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                    Conciliando Lote...
-                  </>
-                ) : (
-                  <>
-                    <Check className="mr-1.5 h-3.5 w-3.5" />
-                    Confirmar em lote ({selectedTxIds.length})
-                  </>
-                )}
+                <Check className="mr-1.5 h-3.5 w-3.5" />
+                Confirmar em lote ({selectedTxIds.length})
               </Button>
             )}
           </div>
@@ -1602,41 +1605,61 @@ export function ExtratosComprovantesTab({
                 ) : (
                   <div className="divide-y border rounded-lg overflow-hidden bg-white">
                     {sugestoesAtuais.map((sug) => {
+                      const isSugChecked =
+                        sugestaoSelecionadaModal?.id === sug.id &&
+                        sugestaoSelecionadaModal?.tipo === sug.tipo
+
                       return (
                         <div
                           key={`${sug.tipo}_${sug.id}`}
-                          className="p-3 flex items-center justify-between gap-3 hover:bg-orange-50/30 transition"
+                          className={`p-3 flex items-center justify-between gap-3 transition cursor-pointer ${
+                            isSugChecked
+                              ? 'bg-orange-50/70 border-l-4 border-l-[#FF6A13]'
+                              : 'hover:bg-neutral-50'
+                          }`}
+                          onClick={() => setSugestaoSelecionadaModal(sug)}
                         >
-                          <div className="space-y-0.5">
-                            <div className="flex items-center gap-2">
-                              <span className="font-semibold text-neutral-900">{sug.titulo}</span>
-                              <CrmBadge
-                                tone={
-                                  sug.confianca === 'alta'
-                                    ? 'green'
+                          <div className="flex items-start gap-2.5">
+                            <input
+                              type="checkbox"
+                              checked={isSugChecked}
+                              onChange={() => setSugestaoSelecionadaModal(sug)}
+                              className="mt-1 rounded border-neutral-300 text-[#FF6A13] focus:ring-[#FF6A13] h-4 w-4 cursor-pointer"
+                            />
+                            <div className="space-y-0.5">
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold text-neutral-900">{sug.titulo}</span>
+                                <CrmBadge
+                                  tone={
+                                    sug.confianca === 'alta'
+                                      ? 'green'
+                                      : sug.confianca === 'media'
+                                        ? 'amber'
+                                        : 'gray'
+                                  }
+                                >
+                                  {sug.confianca === 'alta'
+                                    ? 'Alta Confiança'
                                     : sug.confianca === 'media'
-                                      ? 'amber'
-                                      : 'gray'
-                                }
-                              >
-                                {sug.confianca === 'alta'
-                                  ? 'Alta Confiança'
-                                  : sug.confianca === 'media'
-                                    ? 'Média Confiança'
-                                    : 'Data Distante'}
-                              </CrmBadge>
+                                      ? 'Média Confiança'
+                                      : 'Data Distante'}
+                                </CrmBadge>
+                              </div>
+                              <p className="text-[11px] text-neutral-500">{sug.detalhe}</p>
+                              <p className="text-[10px] text-neutral-400">
+                                Diferença de datas: {sug.diferencaDias} dia(s) · Valor:{' '}
+                                {formatCurrency(sug.valor)}
+                              </p>
                             </div>
-                            <p className="text-[11px] text-neutral-500">{sug.detalhe}</p>
-                            <p className="text-[10px] text-neutral-400">
-                              Diferença de datas: {sug.diferencaDias} dia(s) · Valor:{' '}
-                              {formatCurrency(sug.valor)}
-                            </p>
                           </div>
 
                           <Button
                             size="sm"
                             disabled={isConciliando}
-                            onClick={() => handleConfirmarConciliacao(sug)}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleConfirmarConciliacao(sug)
+                            }}
                             className="bg-emerald-600 hover:bg-emerald-700 text-white shrink-0 h-8 text-xs font-semibold"
                           >
                             <Check className="mr-1 h-3.5 w-3.5" />
@@ -2022,11 +2045,13 @@ export function ExtratosComprovantesTab({
           {modalExcluirExtrato && (
             <div className="space-y-3 text-xs">
               <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-rose-900 space-y-1">
-                <p className="font-bold">Ação irreversível restrita ao Financeiro e Administração:</p>
+                <p className="font-bold">
+                  Ação irreversível restrita ao Financeiro e Administração:
+                </p>
                 <p>
                   A exclusão do extrato <strong>{modalExcluirExtrato.nome_arquivo}</strong> apagará{' '}
-                  <strong>todas as suas transações vinculadas</strong> do banco de dados e atualizará o
-                  Fluxo de Caixa automaticamente.
+                  <strong>todas as suas transações vinculadas</strong> do banco de dados e
+                  atualizará o Fluxo de Caixa automaticamente.
                 </p>
               </div>
 
@@ -2071,7 +2096,93 @@ export function ExtratosComprovantesTab({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {/* Modal de Confirmação da Baixa em Lote */}
+      <Dialog
+        open={modalConfirmacaoLoteAberto}
+        onOpenChange={(aberto) => {
+          if (!isConciliandoLote) setModalConfirmacaoLoteAberto(aberto)
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-neutral-900">
+              <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+              Confirmar Baixa em Lote ({selectedTxIds.length} selecionadas)
+            </DialogTitle>
+          </DialogHeader>
 
+          <div className="space-y-3 text-xs py-2">
+            <p className="text-neutral-700">
+              Você está prestes a executar a <strong>baixa em cascata</strong> para as seguintes
+              movimentações bancárias selecionadas:
+            </p>
+            <div className="p-3 bg-neutral-50 rounded-lg border text-[11px] space-y-1.5 max-h-48 overflow-y-auto">
+              {transacoes
+                .filter((t) => selectedTxIds.includes(t.id))
+                .map((t) => (
+                  <div
+                    key={t.id}
+                    className="flex justify-between items-center py-1 border-b last:border-0 border-neutral-200"
+                  >
+                    <span className="truncate max-w-[240px] font-medium text-neutral-800">
+                      {t.descricao}
+                    </span>
+                    <span className="font-mono font-bold text-neutral-900 shrink-0">
+                      {formatCurrency(t.valor)}
+                    </span>
+                  </div>
+                ))}
+            </div>
+
+            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-900 space-y-1">
+              <span className="font-bold block">Efeito da baixa em cascata:</span>
+              <p>
+                • Despesas correspondentes: <strong>contas_pagar</strong> alteradas para{' '}
+                <strong>pago</strong>
+              </p>
+              <p>
+                • Parcelas e recebíveis: marcados como <strong>paga / recebido</strong>
+              </p>
+              <p>
+                • Lançamento do extrato: status alterado para <strong>conciliado</strong> com
+                recálculo automático do fluxo
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={isConciliandoLote}
+              onClick={() => setModalConfirmacaoLoteAberto(false)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              size="sm"
+              disabled={isConciliandoLote}
+              onClick={async () => {
+                await handleConfirmarEmLote()
+                setModalConfirmacaoLoteAberto(false)
+              }}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+            >
+              {isConciliandoLote ? (
+                <>
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                  Processando Baixas...
+                </>
+              ) : (
+                <>
+                  <Check className="mr-1.5 h-3.5 w-3.5" />
+                  Confirmar Baixas
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {/* Modal de Excluir Transação Individual */}
       <Dialog
         open={!!transacaoParaExcluir}
@@ -2081,12 +2192,14 @@ export function ExtratosComprovantesTab({
       >
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle className="text-rose-600 text-sm">Excluir Lançamento do Extrato</DialogTitle>
+            <DialogTitle className="text-rose-600 text-sm">
+              Excluir Lançamento do Extrato
+            </DialogTitle>
           </DialogHeader>
           {transacaoParaExcluir && (
             <p className="text-xs text-neutral-600">
-              Deseja remover o lançamento <strong>"{transacaoParaExcluir.descricao}"</strong> no valor de{' '}
-              <strong>{formatCurrency(transacaoParaExcluir.valor)}</strong>?
+              Deseja remover o lançamento <strong>"{transacaoParaExcluir.descricao}"</strong> no
+              valor de <strong>{formatCurrency(transacaoParaExcluir.valor)}</strong>?
             </p>
           )}
           <DialogFooter className="mt-2">

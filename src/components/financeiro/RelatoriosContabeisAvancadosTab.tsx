@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import {
   Scale,
   TrendingUp,
@@ -44,6 +44,7 @@ import {
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Progress } from '@/components/ui/progress'
+import { CrmBadge } from '@/components/common/CrmBadge'
 import { toast } from '@/hooks/use-toast'
 import JSZip from 'jszip'
 import {
@@ -69,7 +70,13 @@ import type {
   ClienteRecord,
   ContaBancariaRecord,
   AtivoPatrimonioRecord,
+  ExtratoRecord,
 } from '@/types/crm'
+import {
+  gerarDossieContabilZip,
+  FiltroDossieContabil,
+  TipoPeriodoDossie,
+} from '@/services/dossieContabilService'
 
 export interface RelatoriosContabeisAvancadosTabProps {
   parcelas: ParcelaRecord[]
@@ -79,6 +86,7 @@ export interface RelatoriosContabeisAvancadosTabProps {
   clientes: ClienteRecord[]
   contasBancarias: ContaBancariaRecord[]
   ativosPatrimonio: AtivoPatrimonioRecord[]
+  extratos?: ExtratoRecord[]
   userRole?: string
   usuarioNome?: string
   onNavigateTab?: (tab: string) => void
@@ -100,6 +108,7 @@ export function RelatoriosContabeisAvancadosTab({
   clientes,
   contasBancarias,
   ativosPatrimonio,
+  extratos: extratosProp = [],
   userRole,
   usuarioNome = 'Usuário AEROCAD',
   onNavigateTab,
@@ -111,13 +120,25 @@ export function RelatoriosContabeisAvancadosTab({
   const [secaoAtiva, setSecaoAtiva] = useState<SecaoContabil>('balanco')
   const [modalA4Aberto, setModalA4Aberto] = useState(false)
 
+  // Lista de extratos bancários com fallback via PocketBase se não passado como prop
+  const [extratosList, setExtratosList] = useState<ExtratoRecord[]>(extratosProp)
+
+  useEffect(() => {
+    if (extratosProp && extratosProp.length > 0) {
+      setExtratosList(extratosProp)
+    } else {
+      pb.collection('extratos')
+        .getFullList<ExtratoRecord>({ sort: '-created' })
+        .then((res) => setExtratosList(res))
+        .catch(() => {})
+    }
+  }, [extratosProp])
+
   // Modal e estado do Dossiê Contábil ZIP
   const [modalDossieAberto, setModalDossieAberto] = useState(false)
-  const [tipoPeriodoDossie, setTipoPeriodoDossie] = useState<string>('ano')
+  const [tipoPeriodoDossie, setTipoPeriodoDossie] = useState<TipoPeriodoDossie>('ano')
   const [anoDossie, setAnoDossie] = useState<string>('2026')
   const [mesDossie, setMesDossie] = useState<string>('1')
-  const [semestreDossie, setSemestreDossie] = useState<string>('1')
-  const [trimestreDossie, setTrimestreDossie] = useState<string>('1')
   const [dataInicioDossie, setDataInicioDossie] = useState<string>('')
   const [dataFimDossie, setDataFimDossie] = useState<string>('')
   const [gerandoDossie, setGerandoDossie] = useState(false)
@@ -1006,6 +1027,131 @@ export function RelatoriosContabeisAvancadosTab({
         ],
         linhas,
       })
+    }
+  }
+
+  // Gerador do Dossiê Contábil ZIP com JSZip
+  async function handleGerarDossieContabilZip() {
+    try {
+      setGerandoDossie(true)
+      setProgressoDossie(5)
+      setEtapaDossie('Iniciando empacotamento contábil...')
+
+      const filtroConfig: FiltroDossieContabil = {
+        tipo: tipoPeriodoDossie,
+        ano: Number(anoDossie) || 2026,
+        mes: tipoPeriodoDossie === 'mes' ? Number(mesDossie) || 1 : undefined,
+        dataInicio:
+          tipoPeriodoDossie === 'personalizado' ? dataInicioDossie || undefined : undefined,
+        dataFim: tipoPeriodoDossie === 'personalizado' ? dataFimDossie || undefined : undefined,
+      }
+
+      // Prepara demonstrativos HTML para inclusão na pasta AAAA/MM/demonstrativos/
+      const demonstrativoBalancoHtml = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8"/>
+  <title>Balanço Patrimonial - AEROCAD</title>
+  <style>
+    body { font-family: Arial, sans-serif; font-size: 12px; color: #333; margin: 20px; }
+    h1 { color: #FF6A13; font-size: 18px; margin-bottom: 4px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 11px; }
+    th, td { border: 1px solid #ddd; padding: 6px 10px; }
+    th { background: #FF6A13; color: white; text-align: left; }
+    .right { text-align: right; }
+    .bold { font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>AEROCAD CONSULTORIA — BALANÇO PATRIMONIAL (MINUTA GERENCIAL)</h1>
+  <p><strong>Referência:</strong> ${periodoRotulo} | <strong>Gerado em:</strong> ${formatDateBrasilia(new Date())}</p>
+  <table>
+    <tr><th>Grupo Patrimonial</th><th class="right">Valor Contábil (R$)</th></tr>
+    <tr><td>1. ATIVO CIRCULANTE (Disponibilidades + Contas a Receber)</td><td class="right bold">${formatCurrency(balancoData.totalAtivoCirculante)}</td></tr>
+    <tr><td>• Disponibilidades Bancárias PJ</td><td class="right">${formatCurrency(balancoData.totalDisponibilidades)}</td></tr>
+    <tr><td>• Contas a Receber de Clientes</td><td class="right">${formatCurrency(balancoData.totalContasReceber)}</td></tr>
+    <tr><td>1.2 ATIVO NÃO CIRCULANTE (Imobilizado Líquido)</td><td class="right bold">${formatCurrency(balancoData.totalAtivoNaoCirculante)}</td></tr>
+    <tr><td>• Custo Histórico de Aquisição</td><td class="right">${formatCurrency(balancoData.totalCustoHistoricoAtivos)}</td></tr>
+    <tr><td>• (-) Depreciação Linear Acumulada</td><td class="right">- ${formatCurrency(balancoData.totalDepreciacaoAcumulada)}</td></tr>
+    <tr style="background:#FFF3E8;"><td><strong>TOTAL DO ATIVO</strong></td><td class="right bold" style="color:#FF6A13;">${formatCurrency(balancoData.totalAtivo)}</td></tr>
+    <tr><td>2. PASSIVO CIRCULANTE (Fornecedores e Contas a Pagar)</td><td class="right bold">${formatCurrency(balancoData.totalPassivoCirculante)}</td></tr>
+    <tr><td>2.2 PATRIMÔNIO LÍQUIDO (Capital Estimado + Lucros Acumulados)</td><td class="right bold">${formatCurrency(balancoData.patrimonioLiquidoTotal)}</td></tr>
+    <tr style="background:#F2F2F2;"><td><strong>TOTAL DO PASSIVO + PATRIMÔNIO LÍQUIDO</strong></td><td class="right bold">${formatCurrency(balancoData.totalPassivoEPL)}</td></tr>
+  </table>
+</body>
+</html>`
+
+      const demonstrativoDreHtml = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8"/>
+  <title>DRE - AEROCAD</title>
+  <style>
+    body { font-family: Arial, sans-serif; font-size: 12px; color: #333; margin: 20px; }
+    h1 { color: #FF6A13; font-size: 18px; margin-bottom: 4px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 11px; }
+    th, td { border: 1px solid #ddd; padding: 6px 10px; }
+    th { background: #2D2D2D; color: white; text-align: left; }
+    .right { text-align: right; }
+    .bold { font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>AEROCAD CONSULTORIA — DEMONSTRATIVO DO RESULTADO DO EXERCÍCIO (DRE)</h1>
+  <p><strong>Referência:</strong> ${periodoRotulo} | <strong>Gerado em:</strong> ${formatDateBrasilia(new Date())}</p>
+  <table>
+    <tr><th>Degrau Contábil</th><th class="right">Valor (R$)</th></tr>
+    <tr><td>1. RECEITA OPERACIONAL BRUTA</td><td class="right bold">${formatCurrency(dreData.receitaBruta)}</td></tr>
+    <tr><td>2. (-) Tributos sobre Serviços (ISS / DAS)</td><td class="right">- ${formatCurrency(dreData.deducoesImpostos)}</td></tr>
+    <tr><td>3. (=) RECEITA OPERACIONAL LÍQUIDA</td><td class="right bold">${formatCurrency(dreData.receitaLiquida)}</td></tr>
+    <tr><td>4. (-) Custos Variáveis dos Projetos</td><td class="right">- ${formatCurrency(dreData.custosVariaveis)}</td></tr>
+    <tr><td>5. (=) MARGEM DE CONTRIBUIÇÃO</td><td class="right bold">${formatCurrency(dreData.margemContribuicao)}</td></tr>
+    <tr><td>6. (-) Despesas Fixas Operacionais e Administrativas</td><td class="right">- ${formatCurrency(dreData.despesasFixas)}</td></tr>
+    <tr style="background:#FFF3E8;"><td><strong>7. (=) RESULTADO OPERACIONAL LÍQUIDO</strong></td><td class="right bold" style="color:#FF6A13;">${formatCurrency(dreData.resultadoOperacional)}</td></tr>
+  </table>
+</body>
+</html>`
+
+      const resultado = await gerarDossieContabilZip(
+        filtroConfig,
+        contasPagar,
+        extratosList,
+        {
+          BALANCO_PATRIMONIAL_MINUTA: demonstrativoBalancoHtml,
+          DEMONSTRATIVO_RESULTADO_DRE: demonstrativoDreHtml,
+        },
+        (p) => {
+          setProgressoDossie(p.progresso)
+          setEtapaDossie(p.etapa)
+        },
+      )
+
+      // Download do ZIP pelo navegador
+      const urlBlob = URL.createObjectURL(resultado.blob)
+      const link = document.createElement('a')
+      link.href = urlBlob
+      link.download = resultado.nomeArquivoZip
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(urlBlob)
+
+      toast({
+        title: 'Dossiê Contábil Baixado com Sucesso',
+        description: `${resultado.totalArquivos} arquivos organizados em AAAA/MM/ com NOTA_EXPLICATIVA.md gerada.`,
+      })
+      setModalDossieAberto(false)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      toast({
+        title: 'Erro ao Gerar Dossiê Contábil',
+        description: msg,
+        variant: 'destructive',
+      })
+    } finally {
+      setGerandoDossie(false)
+      setProgressoDossie(0)
+      setEtapaDossie('')
     }
   }
 
@@ -2310,6 +2456,227 @@ export function RelatoriosContabeisAvancadosTab({
               observacoesFinais="Demonstrativo gerencial de apuração de resultado para tomada de decisões executivas. Classificação conforme Plano de Contas AEROCAD adaptado para consultorias de engenharia e projetos aeroportuários."
             />
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* 4. MODAL DE GERAÇÃO DO DOSSIÊ CONTÁBIL (.ZIP) COM NOTA_EXPLICATIVA.MD */}
+      <Dialog
+        open={modalDossieAberto}
+        onOpenChange={(aberto) => {
+          if (!gerandoDossie) setModalDossieAberto(aberto)
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-neutral-900">
+              <Layers className="h-5 w-5 text-[#FF6A13]" />
+              Gerar Dossiê Contábil Completo (.ZIP)
+            </DialogTitle>
+            <DialogDescription className="text-xs text-neutral-500">
+              Compilação estruturada em pastas cronológicas <strong>AAAA/MM/</strong> contendo
+              comprovantes de despesas, extratos bancários, demonstrativos em HTML e a{' '}
+              <strong>NOTA_EXPLICATIVA.md</strong> na raiz com identificação AEROCAD e tabela de
+              rastreabilidade.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 text-xs py-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-neutral-700">
+                Modalidade de Período
+              </Label>
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setTipoPeriodoDossie('ano')}
+                  className={`p-2.5 rounded-lg border text-center font-medium transition ${
+                    tipoPeriodoDossie === 'ano'
+                      ? 'border-[#FF6A13] bg-orange-50 text-[#FF6A13]'
+                      : 'border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-50'
+                  }`}
+                >
+                  <Calendar className="h-4 w-4 mx-auto mb-1 text-neutral-500" />
+                  Ano Inteiro
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setTipoPeriodoDossie('mes')}
+                  className={`p-2.5 rounded-lg border text-center font-medium transition ${
+                    tipoPeriodoDossie === 'mes'
+                      ? 'border-[#FF6A13] bg-orange-50 text-[#FF6A13]'
+                      : 'border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-50'
+                  }`}
+                >
+                  <Clock className="h-4 w-4 mx-auto mb-1 text-neutral-500" />
+                  Mês Específico
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setTipoPeriodoDossie('personalizado')}
+                  className={`p-2.5 rounded-lg border text-center font-medium transition ${
+                    tipoPeriodoDossie === 'personalizado'
+                      ? 'border-[#FF6A13] bg-orange-50 text-[#FF6A13]'
+                      : 'border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-50'
+                  }`}
+                >
+                  <Filter className="h-4 w-4 mx-auto mb-1 text-neutral-500" />
+                  Data Início / Fim
+                </button>
+              </div>
+            </div>
+
+            {/* Configuração de Ano e Mês */}
+            {tipoPeriodoDossie === 'ano' && (
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold text-neutral-700">Exercício Anual</Label>
+                <Select value={anoDossie} onValueChange={setAnoDossie}>
+                  <SelectTrigger className="h-9 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {anosDisponiveis.map((a) => (
+                      <SelectItem key={a} value={a}>
+                        Ano {a} (12 Meses)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {tipoPeriodoDossie === 'mes' && (
+              <div className="grid grid-cols-2 gap-2.5">
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold text-neutral-700">Ano</Label>
+                  <Select value={anoDossie} onValueChange={setAnoDossie}>
+                    <SelectTrigger className="h-9 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {anosDisponiveis.map((a) => (
+                        <SelectItem key={a} value={a}>
+                          Ano {a}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold text-neutral-700">Mês</Label>
+                  <Select value={mesDossie} onValueChange={setMesDossie}>
+                    <SelectTrigger className="h-9 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1">01 - Janeiro</SelectItem>
+                      <SelectItem value="2">02 - Fevereiro</SelectItem>
+                      <SelectItem value="3">03 - Março</SelectItem>
+                      <SelectItem value="4">04 - Abril</SelectItem>
+                      <SelectItem value="5">05 - Maio</SelectItem>
+                      <SelectItem value="6">06 - Junho</SelectItem>
+                      <SelectItem value="7">07 - Julho</SelectItem>
+                      <SelectItem value="8">08 - Agosto</SelectItem>
+                      <SelectItem value="9">09 - Setembro</SelectItem>
+                      <SelectItem value="10">10 - Outubro</SelectItem>
+                      <SelectItem value="11">11 - Novembro</SelectItem>
+                      <SelectItem value="12">12 - Dezembro</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
+
+            {tipoPeriodoDossie === 'personalizado' && (
+              <div className="grid grid-cols-2 gap-2.5">
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold text-neutral-700">Data de Início</Label>
+                  <Input
+                    type="date"
+                    value={dataInicioDossie}
+                    onChange={(e) => setDataInicioDossie(e.target.value)}
+                    className="h-9 text-xs font-mono"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold text-neutral-700">Data de Fim</Label>
+                  <Input
+                    type="date"
+                    value={dataFimDossie}
+                    onChange={(e) => setDataFimDossie(e.target.value)}
+                    className="h-9 text-xs font-mono"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Informações da Estrutura ZIP */}
+            <div className="p-3 bg-neutral-50 rounded-lg border border-neutral-200 text-[11px] text-neutral-600 space-y-1">
+              <span className="font-bold text-neutral-800 block">Estrutura do Pacote ZIP:</span>
+              <p>
+                • <code>AAAA/MM/comprovantes/</code> — Comprovantes vinculados ao Contas a Pagar
+              </p>
+              <p>
+                • <code>AAAA/MM/extratos/</code> — Extratos (.OFX, .RET, planilhas) importados
+              </p>
+              <p>
+                • <code>AAAA/MM/demonstrativos/</code> — Minuta do Balanço e DRE em HTML
+              </p>
+              <p>
+                • <code>NOTA_EXPLICATIVA.md</code> — Relatório descritivo com carimbo de Brasília
+              </p>
+            </div>
+
+            {/* Barra de Progresso durante a geração */}
+            {gerandoDossie && (
+              <div className="space-y-2 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                <div className="flex items-center justify-between text-xs text-[#FF6A13] font-semibold">
+                  <span className="flex items-center gap-1.5">
+                    <Loader2 className="h-4 w-4 animate-spin text-[#FF6A13]" />
+                    {etapaDossie || 'Empacotando dossiê...'}
+                  </span>
+                  <span>{progressoDossie}%</span>
+                </div>
+                <div className="w-full h-2 bg-orange-200 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-[#FF6A13] transition-all duration-300"
+                    style={{ width: `${progressoDossie}%` }}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={gerandoDossie}
+              onClick={() => setModalDossieAberto(false)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              disabled={gerandoDossie}
+              onClick={handleGerarDossieContabilZip}
+              className="bg-[#FF6A13] hover:bg-[#E85B06] text-white font-bold"
+            >
+              {gerandoDossie ? (
+                <>
+                  <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                  Gerando ZIP...
+                </>
+              ) : (
+                <>
+                  <Download className="mr-1.5 h-4 w-4" />
+                  Baixar Dossiê ZIP
+                </>
+              )}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
