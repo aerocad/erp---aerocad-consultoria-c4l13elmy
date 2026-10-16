@@ -1085,9 +1085,10 @@ export function ExtratosComprovantesTab({
 
             {extratos.map((ex) => {
               const isSelected = extratoSelecionadoId === ex.id
-              const hashEncurtado = ex.hash_arquivo
-                ? `${ex.hash_arquivo.slice(0, 8)}...${ex.hash_arquivo.slice(-6)}`
-                : null
+              const hashEncurtado =
+                typeof ex.hash_arquivo === 'string' && ex.hash_arquivo.length > 14
+                  ? `${ex.hash_arquivo.slice(0, 8)}...${ex.hash_arquivo.slice(-6)}`
+                  : null
               const dataImportacao = ex.created ? formatDateBrasilia(ex.created) : null
 
               return (

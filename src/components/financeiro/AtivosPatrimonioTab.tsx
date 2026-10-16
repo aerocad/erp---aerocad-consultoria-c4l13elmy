@@ -126,12 +126,18 @@ export function calcularDepreciacaoLinear(
 
 export interface AtivosPatrimonioTabProps {
   canWrite: boolean
+  ativos?: AtivoPatrimonioRecord[] | any[]
+  ativosPatrimonio?: AtivoPatrimonioRecord[] | any[]
+  onReload?: () => Promise<void> | void
   fornecedores?: FornecedorRecord[]
   credores?: import('@/types/crm').CredorRecord[]
 }
 
 export function AtivosPatrimonioTab({
   canWrite,
+  ativos: ativosProp,
+  ativosPatrimonio: ativosPatrimonioProp,
+  onReload,
   fornecedores = [],
   credores: credoresProp = [],
 }: AtivosPatrimonioTabProps) {
@@ -218,8 +224,16 @@ export function AtivosPatrimonioTab({
   }
 
   useEffect(() => {
-    carregarAtivos()
-  }, [])
+    if (ativosProp && Array.isArray(ativosProp)) {
+      setAtivos(ativosProp)
+      setLoading(false)
+    } else if (ativosPatrimonioProp && Array.isArray(ativosPatrimonioProp)) {
+      setAtivos(ativosPatrimonioProp)
+      setLoading(false)
+    } else {
+      carregarAtivos()
+    }
+  }, [ativosProp, ativosPatrimonioProp])
 
   useEffect(() => {
     if (credoresProp.length > 0) {
@@ -496,6 +510,7 @@ export function AtivosPatrimonioTab({
       setModalAberto(false)
       setAnexosPendentes([])
       await carregarAtivos()
+      if (onReload) void onReload()
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
       toast.error(`Erro ao salvar ativo patrimonial: ${msg}`)
@@ -512,6 +527,7 @@ export function AtivosPatrimonioTab({
       toast.success('Ativo patrimonial excluído.')
       setExcluindo(null)
       await carregarAtivos()
+      if (onReload) void onReload()
     } catch {
       toast.error('Erro ao excluir ativo')
     } finally {

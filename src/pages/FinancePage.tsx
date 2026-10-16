@@ -14,6 +14,7 @@ import {
   CreditCard,
   FileSpreadsheet,
   FileText,
+  Laptop,
   Layers,
   Link as LinkIcon,
   Landmark,
@@ -90,6 +91,7 @@ import { ExtratosComprovantesTab } from '@/components/financeiro/ExtratosComprov
 import { BalancetesTab } from '@/components/financeiro/BalancetesTab'
 import { RelatoriosFinanceirosTab } from '@/components/financeiro/RelatoriosFinanceirosTab'
 import { RelatoriosContabeisAvancadosTab } from '@/components/financeiro/RelatoriosContabeisAvancadosTab'
+import { AtivosPatrimonioTab } from '@/components/financeiro/AtivosPatrimonioTab'
 import {
   CentralFinanceiraHub,
   type FinanceTabKey,
@@ -1429,6 +1431,23 @@ export function FinancePage() {
         </button>
 
         <button
+          onClick={() => setActiveTab('ativos_patrimonio')}
+          className={`pb-3 px-3 text-xs sm:text-sm font-bold border-b-2 transition flex items-center gap-1.5 ${
+            activeTab === 'ativos_patrimonio'
+              ? 'border-[#FF6A13] text-[#FF6A13]'
+              : 'border-transparent text-[#737373] hover:text-[#333]'
+          }`}
+        >
+          <Laptop className="h-4 w-4" />
+          Ativos & Patrimônio
+          {ativosPatrimonio.data.length > 0 && (
+            <span className="ml-1 rounded-full bg-orange-100 text-[#D65100] text-[10px] px-2 py-0.5 font-bold">
+              {ativosPatrimonio.data.length}
+            </span>
+          )}
+        </button>
+
+        <button
           onClick={() => setActiveTab('relatorios_avancados')}
           className={`pb-3 px-3 text-xs sm:text-sm font-bold border-b-2 transition flex items-center gap-1.5 ${
             activeTab === 'relatorios_avancados'
@@ -1585,6 +1604,16 @@ export function FinancePage() {
             projetos={projects.data}
           />
         </div>
+      ) : activeTab === 'ativos_patrimonio' ? (
+        <div className="mt-5">
+          <AtivosPatrimonioTab
+            ativos={ativosPatrimonio.data}
+            canWrite={canWrite}
+            onReload={async () => {
+              void ativosPatrimonio.reload()
+            }}
+          />
+        </div>
       ) : activeTab === 'relatorios_avancados' ? (
         <div className="mt-5">
           <RelatoriosContabeisAvancadosTab
@@ -1605,6 +1634,7 @@ export function FinancePage() {
                 tab === 'fluxo_caixa' ||
                 tab === 'extratos' ||
                 tab === 'balancetes' ||
+                tab === 'ativos_patrimonio' ||
                 tab === 'relatorios' ||
                 tab === 'parcelas' ||
                 tab === 'orfas'

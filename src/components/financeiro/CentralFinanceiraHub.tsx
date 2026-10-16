@@ -25,6 +25,7 @@ export type FinanceTabKey =
   | 'fluxo_caixa'
   | 'extratos'
   | 'balancetes'
+  | 'ativos_patrimonio'
   | 'relatorios'
   | 'relatorios_avancados'
   | 'parcelas'
