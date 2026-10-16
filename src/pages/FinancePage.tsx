@@ -141,6 +141,7 @@ import { BalancetesTab } from '@/components/financeiro/BalancetesTab'
 import { RelatoriosFinanceirosTab } from '@/components/financeiro/RelatoriosFinanceirosTab'
 import { RelatoriosContabeisAvancadosTab } from '@/components/financeiro/RelatoriosContabeisAvancadosTab'
 import { AtivosPatrimonioTab } from '@/components/financeiro/AtivosPatrimonioTab'
+import { AssistenteFinanceiroChatDrawer } from '@/components/financeiro/AssistenteFinanceiroChatDrawer'
 import {
   CentralFinanceiraHub,
   type FinanceTabKey,
@@ -3044,6 +3045,32 @@ export function FinancePage() {
           void credores.reload()
         }}
       />
+
+      {/* Assistente Financeiro AEROCAD com IA Nativa Skip Cloud */}
+      {[
+        'extratos',
+        'fluxo_caixa',
+        'balancetes',
+        'ativos_patrimonio',
+        'relatorios',
+        'relatorios_avancados',
+      ].includes(activeTab) && (
+        <AssistenteFinanceiroChatDrawer
+          secaoAtual={
+            activeTab === 'extratos'
+              ? 'extratos'
+              : activeTab === 'fluxo_caixa'
+                ? 'fluxo'
+                : activeTab === 'balancetes'
+                  ? 'balancos'
+                  : activeTab === 'ativos_patrimonio'
+                    ? 'ativos'
+                    : activeTab === 'relatorios_avancados'
+                      ? 'demonstracoes'
+                      : 'relatorios'
+          }
+        />
+      )}
     </div>
   )
 }

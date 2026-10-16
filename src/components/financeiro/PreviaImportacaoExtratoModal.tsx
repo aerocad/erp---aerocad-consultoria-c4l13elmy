@@ -33,10 +33,12 @@ export interface PreviaImportacaoExtratoModalProps<T extends TransacaoCandidataI
   open: boolean
   onOpenChange: (open: boolean) => void
   analise: AnaliseDeduplicacaoArquivo<T> | null
-  formato: 'ofx' | 'csv' | 'xlsx' | 'ret'
+  formato: 'ofx' | 'csv' | 'xlsx' | 'ret' | 'pdf'
   contaBancaria?: ContaBancariaRecord
   isGravando: boolean
   onConfirmarGravacao: () => Promise<void> | void
+  avisoLeitura?: string | null
+  linhasNaoInterpretadas?: number
 }
 
 export function PreviaImportacaoExtratoModal<T extends TransacaoCandidataImportacao>({
@@ -47,6 +49,8 @@ export function PreviaImportacaoExtratoModal<T extends TransacaoCandidataImporta
   contaBancaria,
   isGravando,
   onConfirmarGravacao,
+  avisoLeitura,
+  linhasNaoInterpretadas = 0,
 }: PreviaImportacaoExtratoModalProps<T>) {
   const [abaExibicao, setAbaExibicao] = useState<'novas' | 'duplicadas'>('novas')
 
@@ -102,6 +106,23 @@ export function PreviaImportacaoExtratoModal<T extends TransacaoCandidataImporta
               </span>
             </div>
           </div>
+
+          {/* Aviso orientador de leitura do extrato / PDF quando parcial */}
+          {avisoLeitura && (
+            <div className="p-3 bg-amber-50 border border-amber-300 rounded-lg text-amber-950 flex items-start gap-2">
+              <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+              <div className="text-[11px] leading-relaxed">
+                <strong>Atenção na Leitura do Extrato:</strong> {avisoLeitura}
+                {linhasNaoInterpretadas > 0 && (
+                  <span className="block mt-0.5 text-amber-800">
+                    Linhas ou cabeçalhos não interpretados:{' '}
+                    <strong>{linhasNaoInterpretadas}</strong>. Confira as transações na prévia antes
+                    de confirmar.
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Banner de status da deduplicação */}
           {isTotalmenteDuplicado ? (

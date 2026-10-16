@@ -21,13 +21,25 @@ routerAdd(
       const conversationId = body.conversation_id || null
 
       // Obter ou criar a conversa garantindo persistência e ID antes do stream
-      const conv = $ai.agent('assistente-aerocad').getOrCreateConversation({
+      const agentSlug =
+        body.agent_slug === 'assistente-financeiro' ? 'assistente-financeiro' : 'assistente-aerocad'
+
+      // Se for assistente financeiro, checa permissão de role (admin ou financeiro)
+      if (agentSlug === 'assistente-financeiro') {
+        const userRole = e.auth?.getString('role')
+        if (userRole !== 'admin' && userRole !== 'financeiro') {
+          return e.forbiddenError('Acesso restrito ao assistente financeiro')
+        }
+      }
+
+      // Obter ou criar a conversa garantindo persistência e ID antes do stream
+      const conv = $ai.agent(agentSlug).getOrCreateConversation({
         user_id: userId,
         id: conversationId,
         title: body.title || message.slice(0, 48),
       })
 
-      const iter = $ai.agent('assistente-aerocad').chat({
+      const iter = $ai.agent(agentSlug).chat({
         user_id: userId,
         conversation_id: conv.id,
         message: message,
@@ -74,7 +86,17 @@ routerAdd(
       const message = body.message?.trim()
       if (!message) return e.badRequestError('A mensagem é obrigatória')
 
-      const result = $ai.agent('assistente-aerocad').chat({
+      const agentSlug =
+        body.agent_slug === 'assistente-financeiro' ? 'assistente-financeiro' : 'assistente-aerocad'
+
+      if (agentSlug === 'assistente-financeiro') {
+        const userRole = e.auth?.getString('role')
+        if (userRole !== 'admin' && userRole !== 'financeiro') {
+          return e.forbiddenError('Acesso restrito ao assistente financeiro')
+        }
+      }
+
+      const result = $ai.agent(agentSlug).chat({
         user_id: userId,
         conversation_id: body.conversation_id || null,
         message: message,
@@ -113,10 +135,19 @@ routerAdd(
       const userId = e.auth?.id
       if (!userId) return e.unauthorizedError('Autenticação necessária')
       const limit = parseInt(e.requestInfo().query?.limit || '30', 10) || 30
-      return e.json(
-        200,
-        $ai.agent('assistente-aerocad').listConversations({ user_id: userId, limit }),
-      )
+      const agentSlug =
+        e.requestInfo().query?.agent_slug === 'assistente-financeiro'
+          ? 'assistente-financeiro'
+          : 'assistente-aerocad'
+
+      if (agentSlug === 'assistente-financeiro') {
+        const userRole = e.auth?.getString('role')
+        if (userRole !== 'admin' && userRole !== 'financeiro') {
+          return e.forbiddenError('Acesso restrito ao assistente financeiro')
+        }
+      }
+
+      return e.json(200, $ai.agent(agentSlug).listConversations({ user_id: userId, limit }))
     } catch (err) {
       if (err instanceof SkipAiAgentsError) {
         return e.json(err.status || 500, { error: err.message })
@@ -136,9 +167,14 @@ routerAdd(
       const userId = e.auth?.id
       if (!userId) return e.unauthorizedError('Autenticação necessária')
       const conversationId = e.request.pathValue('id')
+      const agentSlug =
+        e.requestInfo().query?.agent_slug === 'assistente-financeiro'
+          ? 'assistente-financeiro'
+          : 'assistente-aerocad'
+
       return e.json(
         200,
-        $ai.agent('assistente-aerocad').listMessages({
+        $ai.agent(agentSlug).listMessages({
           conversation_id: conversationId,
           user_id: userId,
         }),

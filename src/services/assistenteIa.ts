@@ -8,7 +8,7 @@ import {
 } from '@/lib/skipAi'
 
 export interface AgentContextRecord {
-  tipo: 'projeto' | 'proposta' | 'processo' | 'cliente' | 'oportunidade'
+  tipo: 'projeto' | 'proposta' | 'processo' | 'cliente' | 'oportunidade' | 'secao_financeira'
   id: string
   titulo: string
   subtitulo?: string
@@ -18,6 +18,7 @@ export interface AgentContextRecord {
 export interface SendAgentMessageOptions {
   message: string
   conversationId?: string | null
+  agentSlug?: 'assistente-aerocad' | 'assistente-financeiro'
   contextRecord?: AgentContextRecord | null
   onChunk?: (delta: string, accumulated: string) => void
   onToolCallStart?: (info: { id: string; name: string }) => void
@@ -54,6 +55,7 @@ export async function sendAgentMessage(options: SendAgentMessageOptions) {
   const {
     message,
     conversationId,
+    agentSlug = 'assistente-aerocad',
     contextRecord,
     onChunk,
     onToolCallStart,
@@ -74,6 +76,7 @@ export async function sendAgentMessage(options: SendAgentMessageOptions) {
     body: JSON.stringify({
       message: enriched,
       conversation_id: conversationId || null,
+      agent_slug: agentSlug,
       title: contextRecord
         ? `${contextRecord.tipo.toUpperCase()}: ${contextRecord.titulo.slice(0, 32)}`
         : message.slice(0, 48),
@@ -103,13 +106,18 @@ export async function sendAgentMessage(options: SendAgentMessageOptions) {
 /**
  * Carrega a lista de conversas do usuário com o assistente
  */
-export async function listAgentConversations(): Promise<AgentConversationItem[]> {
+export async function listAgentConversations(
+  agentSlug: 'assistente-aerocad' | 'assistente-financeiro' = 'assistente-aerocad',
+): Promise<AgentConversationItem[]> {
   const baseUrl = import.meta.env.VITE_POCKETBASE_URL
-  const res = await fetch(`${baseUrl}/backend/v1/assistente/conversas?limit=40`, {
-    headers: {
-      Authorization: pb.authStore.token,
+  const res = await fetch(
+    `${baseUrl}/backend/v1/assistente/conversas?limit=40&agent_slug=${agentSlug}`,
+    {
+      headers: {
+        Authorization: pb.authStore.token,
+      },
     },
-  })
+  )
 
   if (!res.ok) {
     const errorBody = await res.json().catch(() => ({}))
@@ -123,10 +131,13 @@ export async function listAgentConversations(): Promise<AgentConversationItem[]>
 /**
  * Carrega o histórico de mensagens de uma conversa
  */
-export async function loadConversationMessages(conversationId: string): Promise<DisplayMessage[]> {
+export async function loadConversationMessages(
+  conversationId: string,
+  agentSlug: 'assistente-aerocad' | 'assistente-financeiro' = 'assistente-aerocad',
+): Promise<DisplayMessage[]> {
   const baseUrl = import.meta.env.VITE_POCKETBASE_URL
   const res = await fetch(
-    `${baseUrl}/backend/v1/assistente/conversas/${conversationId}/mensagens`,
+    `${baseUrl}/backend/v1/assistente/conversas/${conversationId}/mensagens?agent_slug=${agentSlug}`,
     {
       headers: {
         Authorization: pb.authStore.token,

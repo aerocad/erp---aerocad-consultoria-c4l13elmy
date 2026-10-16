@@ -63,6 +63,7 @@ import {
   type CnabRetornoParsed,
   type CnabTransacaoParsed,
 } from '@/services/cnabRetornoParser'
+import { extrairExtratoPdf, type ExtratoPdfExtracaoProgresso } from '@/services/extratoPdfParser'
 import {
   analisarDeduplicacao,
   calcularHashArquivo,
@@ -178,7 +179,7 @@ export function ExtratosComprovantesTab({
   const [isProcessandoUpload, setIsProcessandoUpload] = useState(false)
   const [modalPreviaExtrato, setModalPreviaExtrato] = useState<{
     file: File
-    formato: 'ofx' | 'csv' | 'xlsx'
+    formato: 'ofx' | 'csv' | 'xlsx' | 'pdf'
     contaBancariaId: string
     analise: AnaliseDeduplicacaoArquivo<TransacaoCandidataImportacao>
     saldoFinal?: number
@@ -186,7 +187,12 @@ export function ExtratosComprovantesTab({
     dataFim?: string
     banco?: string
     conta?: string
+    avisoLeitura?: string | null
+    linhasNaoInterpretadas?: number
   } | null>(null)
+  const [progressoPdfUpload, setProgressoPdfUpload] = useState<ExtratoPdfExtracaoProgresso | null>(
+    null,
+  )
   const [isGravandoExtrato, setIsGravandoExtrato] = useState(false)
   const [resumoRetornoModal, setResumoRetornoModal] = useState<{
     file: File
@@ -582,56 +588,115 @@ export function ExtratosComprovantesTab({
         }
       }
 
-      let parsed = null
-      let formato: 'ofx' | 'csv' | 'xlsx' = 'ofx'
+      // Itera por todos os arquivos selecionados (suporte a upload múltiplo de PDFs ou extratos)
+      for (let idx = 0; idx < files.length; idx++) {
+        const file = files[idx]
+        const ext = file.name.split('.').pop()?.toLowerCase() || ''
+        const hashArquivo = await calcularHashArquivo(file)
 
-      if (ext === 'ofx') {
-        formato = 'ofx'
-        const text = await lerArquivoTextoComFallback(file)
-        parsed = parseOfxString(text)
-      } else if (ext === 'csv' || ext === 'xlsx' || ext === 'xls') {
-        formato = ext === 'csv' ? 'csv' : 'xlsx'
-        parsed = await parsePlanilhaExtrato(file)
-      } else {
-        toast.error(
-          `Arquivo "${file.name}" ignorado: formato não suportado (use OFX, RET, CSV ou XLSX).`,
-        )
-        return
+        // Intercepta arquivos .RET (CNAB 240 / 400)
+        if (ext === 'ret') {
+          try {
+            const text = await lerArquivoTextoComFallback(file)
+            const parsedCnab = parseCnabRetorno(text)
+
+            if (!parsedCnab.transacoes.length) {
+              toast.warning(`Arquivo .ret "${file.name}" não continha lançamentos válidos.`)
+              continue
+            }
+
+            // Executa análise de deduplicação antes de abrir o modal
+            const analiseCnab = analisarDeduplicacao<CnabTransacaoParsed>({
+              arquivoNome: file.name,
+              arquivoHash: hashArquivo,
+              contaBancariaId: contaBancariaSelecionadaUpload,
+              contaNumero: contaBancariaAlvo?.numero_conta || parsedCnab.conta,
+              transacoesCandidatas: parsedCnab.transacoes,
+              transacoesExistentes: transacoes,
+              extratosExistentes: extratos,
+            })
+
+            setResumoRetornoModal({
+              file,
+              parsed: parsedCnab,
+              analise: analiseCnab,
+              contaBancariaId: contaBancariaSelecionadaUpload,
+            })
+            setModalUploadAberto(false)
+            return
+          } catch (retErr: unknown) {
+            const errMsg = retErr instanceof Error ? retErr.message : String(retErr)
+            toast.error(`Erro ao interpretar retorno .ret "${file.name}": ${errMsg}`)
+            continue
+          }
+        }
+
+        let parsed: any = null
+        let formato: 'ofx' | 'csv' | 'xlsx' | 'pdf' = 'ofx'
+        let avisoPdf: string | null = null
+        let linhasNaoLidas = 0
+
+        if (ext === 'ofx') {
+          formato = 'ofx'
+          const text = await lerArquivoTextoComFallback(file)
+          parsed = parseOfxString(text)
+        } else if (ext === 'csv' || ext === 'xlsx' || ext === 'xls') {
+          formato = ext === 'csv' ? 'csv' : 'xlsx'
+          parsed = await parsePlanilhaExtrato(file)
+        } else if (ext === 'pdf') {
+          formato = 'pdf'
+          parsed = await extrairExtratoPdf(file, (p) => {
+            setProgressoPdfUpload(p)
+          })
+          avisoPdf = parsed.aviso || null
+          linhasNaoLidas = parsed.linhasNaoInterpretadas || 0
+        } else {
+          toast.error(
+            `Arquivo "${file.name}" ignorado: formato não suportado (use PDF, OFX, RET, CSV ou XLSX).`,
+          )
+          continue
+        }
+
+        if (!parsed || !parsed.transacoes || !parsed.transacoes.length) {
+          toast.warning(
+            `Extrato em PDF "${file.name}" não teve transações identificadas com precisão. Confira as transações na conferência ou importe o OFX/.RET do banco, que é mais preciso.`,
+          )
+          continue
+        }
+
+        // Executa análise de deduplicação contra transações existentes
+        const analiseExtrato = analisarDeduplicacao({
+          arquivoNome: file.name,
+          arquivoHash: hashArquivo,
+          contaBancariaId: contaBancariaSelecionadaUpload,
+          contaNumero: contaBancariaAlvo?.numero_conta || parsed.conta,
+          transacoesCandidatas: parsed.transacoes,
+          transacoesExistentes: transacoes,
+          extratosExistentes: extratos,
+        })
+
+        setModalPreviaExtrato({
+          file,
+          formato,
+          contaBancariaId: contaBancariaSelecionadaUpload,
+          analise: analiseExtrato,
+          saldoFinal: parsed.saldoFinal,
+          dataInicio: parsed.dataInicio,
+          dataFim: parsed.dataFim,
+          banco: parsed.banco,
+          conta: parsed.conta,
+          avisoLeitura: avisoPdf,
+          linhasNaoInterpretadas: linhasNaoLidas,
+        })
+        setModalUploadAberto(false)
+        break // abre prévia do primeiro arquivo válido do lote
       }
-
-      if (!parsed.transacoes.length) {
-        toast.warning(`Extrato "${file.name}" não continha transações válidas.`)
-        return
-      }
-
-      // Executa análise de deduplicação contra transações existentes
-      const analiseExtrato = analisarDeduplicacao({
-        arquivoNome: file.name,
-        arquivoHash: hashArquivo,
-        contaBancariaId: contaBancariaSelecionadaUpload,
-        contaNumero: contaBancariaAlvo?.numero_conta || parsed.conta,
-        transacoesCandidatas: parsed.transacoes,
-        transacoesExistentes: transacoes,
-        extratosExistentes: extratos,
-      })
-
-      setModalPreviaExtrato({
-        file,
-        formato,
-        contaBancariaId: contaBancariaSelecionadaUpload,
-        analise: analiseExtrato,
-        saldoFinal: parsed.saldoFinal,
-        dataInicio: parsed.dataInicio,
-        dataFim: parsed.dataFim,
-        banco: parsed.banco,
-        conta: parsed.conta,
-      })
-      setModalUploadAberto(false)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
       toast.error(`Falha ao ler extrato: ${msg}`)
     } finally {
       setIsProcessandoUpload(false)
+      setProgressoPdfUpload(null)
       e.target.value = ''
     }
   }
@@ -1526,6 +1591,10 @@ export function ExtratosComprovantesTab({
             <div className="p-3 bg-amber-50 rounded-lg border border-amber-200 text-amber-900 space-y-1">
               <p className="font-semibold">Formatos Suportados:</p>
               <p>
+                • <strong>PDF (Extrato Bancário)</strong>: Leitura inteligente via IA com
+                rasterização página a página e conferência prévia.
+              </p>
+              <p>
                 • <strong>.RET (CNAB 240 / 400)</strong>: Retorno bancário de cobrança e conciliação
                 (BB, Itaú, Caixa, Santander, Bradesco, Sicoob etc.).
               </p>
@@ -1544,19 +1613,38 @@ export function ExtratosComprovantesTab({
                 Clique para selecionar ou arraste arquivos de extrato / retorno
               </p>
               <p className="text-[11px] text-neutral-500 mt-0.5">
-                .RET (CNAB 240/400), OFX, CSV ou XLSX
+                PDF (upload múltiplo), .RET (CNAB 240/400), OFX, CSV ou XLSX
               </p>
               <input
                 type="file"
                 multiple
-                accept=".ret,.ofx,.csv,.xlsx,.xls"
+                accept=".pdf,.ret,.ofx,.csv,.xlsx,.xls"
                 onChange={handleFileSelected}
                 disabled={isProcessandoUpload}
                 className="absolute inset-0 opacity-0 cursor-pointer"
               />
             </div>
 
-            {isProcessandoUpload && (
+            {progressoPdfUpload && (
+              <div className="p-3 bg-orange-50 border border-orange-200 rounded-lg text-xs space-y-2 text-[#D65100]">
+                <div className="flex items-center justify-between font-semibold">
+                  <span>{progressoPdfUpload.mensagem}</span>
+                  {progressoPdfUpload.percentual !== undefined && (
+                    <span>{progressoPdfUpload.percentual}%</span>
+                  )}
+                </div>
+                {progressoPdfUpload.percentual !== undefined && (
+                  <div className="w-full bg-orange-200 rounded-full h-1.5 overflow-hidden">
+                    <div
+                      className="bg-[#FF6A13] h-1.5 transition-all duration-300"
+                      style={{ width: `${progressoPdfUpload.percentual}%` }}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {isProcessandoUpload && !progressoPdfUpload && (
               <div className="text-center text-xs text-[#FF6A13] font-semibold animate-pulse">
                 Processando e analisando transações do extrato...
               </div>
@@ -2274,6 +2362,8 @@ export function ExtratosComprovantesTab({
           contaBancaria={contasBancarias.find((c) => c.id === modalPreviaExtrato?.contaBancariaId)}
           isGravando={isGravandoExtrato}
           onConfirmarGravacao={handleConfirmarGravacaoPreviaExtrato}
+          avisoLeitura={modalPreviaExtrato?.avisoLeitura}
+          linhasNaoInterpretadas={modalPreviaExtrato?.linhasNaoInterpretadas}
         />
       )}
       {/* Modal de Captura Mobile / Extração IA de Comprovantes */}

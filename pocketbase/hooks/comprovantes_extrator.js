@@ -2059,3 +2059,244 @@ Extraia com precisão e retorne EXCLUSIVAMENTE um JSON com os seguintes campos:
   },
   $apis.requireAuth(),
 )
+
+// 4. EXTRAÇÃO DE EXTRATO BANCÁRIO EM PDF OU IMAGEM VIA IA
+routerAdd(
+  'POST',
+  '/backend/v1/extratos/extrair-pdf',
+  (e) => {
+    try {
+      const authUser = e.auth
+      if (!authUser || !authUser.id) {
+        return e.unauthorizedError('Autenticação necessária')
+      }
+
+      const role = authUser.getString('role')
+      if (role !== 'admin' && role !== 'financeiro') {
+        return e.forbiddenError(
+          'Apenas administradores e equipe financeira podem importar extratos bancários',
+        )
+      }
+
+      const files = e.findUploadedFiles('arquivo')
+      if (!files || files.length === 0) {
+        return e.badRequestError('Nenhum arquivo de extrato enviado')
+      }
+
+      const file = files[0]
+      const fileName = file.originalName || 'extrato.pdf'
+      const ext = fileName.split('.').pop().toLowerCase()
+      const isPdf = ext === 'pdf'
+      const isImage = ['jpg', 'jpeg', 'png', 'webp'].includes(ext)
+
+      if (!isPdf && !isImage) {
+        return e.badRequestError(
+          'Formato não suportado. Envie um extrato em PDF ou imagem (JPG/PNG).',
+        )
+      }
+
+      let markdownContent = ''
+      let isRasterizado = false
+
+      // Lê campo body indicando texto bruto extraído de rasterização pelo cliente (se houver)
+      try {
+        const body = e.requestInfo().body || {}
+        if (body.texto_pagina && typeof body.texto_pagina === 'string') {
+          markdownContent = body.texto_pagina.trim()
+          isRasterizado = true
+        }
+      } catch (_) {}
+
+      // Se for PDF e ainda não veio texto de página rasterizada, tenta $documents.toMarkdown
+      if (isPdf && !markdownContent) {
+        try {
+          const docRes = $documents.toMarkdown({ file: file })
+          if (docRes && docRes.markdown) {
+            markdownContent = docRes.markdown
+          }
+        } catch (docErr) {
+          console.log(
+            'toMarkdown falhou para extrato (pode ser PDF escaneado/imagem):',
+            docErr.message,
+          )
+        }
+      }
+
+      // Prepara o prompt do extrator bancário com IA
+      const promptSystem = `Você é o Auditor e Extrator Especialista em Conciliação Bancária da AEROCAD CONSULTORIA.
+Sua missão é extrair rigorosamente todas as transações financeiras do extrato bancário (formato texto, tabela ou imagem).
+
+DIRETRIZES DE EXTRAÇÃO:
+1. IDENTIFICAÇÃO DO BANCO E CONTA:
+   - Identificar o banco emissor (ex: "Banco Inter", "Banco do Brasil", "Itaú", "Caixa", "Santander", "Bradesco", "Sicoob").
+   - Identificar agência e número de conta corrente se visíveis no cabeçalho.
+   - Período coberto (data inicial e data final em formato AAAA-MM-DD).
+   - Saldo final do período se informado.
+
+2. TRANSAÇÕES E LANÇAMENTOS (ORDEM CRONOLÓGICA):
+   - Extrair CADA movimentação individual do extrato:
+     * "data": Formato ISO AAAA-MM-DD (ex: "2026-03-12"). NUNCA deixe vazio.
+     * "descricao": Histórico completo da movimentação (ex: "PIX ENVIADO FULANO", "TARIFA BANCARIA", "RECEBIMENTO CLIENTE XYZ").
+     * "valor": Número decimal absoluto SEMPRE POSITIVO (ex: 1500.50, 42.10).
+     * "tipo": "entrada" (crédito, depósitos, pix recebidos) ou "saida" (débito, pagamentos, pix enviado, tarifas).
+     * "documentoRef": Número do documento, controle, autenticação ou NSU se visível, senão string vazia "".
+     * "saldoLinha": Saldo após a transação se constar, ou null.
+   - IGNORAR linhas de cabeçalho, totais de páginas, resumo mensal e linhas que não representam movimentação financeira efetiva.
+
+3. RETORNO OBRIGATÓRIO EM JSON PURO:
+{
+  "sucesso": true,
+  "banco": "Banco Inter",
+  "agencia": "0001",
+  "conta": "7637194-8",
+  "dataInicio": "2026-03-01",
+  "dataFim": "2026-03-31",
+  "saldoFinal": 45200.30,
+  "totalTransacoes": 12,
+  "transacoes": [
+    {
+      "data": "2026-03-05",
+      "descricao": "PIX RECEBIDO - CONTRATO AEROCAD",
+      "valor": 12500.00,
+      "tipo": "entrada",
+      "documentoRef": "E2603051020",
+      "saldoLinha": 25000.00
+    },
+    {
+      "data": "2026-03-08",
+      "descricao": "PAGAMENTO BOLETO POSTO IPIRANGA",
+      "valor": 280.40,
+      "tipo": "saida",
+      "documentoRef": "003928172",
+      "saldoLinha": 24719.60
+    }
+  ],
+  "linhasNaoInterpretadas": 0,
+  "observacoes": "Extrato lido com sucesso."
+}`
+
+      let userText = `Nome do arquivo: ${fileName}\n\n`
+      if (markdownContent && markdownContent.trim().length > 0) {
+        userText += `CONTEÚDO/TEXTO DO EXTRATO BANCÁRIO:\n${markdownContent.slice(0, 16000)}`
+      } else {
+        userText += `DOCUMENTO ESCANEADO OU IMAGEM DO EXTRATO BANCÁRIO. Analise a imagem fornecida para extrair todas as linhas.`
+      }
+
+      const aiReply = $ai.chat({
+        model: 'fast',
+        messages: [
+          { role: 'system', content: promptSystem },
+          { role: 'user', content: userText },
+        ],
+      })
+
+      let extracted = null
+      if (aiReply && aiReply.choices && aiReply.choices[0]) {
+        const text = aiReply.choices[0].message.content.trim()
+        const match = text.match(/\{[\s\S]*\}/)
+        if (match) {
+          try {
+            extracted = JSON.parse(match[0])
+          } catch (pErr) {
+            console.log('Falha ao interpretar JSON do extrato bancário:', pErr.message)
+          }
+        }
+      }
+
+      if (!extracted || !Array.isArray(extracted.transacoes)) {
+        return e.json(200, {
+          sucesso: false,
+          aviso:
+            'Não foi possível interpretar automaticamente as transações deste PDF. Confira as transações na conferência ou importe o OFX/.RET do banco, que é mais preciso.',
+          dados: {
+            banco: '',
+            agencia: '',
+            conta: '',
+            dataInicio: new Date().toISOString().slice(0, 10),
+            dataFim: new Date().toISOString().slice(0, 10),
+            saldoFinal: 0,
+            totalTransacoes: 0,
+            transacoes: [],
+            linhasNaoInterpretadas: 1,
+            observacoes: 'Leitura automática incompleta.',
+          },
+        })
+      }
+
+      // Validação e higienização das transações extraídas
+      const transacoesHigienizadas = []
+      let totalEntradas = 0
+      let totalSaidas = 0
+
+      for (let i = 0; i < extracted.transacoes.length; i++) {
+        const tx = extracted.transacoes[i]
+        if (!tx || !tx.descricao) continue
+
+        let valorNum =
+          typeof tx.valor === 'number'
+            ? Math.abs(tx.valor)
+            : parseFloat(
+                String(tx.valor || '0')
+                  .replace(/[^\d.,]/g, '')
+                  .replace(',', '.'),
+              )
+        if (isNaN(valorNum) || valorNum <= 0) continue
+
+        let dataStr = (tx.data || '').toString().slice(0, 10)
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(dataStr)) {
+          // Tenta normalizar DD/MM/AAAA
+          const matchBr = String(tx.data || '').match(/(\d{2})\/(\d{2})\/(\d{4})/)
+          if (matchBr) {
+            dataStr = `${matchBr[3]}-${matchBr[2]}-${matchBr[1]}`
+          } else {
+            dataStr = new Date().toISOString().slice(0, 10)
+          }
+        }
+
+        const tipoNormalizado =
+          String(tx.tipo || 'saida')
+            .toLowerCase()
+            .includes('entrad') ||
+          String(tx.tipo || '')
+            .toLowerCase()
+            .includes('credit')
+            ? 'entrada'
+            : 'saida'
+
+        if (tipoNormalizado === 'entrada') totalEntradas += valorNum
+        else totalSaidas += valorNum
+
+        transacoesHigienizadas.push({
+          data: dataStr,
+          descricao: String(tx.descricao).trim(),
+          valor: Number(valorNum.toFixed(2)),
+          tipo: tipoNormalizado,
+          documentoRef: String(tx.documentoRef || tx.documento || '').trim(),
+          saldoLinha: typeof tx.saldoLinha === 'number' ? tx.saldoLinha : null,
+          fitid: `PDF_${dataStr}_${i + 1}_${valorNum.toFixed(2)}`,
+        })
+      }
+
+      extracted.transacoes = transacoesHigienizadas
+      extracted.totalTransacoes = transacoesHigienizadas.length
+      extracted.totalEntradas = Number(totalEntradas.toFixed(2))
+      extracted.totalSaidas = Number(totalSaidas.toFixed(2))
+      extracted.rasterizado = isRasterizado
+
+      return e.json(200, {
+        sucesso: transacoesHigienizadas.length > 0,
+        aviso:
+          transacoesHigienizadas.length === 0
+            ? 'Nenhuma transação válida identificada. Confira as transações na conferência ou importe o OFX/.RET do banco, que é mais preciso.'
+            : null,
+        dados: extracted,
+      })
+    } catch (err) {
+      console.log('Erro no endpoint /backend/v1/extratos/extrair-pdf:', err.message)
+      return e.json(500, {
+        error: 'Erro ao processar extrato PDF: ' + (err.message || 'desconhecido'),
+      })
+    }
+  },
+  $apis.requireAuth(),
+)
