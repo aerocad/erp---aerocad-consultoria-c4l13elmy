@@ -426,16 +426,15 @@ routerAdd(
         : ''
 
       const diretrizModoEssencial = `
-REGRAS OBRIGATÓRIAS DE EXTRAÇÃO:
-Você DEVE ler linha por linha da imagem ou texto, partindo do topo (cabeçalho) até o rodapé.
-NUNCA omita "fornecedor" (estabelecimento) e "valor_total" se estiverem minimamente visíveis na imagem.
-
-1. NOME DO ESTABELECIMENTO (fornecedor): Localize no TOPO/CABEÇALHO do documento (Razão Social ou Nome Fantasia impresso nas 3 primeiras linhas). NUNCA retorne vazio ("") se houver texto no cabeçalho.
-2. VALOR TOTAL (valor_total): Localize no RODAPÉ ou resumo de totais ("TOTAL R$", "VALOR A PAGAR", "VALOR LÍQUIDO", "TOTAL DA NOTA"). Retorne como número decimal (ex: 215.80).
-3. DATA DE EMISSÃO (data_emissao): Formato ISO AAAA-MM-DD.
-4. CNPJ/CPF DO EMITENTE (cnpj_cpf): 14 dígitos formatados (ex: "01.234.567/0001-89").
-5. FORMA DE PAGAMENTO (forma_pagamento_sugerida): pix, cartao_credito, cartao_debito, dinheiro, boleto, ted_doc ou outro.
-Se qualquer outro campo acessório (como número do cupom, chave de 44 dígitos ou lista minuciosa de itens) não estiver legível, preencha null para ele mas NUNCA deixe de preencher fornecedor, valor_total e data_emissao. Ative modo_essencial=true sempre que a leitura for parcial.`
+PADRÃO DE LEITURA ENXUTO - EXTRAIR ESTRITAMENTE 5 CAMPOS (IGNORAR DEMAIS INFORMAÇÕES):
+1. NOME DO ESTABELECIMENTO (fornecedor): Razão social ou nome fantasia no cabeçalho.
+2. CNPJ DO EMITENTE (cnpj_cpf): 14 dígitos formatados ou vazio se ausente.
+3. DATA DA COMPRA/EMISSÃO (data_emissao): Formato ISO AAAA-MM-DD.
+4. VALOR TOTAL (valor_total): Valor total pago/a pagar no rodapé, número decimal puro.
+5. FORMA DE PAGAMENTO (forma_pagamento_sugerida): cartao_debito, cartao_credito, pix, dinheiro, boleto, ted_doc ou outro.
+   Se cartão de crédito, informe credito_tipo ("a_vista" ou "parcelado") e num_parcelas (número de parcelas).
+INFERÊNCIA OBRIGATÓRIA: Infira o produto e despesa pelo estabelecimento (posto -> combustíveis; supermercado/restaurante -> alimentação; farmácia -> saúde; pedágio/estacionamento -> transporte; etc.).
+IGNORAR TOTALMENTE: itens detalhados da nota, chave de acesso de 44 dígitos, impostos, COO/CCF, etc.`
 
       if (rawContent && rawContent.trim().length > 0) {
         promptMessage = `Analise o seguinte conteúdo textual extraído do documento fiscal (${fileName}${contextoOtimizacao}).
@@ -463,29 +462,33 @@ Retorne EXCLUSIVAMENTE o JSON estruturado puro, sem blocos de texto adicionais f
           'Chamada agente nativo falhou, tentando fallback com $ai.chat:',
           agentErr.message,
         )
-        const systemPrompt = `Você é um auditor contábil e fiscal do CRM AEROCAD especializado em cupons fiscais (NFC-e, SAT), comprovantes PIX, recibos e notas fiscais.
-REGRA OBRIGATÓRIA: Leia linha a linha partindo do cabeçalho até o rodapé.
-NUNCA omita "fornecedor" (razão social/nome do estabelecimento no cabeçalho) e "valor_total" (no rodapé/totais).
+        const systemPrompt = `Você é o Extrator Fiscal Enxuto do CRM AEROCAD.
+Extraia EXCLUSIVAMENTE:
+1. Nome do estabelecimento (fornecedor)
+2. CNPJ (cnpj_cpf)
+3. Data (data_emissao AAAA-MM-DD)
+4. Valor total (valor_total decimal)
+5. Forma de pagamento (cartao_debito, cartao_credito [a_vista ou parcelado com num_parcelas], pix, dinheiro, boleto, outro)
+Inferir produto/categoria pelo estabelecimento (posto -> combustíveis, restaurante/mercado -> alimentação).
+IGNORAR chave 44, impostos, itens detalhados.
 Retorne EXCLUSIVAMENTE um JSON puro estruturado com:
 {
   "sucesso": true,
-  "modo_essencial": false,
+  "modo_essencial": true,
   "tipo_documento": "cupom_fiscal",
-  "fornecedor": "Razão Social ou Nome do Estabelecimento",
+  "fornecedor": "Nome do Estabelecimento",
   "cnpj_cpf": "00.000.000/0000-00",
   "data_emissao": "AAAA-MM-DD",
-  "numero_documento": "COO/CCF ou NFC-e nº",
   "valor_total": 0.0,
-  "valor_impostos": null,
-  "forma_pagamento_sugerida": "pix",
+  "forma_pagamento_sugerida": "cartao_debito",
+  "credito_tipo": "a_vista",
+  "num_parcelas": 1,
   "categoria_sugerida": "despesas_operacionais",
   "plano_contas_codigo": "3.1.5",
   "plano_contas_nome": "Combustível, Pedágios e Locação de Veículos",
-  "descricao_itens": "Resumo dos itens principais",
-  "observacoes": "Chave de acesso se houver",
+  "descricao_itens": "Combustíveis e abastecimento",
   "confianca": "alta"
-}
-Se campos secundários estiverem borrados, defina-os como null ou string vazia mas NUNCA omita fornecedor, data e valor_total. Se a leitura for parcial, ative modo_essencial=true.`
+}`
 
         const fallbackReply = $ai.chat({
           model: 'fast',
@@ -520,12 +523,13 @@ Se campos secundários estiverem borrados, defina-os como null ou string vazia m
       ) {
         try {
           const promptPassadaFoco = `ATENÇÃO: A leitura anterior do documento (${fileName}) deixou em branco o estabelecimento ou o valor total.
-Concentre-se com máxima atenção em DUAS partes essenciais:
-1. CABEÇALHO (primeiras linhas no topo): Nome fantasia ou Razão Social da empresa e CNPJ emitente.
-2. RODAPÉ/TOTAIS (linhas inferiores): Campo TOTAL R$, VALOR A PAGAR ou VALOR PAGO.
-3. FORMA DE PAGAMENTO: PIX, Cartão Débito/Crédito, Dinheiro.
+Foque estritamente em:
+1. CABEÇALHO: Nome do estabelecimento e CNPJ.
+2. RODAPÉ: Valor total da compra e data.
+3. FORMA DE PAGAMENTO: Débito, Crédito (à vista ou parcelado), PIX ou Dinheiro.
+Inferir categoria/produto pelo nome do estabelecimento (posto -> combustível, mercado/restaurante -> alimentação).
 ${rawContent ? 'Conteúdo:\n' + rawContent.slice(0, 3000) : ''}
-Retorne EXCLUSIVAMENTE o JSON estruturado puro com fornecedor, cnpj_cpf, valor_total, data_emissao e forma_pagamento_sugerida.`
+Retorne EXCLUSIVAMENTE o JSON estruturado com fornecedor, cnpj_cpf, valor_total, data_emissao, forma_pagamento_sugerida, credito_tipo e num_parcelas.`
 
           const rescateReply = $ai.chat({
             model: 'fast',
@@ -533,7 +537,7 @@ Retorne EXCLUSIVAMENTE o JSON estruturado puro com fornecedor, cnpj_cpf, valor_t
               {
                 role: 'system',
                 content:
-                  'Você é o especialista de resgate de dados essenciais em cabeçalhos e rodapés de notas e cupons. Retorne JSON puro.',
+                  'Você é o especialista de resgate enxuto dos 5 campos essenciais. Retorne JSON puro.',
               },
               { role: 'user', content: promptPassadaFoco },
             ],

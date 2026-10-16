@@ -45,6 +45,8 @@ export interface ComprovanteExtraido {
     | 'cartao_debito'
     | 'dinheiro'
     | 'outro'
+  credito_tipo?: 'a_vista' | 'parcelado'
+  num_parcelas?: number
   categoria_sugerida:
     | 'despesas_operacionais'
     | 'terceirizados'

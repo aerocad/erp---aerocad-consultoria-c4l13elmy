@@ -94,31 +94,35 @@ export function CapturaComprovanteModal({
   const [salvandoCredorRapido, setSalvandoCredorRapido] = useState(false)
 
   // Dados fiscais adicionais (chave 44, série, etc.)
-  const [chaveAcesso, setChaveAcesso] = useState('')
-  const [serieDoc, setSerieDoc] = useState('')
-  const [dadosCompletosDoc, setDadosCompletosDoc] = useState<Partial<ComprovanteExtraido>>({})
+  const [credorId, setCredorId] = useState<string>('')
+  const [mostrarCadastroCredor, setMostrarCadastroCredor] = useState(false)
+  const [salvandoCredorRapido, setSalvandoCredorRapido] = useState(false)
 
-  // Campos do formulário de conferência
+  // Campos essenciais enxutos (1: Estabelecimento, 2: CNPJ, 3: Data, 4: Valor Total, 5: Forma de Pagamento)
   const [tipoDoc, setTipoDoc] = useState<TipoDocumentoFiscal>('cupom_fiscal')
   const [fornecedor, setFornecedor] = useState('')
   const [cnpjCpf, setCnpjCpf] = useState('')
-  const [numeroDoc, setNumeroDoc] = useState('')
   const [dataEmissao, setDataEmissao] = useState(new Date().toISOString().slice(0, 10))
   const [valorTotal, setValorTotal] = useState<number | ''>('')
-  const [valorImpostos, setValorImpostos] = useState<number | ''>('')
+  const [formaPagamento, setFormaPagamento] = useState<
+    'pix' | 'ted_doc' | 'boleto' | 'cartao_credito' | 'cartao_debito' | 'dinheiro' | 'outro'
+  >('cartao_debito')
+  const [creditoTipo, setCreditoTipo] = useState<'a_vista' | 'parcelado'>('a_vista')
+  const [numParcelas, setNumParcelas] = useState<number>(1)
+
+  // Classificação contábil e detalhamento manual
   const [categoria, setCategoria] = useState<
     'despesas_operacionais' | 'terceirizados' | 'impostos' | 'equipamentos' | 'folha' | 'outros'
   >('despesas_operacionais')
-  const [planoContasCodigo, setPlanoContasCodigo] = useState('3.1.1')
+  const [planoContasCodigo, setPlanoContasCodigo] = useState('3.1.5')
   const [planoContasNome, setPlanoContasNome] = useState(
-    'Despesas Administrativas Gerais & Escritório',
+    'Combustível, Pedágios e Locação de Veículos',
   )
-  const [formaPagamento, setFormaPagamento] = useState<
-    'pix' | 'ted_doc' | 'boleto' | 'cartao_credito' | 'cartao_debito' | 'dinheiro' | 'outro'
-  >('pix')
+  const [contaBancariaId, setContaBancariaId] = useState<string>('')
   const [descricaoItens, setDescricaoItens] = useState('')
   const [projetoId, setProjetoId] = useState<string>('nenhum')
   const [observacoes, setObservacoes] = useState('')
+  const [detalhamentoManualAberto, setDetalhamentoManualAberto] = useState(true)
   const [confianca, setConfianca] = useState<'alta' | 'media' | 'baixa'>('alta')
   const [avisoExtracao, setAvisoExtracao] = useState<string | null>(null)
   const [modoEssencialAtivo, setModoEssencialAtivo] = useState<boolean>(false)
@@ -142,11 +146,11 @@ export function CapturaComprovanteModal({
       setAvisoExtracao(null)
       setCredorId('')
       setMostrarCadastroCredor(false)
-      setChaveAcesso('')
-      setSerieDoc('')
-      setDadosCompletosDoc({})
       setModoEssencialAtivo(false)
       setInfoInferencia(null)
+      setCreditoTipo('a_vista')
+      setNumParcelas(1)
+      setContaBancariaId('')
     }
   }, [open])
 
@@ -290,18 +294,13 @@ export function CapturaComprovanteModal({
   }
 
   function preencherFormularioComExtraido(extraido: ComprovanteExtraido, nomeArquivo: string) {
-    setDadosCompletosDoc(extraido)
-    setTipoDoc(extraido.tipo_documento || 'outro')
+    setTipoDoc(extraido.tipo_documento || 'cupom_fiscal')
     const forn = extraido.fornecedor || ''
     setFornecedor(forn)
     const docLimpo = extraido.cnpj_cpf || ''
     setCnpjCpf(docLimpo)
-    setNumeroDoc(extraido.numero_documento || '')
-    if (extraido.serie) setSerieDoc(extraido.serie)
-    if (extraido.chave_acesso) setChaveAcesso(extraido.chave_acesso)
     setDataEmissao(extraido.data_emissao || new Date().toISOString().slice(0, 10))
     setValorTotal(extraido.valor_total || '')
-    setValorImpostos(extraido.valor_impostos || '')
     const cat = extraido.categoria_sugerida || 'despesas_operacionais'
     setCategoria(cat)
     if (extraido.plano_contas_codigo) {
@@ -312,25 +311,33 @@ export function CapturaComprovanteModal({
       setPlanoContasCodigo(pc.codigo)
       setPlanoContasNome(pc.nome)
     }
-    setFormaPagamento(extraido.forma_pagamento_sugerida || 'pix')
+
+    const forma = extraido.forma_pagamento_sugerida || 'cartao_debito'
+    setFormaPagamento(forma)
+    if (extraido.credito_tipo) {
+      setCreditoTipo(extraido.credito_tipo)
+    } else if (forma === 'cartao_credito') {
+      setCreditoTipo('a_vista')
+    }
+    if (extraido.num_parcelas && extraido.num_parcelas > 1) {
+      setNumParcelas(extraido.num_parcelas)
+      setCreditoTipo('parcelado')
+    } else {
+      setNumParcelas(1)
+    }
+
     setDescricaoItens(
-      extraido.descricao_itens || `Despesa comprovante ${nomeArquivo.replace(/\.[^/.]+$/, '')}`,
+      extraido.descricao_itens ||
+        (forn ? `Despesa - ${forn}` : `Comprovante ${nomeArquivo.replace(/\.[^/.]+$/, '')}`),
     )
     setObservacoes(extraido.observacoes || '')
-    setConfianca(extraido.confianca || 'media')
+    setConfianca(extraido.confianca || 'alta')
 
-    // Ativa Modo Essencial se o backend marcou modo_essencial, OU se temos pelo menos um dado vital
-    // (fornecedor/CNPJ, valor > 0 ou data válida) com leitura parcial ou pendência de outros dados
-    const temDadoVital =
-      Boolean(forn || docLimpo) ||
-      (typeof extraido.valor_total === 'number' && extraido.valor_total > 0) ||
-      Boolean(extraido.data_emissao)
-    const leituraParcial =
-      Boolean(extraido.modo_essencial) ||
-      (temDadoVital &&
-        (!extraido.numero_documento || !extraido.chave_acesso || extraido.confianca !== 'alta'))
+    // Modo essencial ativado se algum dos 5 campos essenciais veio vazio ou sinalizado pelo extrator
+    const vitalVazio =
+      !forn || !docLimpo || !extraido.valor_total || !extraido.data_emissao || !forma
+    setModoEssencialAtivo(Boolean(extraido.modo_essencial || vitalVazio))
 
-    setModoEssencialAtivo(leituraParcial)
     if (extraido.inferencia_categoria) {
       setInfoInferencia(extraido.inferencia_categoria)
     } else {
@@ -389,78 +396,13 @@ export function CapturaComprovanteModal({
     }
   }
 
-  // Copiar resumo estruturado do DANFE para área de transferência
-  async function handleCopiarResumoDanfe() {
-    try {
-      const dadosParaResumo: ComprovanteExtraido = {
-        sucesso: true,
-        tipo_documento: tipoDoc,
-        fornecedor,
-        cnpj_cpf: cnpjCpf,
-        numero_documento: numeroDoc,
-        serie: serieDoc,
-        chave_acesso: chaveAcesso,
-        data_emissao: dataEmissao,
-        valor_total:
-          typeof valorTotal === 'number' ? valorTotal : parseFloat(String(valorTotal)) || 0,
-        valor_impostos: typeof valorImpostos === 'number' ? valorImpostos : null,
-        forma_pagamento_sugerida: formaPagamento,
-        categoria_sugerida: categoria,
-        plano_contas_codigo: planoContasCodigo,
-        plano_contas_nome: planoContasNome,
-        descricao_itens: descricaoItens,
-        observacoes,
-        confianca,
-        itens_danfe: dadosCompletosDoc.itens_danfe,
-      }
-      const texto = formatarResumoDanfeParaAreaTransferencia(dadosParaResumo, podeVerValores)
-      await navigator.clipboard.writeText(texto)
-      toast.success('Resumo do documento fiscal copiado para a área de transferência!')
-    } catch (err) {
-      console.error(err)
-      toast.error('Não foi possível copiar para a área de transferência.')
-    }
-  }
-
-  // Imprimir DANFE simplificado A4
-  function handleImprimirDanfeSimplificado() {
-    try {
-      const dadosParaImpressao: ComprovanteExtraido = {
-        sucesso: true,
-        tipo_documento: tipoDoc,
-        fornecedor,
-        cnpj_cpf: cnpjCpf,
-        numero_documento: numeroDoc,
-        serie: serieDoc,
-        chave_acesso: chaveAcesso,
-        data_emissao: dataEmissao,
-        valor_total:
-          typeof valorTotal === 'number' ? valorTotal : parseFloat(String(valorTotal)) || 0,
-        valor_impostos: typeof valorImpostos === 'number' ? valorImpostos : null,
-        forma_pagamento_sugerida: formaPagamento,
-        categoria_sugerida: categoria,
-        plano_contas_codigo: planoContasCodigo,
-        plano_contas_nome: planoContasNome,
-        descricao_itens: descricaoItens,
-        observacoes,
-        confianca,
-        itens_danfe: dadosCompletosDoc.itens_danfe,
-      }
-      imprimirDanfeSimplificado(dadosParaImpressao, podeVerValores)
-      toast.info('Abrindo visualização de impressão do DANFE Simplificado...')
-    } catch (err) {
-      console.error(err)
-      toast.error('Erro ao gerar visualização do DANFE Simplificado.')
-    }
-  }
-
   // Reprocessa a MESMA foto/arquivo já carregado sem exigir recaptura
   async function handleReprocessarMesmaFoto() {
     if (!arquivoSelecionado) {
       toast.error('Nenhum arquivo carregado para reprocessar.')
       return
     }
-    toast.info('Reprocessando a mesma foto com realce visual...')
+    toast.info('Reprocessando a mesma foto com foco nos 5 campos essenciais...')
     await executarExtracao(arquivoSelecionado)
   }
 
@@ -472,7 +414,7 @@ export function CapturaComprovanteModal({
     }
 
     if (!fornecedor.trim()) {
-      toast.error('Informe a Razão Social ou Fornecedor.')
+      toast.error('Informe a Razão Social ou Estabelecimento.')
       return
     }
 
@@ -483,7 +425,7 @@ export function CapturaComprovanteModal({
     }
 
     if (!dataEmissao) {
-      toast.error('Informe a data de vencimento / emissão.')
+      toast.error('Informe a data da compra / emissão.')
       return
     }
 
@@ -491,7 +433,14 @@ export function CapturaComprovanteModal({
     try {
       const descFinal = descricaoItens.trim()
         ? descricaoItens.trim()
-        : `${TIPO_DOC_LABELS[tipoDoc]} - ${fornecedor}`
+        : `${fornecedor} - ${infoInferencia?.descricao_produto_inferido || 'Despesa Operacional'}`
+
+      const infoPagtoTexto =
+        formaPagamento === 'cartao_credito'
+          ? `Cartão de Crédito (${creditoTipo === 'parcelado' ? `${numParcelas}x parcelado` : 'à vista'})`
+          : formaPagamento === 'cartao_debito'
+            ? 'Cartão de Débito'
+            : formaPagamento.toUpperCase()
 
       await salvarContaPagarComComprovante({
         descricao: descFinal,
@@ -500,15 +449,17 @@ export function CapturaComprovanteModal({
         valor: valorNum,
         data_vencimento: dataEmissao,
         forma_pagamento: formaPagamento,
-        numero_documento: numeroDoc.trim() || undefined,
         projetoId: projetoId === 'nenhum' ? null : projetoId,
+        conta_bancaria: contaBancariaId || undefined,
+        cnpj_cpf_beneficiario: cnpjCpf.trim() || undefined,
         observacoes: [
           observacoes.trim(),
-          cnpjCpf ? `CNPJ/CPF: ${cnpjCpf}` : '',
-          chaveAcesso ? `Chave de Acesso: ${chaveAcesso}` : '',
-          serieDoc ? `Série: ${serieDoc}` : '',
-          valorImpostos ? `Impostos destacados: R$ ${valorImpostos}` : '',
-          `Extraído via IA / Varredura Fiscal (${TIPO_DOC_LABELS[tipoDoc]})`,
+          cnpjCpf ? `CNPJ: ${cnpjCpf}` : '',
+          `Forma de Pagamento: ${infoPagtoTexto}`,
+          infoInferencia?.descricao_produto_inferido
+            ? `Produto/Despesa inferido: ${infoInferencia.descricao_produto_inferido}`
+            : '',
+          'Captura enxuta de comprovante / cupom fiscal',
         ]
           .filter(Boolean)
           .join('\n'),
@@ -723,12 +674,12 @@ export function CapturaComprovanteModal({
                   <Sparkles className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
                   <div>
                     <span className="font-bold block text-blue-900">
-                      Leitura parcial — dados essenciais extraídos
+                      Padrão de leitura enxuto aplicado
                     </span>
                     <span className="text-[11px] text-blue-800">
-                      Os 5 campos vitais (data, valor, forma de pagamento, estabelecimento e CNPJ)
-                      foram capturados e a categoria inferida automaticamente. Confira e complete o
-                      restante.
+                      Extração focada estritamente nos 5 dados vitais (estabelecimento, CNPJ, data,
+                      valor e forma de pagamento). A categoria e o produto foram inferidos pelo nome
+                      do estabelecimento.
                     </span>
                   </div>
                 </div>
@@ -770,17 +721,39 @@ export function CapturaComprovanteModal({
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-neutral-900 flex items-center gap-1.5">
                   <Sparkles className="h-4 w-4 text-[#FF6A13]" />
-                  Campos Essenciais Extraídos (Prioridade Contábil)
+                  Os 5 Campos Vitais do Comprovante (Padrão Enxuto)
                 </span>
                 <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-white text-orange-800 border border-orange-200">
-                  {modoEssencialAtivo ? 'Modo Essencial' : 'Conferência Rápida'}
+                  Leitura Enxuta
                 </span>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
-                {/* 1. Data */}
+                {/* 1. Estabelecimento */}
+                <div className="p-2 rounded-lg bg-white border border-neutral-200/80 shadow-[0_1px_2px_rgba(0,0,0,0.03)] col-span-2 sm:col-span-1">
+                  <span className="text-[10px] text-neutral-500 font-medium block">
+                    1. Estabelecimento
+                  </span>
+                  <span
+                    className="font-bold text-neutral-900 text-xs truncate block"
+                    title={fornecedor}
+                  >
+                    {fornecedor || '—'}
+                  </span>
+                </div>
+                {/* 2. CNPJ */}
+                <div className="p-2 rounded-lg bg-white border border-neutral-200/80 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+                  <span className="text-[10px] text-neutral-500 font-medium block">2. CNPJ</span>
+                  <span
+                    className="font-semibold text-neutral-700 font-mono text-[11px] truncate block"
+                    title={cnpjCpf}
+                  >
+                    {cnpjCpf || '—'}
+                  </span>
+                </div>
+                {/* 3. Data */}
                 <div className="p-2 rounded-lg bg-white border border-neutral-200/80 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
                   <span className="text-[10px] text-neutral-500 font-medium block">
-                    1. Data Emissão
+                    3. Data Compra
                   </span>
                   <span
                     className="font-bold text-neutral-900 font-mono text-xs truncate block"
@@ -789,10 +762,10 @@ export function CapturaComprovanteModal({
                     {dataEmissao ? dataEmissao.split('-').reverse().join('/') : '—'}
                   </span>
                 </div>
-                {/* 2. Valor */}
+                {/* 4. Valor */}
                 <div className="p-2 rounded-lg bg-white border border-neutral-200/80 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
                   <span className="text-[10px] text-neutral-500 font-medium block">
-                    2. Valor Total
+                    4. Valor Total
                   </span>
                   <span
                     className="font-bold text-[#FF6A13] font-mono text-xs truncate block"
@@ -805,40 +778,26 @@ export function CapturaComprovanteModal({
                       : '—'}
                   </span>
                 </div>
-                {/* 3. Forma de Pagamento */}
+                {/* 5. Forma de Pagamento */}
                 <div className="p-2 rounded-lg bg-white border border-neutral-200/80 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
                   <span className="text-[10px] text-neutral-500 font-medium block">
-                    3. Forma Pagto
+                    5. Forma Pagto
                   </span>
                   <span
-                    className="font-semibold text-neutral-800 uppercase text-[11px] truncate block"
-                    title={formaPagamento}
+                    className="font-semibold text-neutral-800 text-[11px] truncate block"
+                    title={
+                      formaPagamento === 'cartao_credito'
+                        ? `Crédito (${creditoTipo === 'parcelado' ? `${numParcelas}x` : 'À vista'})`
+                        : formaPagamento === 'cartao_debito'
+                          ? 'Débito'
+                          : formaPagamento.toUpperCase()
+                    }
                   >
-                    {formaPagamento}
-                  </span>
-                </div>
-                {/* 4. Estabelecimento */}
-                <div className="p-2 rounded-lg bg-white border border-neutral-200/80 shadow-[0_1px_2px_rgba(0,0,0,0.03)] col-span-1 sm:col-span-1">
-                  <span className="text-[10px] text-neutral-500 font-medium block">
-                    4. Estabelecimento
-                  </span>
-                  <span
-                    className="font-semibold text-neutral-900 text-[11px] truncate block"
-                    title={fornecedor}
-                  >
-                    {fornecedor || '—'}
-                  </span>
-                </div>
-                {/* 5. CNPJ */}
-                <div className="p-2 rounded-lg bg-white border border-neutral-200/80 shadow-[0_1px_2px_rgba(0,0,0,0.03)] col-span-2 sm:col-span-1">
-                  <span className="text-[10px] text-neutral-500 font-medium block">
-                    5. CNPJ Emitente
-                  </span>
-                  <span
-                    className="font-semibold text-neutral-700 font-mono text-[11px] truncate block"
-                    title={cnpjCpf}
-                  >
-                    {cnpjCpf || '—'}
+                    {formaPagamento === 'cartao_credito'
+                      ? `Crédito (${creditoTipo === 'parcelado' ? `${numParcelas}x` : 'À vista'})`
+                      : formaPagamento === 'cartao_debito'
+                        ? 'Débito'
+                        : formaPagamento.toUpperCase()}
                   </span>
                 </div>
               </div>
@@ -908,54 +867,14 @@ export function CapturaComprovanteModal({
                 </div>
               </div>
 
-              {/* COLUNA DIREITA: FORMULÁRIO EDITÁVEL PRÉ-PREENCHIDO */}
+              {/* COLUNA DIREITA: FORMULÁRIO ENXUTO E DETALHAMENTO MANUAL */}
               <div className="md:col-span-7 space-y-3 text-xs">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <Label className="text-xs">Tipo de Documento</Label>
-                    <Select
-                      value={tipoDoc}
-                      onValueChange={(val) => setTipoDoc(val as TipoDocumentoFiscal)}
-                    >
-                      <SelectTrigger className="h-8 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Object.entries(TIPO_DOC_LABELS).map(([k, label]) => (
-                          <SelectItem key={k} value={k}>
-                            {label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-1">
-                    <Label className="text-xs">Número / Série</Label>
-                    <div className="flex gap-1.5">
-                      <Input
-                        value={numeroDoc}
-                        onChange={(e) => setNumeroDoc(e.target.value)}
-                        placeholder="Número: 004821"
-                        className="h-8 text-xs font-mono flex-1"
-                      />
-                      <Input
-                        value={serieDoc}
-                        onChange={(e) => setSerieDoc(e.target.value)}
-                        placeholder="Série"
-                        className="h-8 text-xs font-mono w-20"
-                        title="Série fiscal"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* VINCULAÇÃO DE CREDOR / FORNECEDOR */}
+                {/* 1. Nome do Estabelecimento e CNPJ */}
                 <div className="p-2.5 rounded-lg border border-neutral-200 bg-neutral-50/70 space-y-2">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1.5 text-xs font-semibold text-neutral-800">
                       <Building2 className="h-3.5 w-3.5 text-[#FF6A13]" />
-                      <span>Credor / Fornecedor Vinculado</span>
+                      <span>1. Estabelecimento & 2. CNPJ</span>
                     </div>
                     {credorId && (
                       <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded flex items-center gap-1">
@@ -967,19 +886,21 @@ export function CapturaComprovanteModal({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <div className="space-y-1">
                       <Label className="text-xs font-medium text-neutral-700">
-                        Fornecedor / Razão Social *
+                        Nome do Estabelecimento *
                       </Label>
                       <Input
                         value={fornecedor}
                         onChange={(e) => setFornecedor(e.target.value)}
-                        placeholder="Nome fantasia ou razão social"
-                        className="h-8 text-xs"
+                        placeholder="Ex: Auto Posto Bandeirantes"
+                        className="h-8 text-xs font-medium"
                         required
                       />
                     </div>
 
                     <div className="space-y-1">
-                      <Label className="text-xs font-medium text-neutral-700">CNPJ / CPF</Label>
+                      <Label className="text-xs font-medium text-neutral-700">
+                        CNPJ do Estabelecimento
+                      </Label>
                       <Input
                         value={cnpjCpf}
                         onChange={(e) => setCnpjCpf(e.target.value)}
@@ -989,6 +910,7 @@ export function CapturaComprovanteModal({
                     </div>
                   </div>
 
+                  {/* Vínculo de Credor */}
                   {credores.length > 0 && (
                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pt-1 text-[11px]">
                       <div className="flex-1 w-full sm:w-auto">
@@ -1000,7 +922,9 @@ export function CapturaComprovanteModal({
                             <SelectValue placeholder="Selecione credor cadastrado..." />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="nenhum">Nenhum (usar apenas nome avulso)</SelectItem>
+                            <SelectItem value="nenhum">
+                              Nenhum (usar apenas nome do estabelecimento)
+                            </SelectItem>
                             {credores.map((c) => (
                               <SelectItem key={c.id} value={c.id}>
                                 {c.nome} {c.cpf_cnpj ? `(${c.cpf_cnpj})` : ''}
@@ -1031,28 +955,24 @@ export function CapturaComprovanteModal({
                   )}
                 </div>
 
-                {/* Chave de Acesso se houver */}
-                {chaveAcesso && (
-                  <div className="space-y-1">
-                    <Label className="text-xs font-medium text-neutral-700 flex items-center justify-between">
-                      <span>Chave de Acesso (44 dígitos)</span>
-                      <span className="text-[10px] text-neutral-400 font-mono">
-                        {chaveAcesso.length} dígitos
-                      </span>
-                    </Label>
-                    <Input
-                      value={chaveAcesso}
-                      onChange={(e) => setChaveAcesso(e.target.value)}
-                      placeholder="Chave de 44 dígitos"
-                      className="h-8 text-xs font-mono bg-neutral-50"
-                    />
-                  </div>
-                )}
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {/* 3. Data e 4. Valor Total */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <Label className="text-xs font-semibold text-neutral-900">
-                      Valor Total (R$) *
+                      3. Data da Compra / Emissão *
+                    </Label>
+                    <Input
+                      type="date"
+                      value={dataEmissao}
+                      onChange={(e) => setDataEmissao(e.target.value)}
+                      className="h-8 text-xs font-mono"
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold text-neutral-900">
+                      4. Valor Total da Compra (R$) *
                     </Label>
                     <Input
                       type="number"
@@ -1066,181 +986,234 @@ export function CapturaComprovanteModal({
                       required
                     />
                   </div>
-
-                  <div className="space-y-1">
-                    <Label className="text-xs">Impostos Destacados (R$)</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={valorImpostos}
-                      onChange={(e) =>
-                        setValorImpostos(e.target.value === '' ? '' : parseFloat(e.target.value))
-                      }
-                      placeholder="0,00"
-                      className="h-8 text-xs font-mono"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <Label className="text-xs font-semibold text-neutral-900">
-                      Data de Emissão / Vencimento *
-                    </Label>
-                    <Input
-                      type="date"
-                      value={dataEmissao}
-                      onChange={(e) => setDataEmissao(e.target.value)}
-                      className="h-8 text-xs font-mono"
-                      required
-                    />
-                  </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <Label className="text-xs">Categoria de Conta a Pagar</Label>
-                    <Select
-                      value={categoria}
-                      onValueChange={(val) => {
-                        const novaCat = val as
-                          | 'despesas_operacionais'
-                          | 'terceirizados'
-                          | 'impostos'
-                          | 'equipamentos'
-                          | 'folha'
-                          | 'outros'
-                        setCategoria(novaCat)
-                        const pc = sugerirPlanoContasPorCategoria(novaCat)
-                        setPlanoContasCodigo(pc.codigo)
-                        setPlanoContasNome(pc.nome)
-                      }}
-                    >
-                      <SelectTrigger className="h-8 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="despesas_operacionais">Despesas Operacionais</SelectItem>
-                        <SelectItem value="terceirizados">Terceirizados & Serviços</SelectItem>
-                        <SelectItem value="impostos">Impostos & Tributos</SelectItem>
-                        <SelectItem value="equipamentos">Equipamentos & Hardware</SelectItem>
-                        <SelectItem value="folha">Folha de Pagamento</SelectItem>
-                        <SelectItem value="outros">Outros Custos</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-1">
-                    <Label className="text-xs">Forma de Pagamento</Label>
-                    <Select
-                      value={formaPagamento}
-                      onValueChange={(val) =>
-                        setFormaPagamento(
-                          val as
-                            | 'pix'
-                            | 'ted_doc'
-                            | 'boleto'
-                            | 'cartao_credito'
-                            | 'cartao_debito'
-                            | 'dinheiro'
-                            | 'outro',
-                        )
-                      }
-                    >
-                      <SelectTrigger className="h-8 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="pix">PIX</SelectItem>
-                        <SelectItem value="ted_doc">TED / DOC</SelectItem>
-                        <SelectItem value="boleto">Boleto Bancário</SelectItem>
-                        <SelectItem value="cartao_credito">Cartão de Crédito</SelectItem>
-                        <SelectItem value="cartao_debito">Cartão de Débito</SelectItem>
-                        <SelectItem value="dinheiro">Dinheiro em Espécie</SelectItem>
-                        <SelectItem value="outro">Outro</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                {/* Classificação Contábil Editável (Plano de Contas) com Inferência pelo Estabelecimento */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-xs font-semibold">
-                        Classificação Contábil (Plano de Contas)
-                      </Label>
-                      {infoInferencia && (
-                        <span
-                          className="text-[10px] font-semibold text-orange-700 bg-orange-100 px-1.5 py-0.2 rounded border border-orange-200"
-                          title={`Inferido por: ${infoInferencia.termo_detectado || 'nome do estabelecimento'}`}
-                        >
-                          sugerido pelo estabelecimento
-                        </span>
-                      )}
+                {/* 5. Forma de Pagamento (Débito, Crédito à vista/parcelado, etc.) */}
+                <div className="p-2.5 rounded-lg border border-neutral-200 bg-neutral-50/70 space-y-2">
+                  <Label className="text-xs font-semibold text-neutral-900 block">
+                    5. Forma de Pagamento
+                  </Label>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <div className="space-y-1 sm:col-span-1">
+                      <Select
+                        value={formaPagamento}
+                        onValueChange={(val) => {
+                          const f = val as typeof formaPagamento
+                          setFormaPagamento(f)
+                          if (f === 'cartao_credito' && !creditoTipo) {
+                            setCreditoTipo('a_vista')
+                          }
+                        }}
+                      >
+                        <SelectTrigger className="h-8 text-xs bg-white">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="cartao_debito">Cartão de Débito</SelectItem>
+                          <SelectItem value="cartao_credito">Cartão de Crédito</SelectItem>
+                          <SelectItem value="pix">PIX</SelectItem>
+                          <SelectItem value="dinheiro">Dinheiro</SelectItem>
+                          <SelectItem value="boleto">Boleto Bancário</SelectItem>
+                          <SelectItem value="ted_doc">TED / DOC</SelectItem>
+                          <SelectItem value="outro">Outro</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
-                    <Select
-                      value={planoContasCodigo}
-                      onValueChange={(val) => {
-                        setPlanoContasCodigo(val)
-                        const item = PLANO_CONTAS_AEROCAD.find((p) => p.codigo === val)
-                        if (item) setPlanoContasNome(item.nome)
-                      }}
-                    >
-                      <SelectTrigger className="h-8 text-xs font-mono">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {PLANO_CONTAS_AEROCAD.filter((p) => p.natureza === 'despesa').map((p) => (
-                          <SelectItem key={p.codigo} value={p.codigo}>
-                            {p.codigo} - {p.nome}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {infoInferencia && (
-                      <p className="text-[10px] text-neutral-500 italic">
-                        Segmento: {infoInferencia.segmento} (
-                        {infoInferencia.descricao_produto_inferido})
-                      </p>
+
+                    {formaPagamento === 'cartao_credito' && (
+                      <>
+                        <div className="space-y-1">
+                          <Select
+                            value={creditoTipo}
+                            onValueChange={(val) => {
+                              const t = val as 'a_vista' | 'parcelado'
+                              setCreditoTipo(t)
+                              if (t === 'a_vista') setNumParcelas(1)
+                            }}
+                          >
+                            <SelectTrigger className="h-8 text-xs bg-white">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="a_vista">À Vista</SelectItem>
+                              <SelectItem value="parcelado">Parcelado</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {creditoTipo === 'parcelado' && (
+                          <div className="space-y-1">
+                            <Input
+                              type="number"
+                              min={2}
+                              max={48}
+                              value={numParcelas}
+                              onChange={(e) => setNumParcelas(parseInt(e.target.value) || 2)}
+                              placeholder="Nº parcelas"
+                              className="h-8 text-xs font-mono bg-white"
+                              title="Quantidade de parcelas no crédito"
+                            />
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* INFERÊNCIA DO PRODUTO / CATEGORIA AUTOMÁTICA PELO ESTABELECIMENTO */}
+                <div className="p-3 rounded-lg border border-orange-200 bg-orange-50/40 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-neutral-800 flex items-center gap-1.5">
+                      <Sparkles className="h-3.5 w-3.5 text-[#FF6A13]" />
+                      Produto & Categoria Inferidos pelo Estabelecimento
+                    </span>
+                    {infoInferencia?.segmento && (
+                      <span className="text-[10px] font-bold text-orange-800 bg-orange-100 px-2 py-0.5 rounded border border-orange-200">
+                        {infoInferencia.segmento}
+                      </span>
                     )}
                   </div>
 
-                  <div className="space-y-1">
-                    <Label className="text-xs">Projeto AEROCAD Vinculado (Opcional)</Label>
-                    <Select value={projetoId} onValueChange={setProjetoId}>
-                      <SelectTrigger className="h-8 text-xs">
-                        <SelectValue placeholder="Selecione se for custo de projeto específico..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="nenhum">Nenhum (Despesa Operacional Geral)</SelectItem>
-                        {projetos.map((p) => (
-                          <SelectItem key={p.id} value={p.id}>
-                            {p.numero} · {p.nome}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                    <div className="space-y-1">
+                      <Label className="text-[11px] text-neutral-600">Categoria Contábil</Label>
+                      <Select
+                        value={categoria}
+                        onValueChange={(val) => {
+                          const novaCat = val as
+                            | 'despesas_operacionais'
+                            | 'terceirizados'
+                            | 'impostos'
+                            | 'equipamentos'
+                            | 'folha'
+                            | 'outros'
+                          setCategoria(novaCat)
+                          const pc = sugerirPlanoContasPorCategoria(novaCat)
+                          setPlanoContasCodigo(pc.codigo)
+                          setPlanoContasNome(pc.nome)
+                        }}
+                      >
+                        <SelectTrigger className="h-8 text-xs bg-white">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="despesas_operacionais">
+                            Despesas Operacionais
                           </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                          <SelectItem value="terceirizados">Terceirizados & Serviços</SelectItem>
+                          <SelectItem value="impostos">Impostos & Tributos</SelectItem>
+                          <SelectItem value="equipamentos">Equipamentos & Hardware</SelectItem>
+                          <SelectItem value="folha">Folha de Pagamento</SelectItem>
+                          <SelectItem value="outros">Outros Custos</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label className="text-[11px] text-neutral-600">Plano de Contas</Label>
+                      <Select
+                        value={planoContasCodigo}
+                        onValueChange={(val) => {
+                          setPlanoContasCodigo(val)
+                          const item = PLANO_CONTAS_AEROCAD.find((p) => p.codigo === val)
+                          if (item) setPlanoContasNome(item.nome)
+                        }}
+                      >
+                        <SelectTrigger className="h-8 text-xs font-mono bg-white">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-52">
+                          {PLANO_CONTAS_AEROCAD.filter((p) => p.natureza === 'despesa').map((p) => (
+                            <SelectItem key={p.codigo} value={p.codigo}>
+                              {p.codigo} - {p.nome}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
+
+                  {infoInferencia?.descricao_produto_inferido && (
+                    <p className="text-[11px] text-neutral-600 italic">
+                      💡 {infoInferencia.descricao_produto_inferido}
+                    </p>
+                  )}
                 </div>
 
-                <div className="space-y-1">
-                  <Label className="text-xs">Descrição dos Itens / Serviço</Label>
-                  <Input
-                    value={descricaoItens}
-                    onChange={(e) => setDescricaoItens(e.target.value)}
-                    placeholder="Ex: Abastecimento de combustível caminhonete em campo"
-                    className="h-8 text-xs"
-                  />
-                </div>
+                {/* DETALHAMENTO MANUAL DA DESPESA (ITEM 2 DO PEDIDO) */}
+                <div className="border rounded-lg overflow-hidden bg-white">
+                  <button
+                    type="button"
+                    onClick={() => setDetalhamentoManualAberto(!detalhamentoManualAberto)}
+                    className="w-full px-3 py-2 bg-neutral-100 hover:bg-neutral-200/80 text-left font-semibold text-neutral-800 text-xs flex items-center justify-between"
+                  >
+                    <span>Detalhamento Manual da Despesa</span>
+                    <span className="text-[11px] font-normal text-neutral-500">
+                      {detalhamentoManualAberto ? '▲ Recolher' : '▼ Expandir campos manuais'}
+                    </span>
+                  </button>
 
-                <div className="space-y-1">
-                  <Label className="text-xs">Observações Fiscais</Label>
-                  <Textarea
-                    value={observacoes}
-                    onChange={(e) => setObservacoes(e.target.value)}
-                    placeholder="Chave de acesso, observações ou detalhes adicionais..."
-                    rows={2}
-                    className="text-xs resize-none"
-                  />
+                  {detalhamentoManualAberto && (
+                    <div className="p-3 space-y-3">
+                      <div className="space-y-1">
+                        <Label className="text-xs font-medium text-neutral-700">
+                          Descrição Detalhada / Histórico do Lançamento
+                        </Label>
+                        <Input
+                          value={descricaoItens}
+                          onChange={(e) => setDescricaoItens(e.target.value)}
+                          placeholder="Ex: Abastecimento caminhonete em campo no projeto 2026-042"
+                          className="h-8 text-xs"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <Label className="text-xs text-neutral-600">
+                            Projeto Vinculado (Custeio)
+                          </Label>
+                          <Select value={projetoId} onValueChange={setProjetoId}>
+                            <SelectTrigger className="h-8 text-xs">
+                              <SelectValue placeholder="Sem projeto (Despesa geral)" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="nenhum">Sem projeto (Despesa geral)</SelectItem>
+                              {projetos.map((p) => (
+                                <SelectItem key={p.id} value={p.id}>
+                                  {p.numero} · {p.nome}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="space-y-1">
+                          <Label className="text-xs text-neutral-600">
+                            Conta Bancária de Pagamento
+                          </Label>
+                          <Input
+                            value={contaBancariaId}
+                            onChange={(e) => setContaBancariaId(e.target.value)}
+                            placeholder="Apelido da conta / banco..."
+                            className="h-8 text-xs"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1">
+                        <Label className="text-xs text-neutral-600">
+                          Observações Manuais Internas
+                        </Label>
+                        <Textarea
+                          value={observacoes}
+                          onChange={(e) => setObservacoes(e.target.value)}
+                          placeholder="Anotações para a conferência financeira..."
+                          rows={2}
+                          className="text-xs resize-none"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -1261,32 +1234,6 @@ export function CapturaComprovanteModal({
               </Button>
 
               <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={handleCopiarResumoDanfe}
-                  disabled={isSubmitting}
-                  className="h-8 text-xs"
-                  title="Copiar resumo estruturado para a área de transferência"
-                >
-                  <Copy className="mr-1.5 h-3.5 w-3.5 text-neutral-600" />
-                  Copiar dados
-                </Button>
-
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={handleImprimirDanfeSimplificado}
-                  disabled={isSubmitting}
-                  className="h-8 text-xs text-[#FF6A13] border-orange-200 hover:bg-orange-50"
-                  title="Gerar DANFE Simplificado A4 com carimbo informativo"
-                >
-                  <Printer className="mr-1.5 h-3.5 w-3.5" />
-                  Gerar DANFE simplificado
-                </Button>
-
                 <Button
                   size="sm"
                   onClick={handleSalvarContaPagar}
