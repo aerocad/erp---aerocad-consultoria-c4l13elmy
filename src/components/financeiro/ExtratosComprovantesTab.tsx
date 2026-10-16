@@ -216,8 +216,8 @@ export function ExtratosComprovantesTab({
     // Escopo respeita o extrato selecionado caso não seja "todos"
     const txBase =
       extratoSelecionadoId === 'todos'
-        ? listaTransacoes
-        : listaTransacoes.filter((t) => t && t.extrato === extratoSelecionadoId)
+        ? listaTransacoes.filter(Boolean)
+        : listaTransacoes.filter((t) => Boolean(t && t.extrato === extratoSelecionadoId))
 
     let confirmadas = 0
     let pendentes = 0
@@ -225,9 +225,9 @@ export function ExtratosComprovantesTab({
 
     for (const t of txBase) {
       if (!t) continue
-      if (t.status_conciliacao === 'conciliado') {
+      if (t?.status_conciliacao === 'conciliado') {
         confirmadas++
-      } else if (t.status_conciliacao === 'ignorado') {
+      } else if (t?.status_conciliacao === 'ignorado') {
         ignoradas++
       } else {
         pendentes++
@@ -240,17 +240,21 @@ export function ExtratosComprovantesTab({
       pendentes,
       ignoradas,
     }
-  }, [transacoes, extratoSelecionadoId])
+  }, [listaTransacoes, extratoSelecionadoId])
 
-  // Transações filtradas
+  // Transações filtradas com tolerância a transações órfãs (extrato nulo) e campos incompletos
   const transacoesFiltradas = useMemo(() => {
     const termoBusca = (busca || '').toLowerCase().trim()
     return listaTransacoes.filter((tx) => {
       if (!tx) return false
-      const extratoPai = listaExtratos.find((e) => e && e.id === tx.extrato)
-      const matchExtrato = extratoSelecionadoId === 'todos' || tx.extrato === extratoSelecionadoId
-      const descLower = (tx.descricao || '').toLowerCase()
-      const docRefLower = (tx.documento_ref || '').toLowerCase()
+      const extratoPai = tx.extrato
+        ? listaExtratos.find((e) => e && e.id === tx.extrato)
+        : undefined
+      const matchExtrato =
+        extratoSelecionadoId === 'todos' ||
+        (extratoSelecionadoId === 'sem_extrato' ? !tx.extrato : tx.extrato === extratoSelecionadoId)
+      const descLower = String(tx.descricao || '').toLowerCase()
+      const docRefLower = String(tx.documento_ref || '').toLowerCase()
       const matchBusca =
         !termoBusca || descLower.includes(termoBusca) || docRefLower.includes(termoBusca)
       const matchStatus = filtroStatus === 'todos' || tx.status_conciliacao === filtroStatus
@@ -841,17 +845,21 @@ export function ExtratosComprovantesTab({
 
   // Ações de seleção de transações para lote
   const transacoesPendentesVisiveis = useMemo(() => {
-    return transacoesFiltradas.filter((t) => t && t.status_conciliacao === 'pendente')
+    return transacoesFiltradas.filter((t) =>
+      Boolean(t && t?.id && t?.status_conciliacao === 'pendente'),
+    )
   }, [transacoesFiltradas])
 
   const todasPendentesVisiveisSelecionadas = useMemo(() => {
     if (transacoesPendentesVisiveis.length === 0) return false
-    return transacoesPendentesVisiveis.every((t) => t && selectedTxIds.includes(t.id))
+    return transacoesPendentesVisiveis.every((t) => Boolean(t?.id && selectedTxIds.includes(t.id)))
   }, [transacoesPendentesVisiveis, selectedTxIds])
 
   function alternarSelecaoTodasPendentesVisiveis() {
     if (todasPendentesVisiveisSelecionadas) {
-      const idsPendentesVisiveis = new Set(transacoesPendentesVisiveis.map((t) => t.id))
+      const idsPendentesVisiveis = new Set(
+        transacoesPendentesVisiveis.map((t) => t.id).filter(Boolean),
+      )
       setSelectedTxIds((prev) => prev.filter((id) => !idsPendentesVisiveis.has(id)))
     } else {
       const idsToAdd = transacoesPendentesVisiveis.filter((t) => Boolean(t?.id)).map((t) => t.id)
@@ -860,6 +868,7 @@ export function ExtratosComprovantesTab({
   }
 
   function alternarSelecaoTx(txId: string) {
+    if (!txId) return
     setSelectedTxIds((prev) =>
       prev.includes(txId) ? prev.filter((id) => id !== txId) : [...prev, txId],
     )
@@ -870,8 +879,8 @@ export function ExtratosComprovantesTab({
     if (selectedTxIds.length === 0) return
     setIsConciliandoLote(true)
 
-    const itensParaConciliar = transacoes.filter(
-      (t) => selectedTxIds.includes(t.id) && t.status_conciliacao === 'pendente',
+    const itensParaConciliar = listaTransacoes.filter((t) =>
+      Boolean(t?.id && selectedTxIds.includes(t.id) && t?.status_conciliacao === 'pendente'),
     )
 
     let totalConciliadas = 0
@@ -1798,15 +1807,15 @@ export function ExtratosComprovantesTab({
           if (!open && !isGravandoRetorno) setResumoRetornoModal(null)
         }}
       >
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-sm font-bold text-neutral-900">
-              <FileUp className="h-4 w-4 text-[#FF6A13]" />
-              Resumo da Conciliação de Retorno Bancário (.RET)
-            </DialogTitle>
-          </DialogHeader>
+        {resumoRetornoModal && (
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-sm font-bold text-neutral-900">
+                <FileUp className="h-4 w-4 text-[#FF6A13]" />
+                Resumo da Conciliação de Retorno Bancário (.RET)
+              </DialogTitle>
+            </DialogHeader>
 
-          {resumoRetornoModal && (
             <div className="space-y-4 text-xs">
               {/* Cabeçalho do arquivo decodificado */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-3 bg-neutral-50 rounded-lg border">
@@ -1815,7 +1824,7 @@ export function ExtratosComprovantesTab({
                     Arquivo
                   </span>
                   <span className="font-semibold text-neutral-800 truncate block">
-                    {resumoRetornoModal.file.name}
+                    {resumoRetornoModal?.file?.name || 'Arquivo .RET'}
                   </span>
                 </div>
                 <div>
@@ -1823,7 +1832,8 @@ export function ExtratosComprovantesTab({
                     Layout Detectado
                   </span>
                   <span className="font-bold text-[#FF6A13]">
-                    {resumoRetornoModal.parsed.layout} ({resumoRetornoModal.parsed.bancoNome})
+                    {resumoRetornoModal?.parsed?.layout || 'CNAB'} (
+                    {resumoRetornoModal?.parsed?.bancoNome || 'Banco'})
                   </span>
                 </div>
                 <div>
@@ -1831,7 +1841,7 @@ export function ExtratosComprovantesTab({
                     Conta PJ Destino
                   </span>
                   <span className="font-semibold text-neutral-800 truncate block">
-                    {contasBancarias.find((c) => c.id === resumoRetornoModal.contaBancariaId)
+                    {contasBancarias.find((c) => c.id === resumoRetornoModal?.contaBancariaId)
                       ?.apelido || 'Não associada'}
                   </span>
                 </div>
@@ -1840,11 +1850,11 @@ export function ExtratosComprovantesTab({
                     Período Coberto
                   </span>
                   <span className="font-mono text-neutral-700">
-                    {resumoRetornoModal.parsed.dataInicio
+                    {resumoRetornoModal?.parsed?.dataInicio
                       ? formatDate(resumoRetornoModal.parsed.dataInicio)
                       : '—'}{' '}
                     a{' '}
-                    {resumoRetornoModal.parsed.dataFim
+                    {resumoRetornoModal?.parsed?.dataFim
                       ? formatDate(resumoRetornoModal.parsed.dataFim)
                       : '—'}
                   </span>
@@ -1852,8 +1862,8 @@ export function ExtratosComprovantesTab({
               </div>
 
               {/* Banner de Deduplicação do Retorno */}
-              {resumoRetornoModal.analise.arquivoJaImportado ||
-              resumoRetornoModal.analise.totalNovas === 0 ? (
+              {resumoRetornoModal?.analise?.arquivoJaImportado ||
+              (resumoRetornoModal?.analise?.totalNovas ?? 0) === 0 ? (
                 <div className="p-3.5 bg-amber-50 border border-amber-300 rounded-lg text-amber-900 space-y-1.5">
                   <div className="flex items-center gap-2 font-bold text-xs text-amber-900">
                     <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
@@ -1861,10 +1871,10 @@ export function ExtratosComprovantesTab({
                   </div>
                   <p className="text-[11px] text-amber-800 leading-relaxed">
                     Todos os{' '}
-                    <strong>{resumoRetornoModal.analise.totalCandidatas} lançamentos</strong> deste
-                    retorno bancário já constam no banco de dados. Nenhuma movimentação será
+                    <strong>{resumoRetornoModal?.analise?.totalCandidatas ?? 0} lançamentos</strong>{' '}
+                    deste retorno bancário já constam no banco de dados. Nenhuma movimentação será
                     duplicada na conciliação ou no fluxo.
-                    {resumoRetornoModal.analise.extratoExistenteCorrespondente && (
+                    {resumoRetornoModal?.analise?.extratoExistenteCorrespondente && (
                       <span className="block mt-1 text-amber-900 font-medium">
                         Importação anterior registrada em:{' '}
                         {formatDate(
@@ -1876,17 +1886,19 @@ export function ExtratosComprovantesTab({
                     )}
                   </p>
                 </div>
-              ) : resumoRetornoModal.analise.totalDuplicadas > 0 ? (
+              ) : (resumoRetornoModal?.analise?.totalDuplicadas ?? 0) > 0 ? (
                 <div className="p-3.5 bg-emerald-50 border border-emerald-300 rounded-lg text-emerald-950 space-y-1">
                   <div className="flex items-center gap-2 font-bold text-xs text-emerald-900">
                     <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
                     <span>Filtro de Deduplicação Ativo</span>
                   </div>
                   <p className="text-[11px] text-emerald-800 leading-relaxed">
-                    <strong>{resumoRetornoModal.analise.totalNovas} lançamentos novos</strong> serão
-                    gravados e{' '}
                     <strong>
-                      {resumoRetornoModal.analise.totalDuplicadas} já existentes no banco
+                      {resumoRetornoModal?.analise?.totalNovas ?? 0} lançamentos novos
+                    </strong>{' '}
+                    serão gravados e{' '}
+                    <strong>
+                      {resumoRetornoModal?.analise?.totalDuplicadas ?? 0} já existentes no banco
                     </strong>{' '}
                     serão ignorados para preservar integridade.
                   </p>
@@ -1900,10 +1912,10 @@ export function ExtratosComprovantesTab({
                     Novos Lançamentos
                   </span>
                   <p className="text-base font-bold text-emerald-700 mt-1">
-                    {resumoRetornoModal.analise.totalNovas}
+                    {resumoRetornoModal?.analise?.totalNovas ?? 0}
                   </p>
                   <span className="text-[10px] text-emerald-600">
-                    +{formatCurrency(resumoRetornoModal.analise.totalEntradasNovas)}
+                    +{formatCurrency(resumoRetornoModal?.analise?.totalEntradasNovas ?? 0)}
                   </span>
                 </div>
 
@@ -1912,7 +1924,7 @@ export function ExtratosComprovantesTab({
                     Já Existentes (Ignorados)
                   </span>
                   <p className="text-base font-bold text-amber-700 mt-1">
-                    {resumoRetornoModal.analise.totalDuplicadas}
+                    {resumoRetornoModal?.analise?.totalDuplicadas ?? 0}
                   </p>
                   <span className="text-[10px] text-amber-600">Evitando duplicidade</span>
                 </div>
@@ -1922,10 +1934,10 @@ export function ExtratosComprovantesTab({
                     Débitos / Tarifas
                   </span>
                   <p className="text-base font-bold text-rose-700 mt-1">
-                    {formatCurrency(resumoRetornoModal.parsed.totalSaidas)}
+                    {formatCurrency(resumoRetornoModal?.parsed?.totalSaidas ?? 0)}
                   </p>
                   <span className="text-[10px] text-rose-600">
-                    {resumoRetornoModal.parsed.qtdSaidas} débito(s)
+                    {resumoRetornoModal?.parsed?.qtdSaidas ?? 0} débito(s)
                   </span>
                 </div>
 
@@ -1934,10 +1946,10 @@ export function ExtratosComprovantesTab({
                     Total no Arquivo
                   </span>
                   <p className="text-base font-bold text-neutral-800 mt-1">
-                    {resumoRetornoModal.parsed.totalTransacoes}
+                    {resumoRetornoModal?.parsed?.totalTransacoes ?? 0}
                   </p>
                   <span className="text-[10px] text-neutral-500">
-                    {resumoRetornoModal.parsed.totalRegistros} linhas
+                    {resumoRetornoModal?.parsed?.totalRegistros ?? 0} linhas
                   </span>
                 </div>
               </div>
@@ -1949,7 +1961,7 @@ export function ExtratosComprovantesTab({
                   Códigos de Ocorrência Encontrados no Arquivo:
                 </p>
                 <div className="border rounded-lg overflow-hidden divide-y bg-white">
-                  {resumoRetornoModal.parsed.ocorrenciasResumo.map((oc) => (
+                  {(resumoRetornoModal?.parsed?.ocorrenciasResumo || []).map((oc) => (
                     <div
                       key={oc.codigo}
                       className="px-3 py-2 flex items-center justify-between text-xs"
@@ -1974,14 +1986,14 @@ export function ExtratosComprovantesTab({
               </div>
 
               {/* Avisos se houver linhas não interpretadas */}
-              {resumoRetornoModal.parsed.avisos.length > 0 && (
+              {(resumoRetornoModal?.parsed?.avisos?.length ?? 0) > 0 && (
                 <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-900 space-y-1">
                   <p className="font-bold flex items-center gap-1.5 text-xs text-amber-800">
                     <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
-                    Avisos de Processamento ({resumoRetornoModal.parsed.avisos.length}):
+                    Avisos de Processamento ({resumoRetornoModal?.parsed?.avisos?.length ?? 0}):
                   </p>
                   <div className="max-h-24 overflow-y-auto space-y-1 text-[11px] text-amber-800 pr-1">
-                    {resumoRetornoModal.parsed.avisos.map((av, idx) => (
+                    {resumoRetornoModal?.parsed?.avisos?.map((av, idx) => (
                       <div key={idx}>
                         • Linha {av.linha}: {av.mensagem}
                       </div>
@@ -1994,11 +2006,11 @@ export function ExtratosComprovantesTab({
               <div>
                 <p className="font-semibold text-neutral-800 mb-1.5">
                   Prévia dos Lançamentos (primeiros{' '}
-                  {Math.min(5, resumoRetornoModal.parsed.transacoes.length)} de{' '}
-                  {resumoRetornoModal.parsed.transacoes.length}):
+                  {Math.min(5, resumoRetornoModal?.parsed?.transacoes?.length ?? 0)} de{' '}
+                  {resumoRetornoModal?.parsed?.transacoes?.length ?? 0}):
                 </p>
                 <div className="border rounded-lg overflow-hidden divide-y bg-white text-[11px]">
-                  {resumoRetornoModal.parsed.transacoes.slice(0, 5).map((t, i) => (
+                  {(resumoRetornoModal?.parsed?.transacoes || []).slice(0, 5).map((t, i) => (
                     <div key={i} className="p-2.5 flex items-center justify-between">
                       <div>
                         <p className="font-semibold text-neutral-900">{t.descricao}</p>
@@ -2018,38 +2030,40 @@ export function ExtratosComprovantesTab({
                 </div>
               </div>
             </div>
-          )}
 
-          <DialogFooter className="mt-4 gap-2">
-            <Button
-              variant="outline"
-              disabled={isGravandoRetorno}
-              onClick={() => setResumoRetornoModal(null)}
-            >
-              Cancelar
-            </Button>
-            {resumoRetornoModal.analise.arquivoJaImportado ||
-            resumoRetornoModal.analise.totalNovas === 0 ? (
+            <DialogFooter className="mt-4 gap-2">
               <Button
-                variant="default"
+                variant="outline"
+                disabled={isGravandoRetorno}
                 onClick={() => setResumoRetornoModal(null)}
-                className="bg-neutral-800 hover:bg-neutral-900 text-white"
               >
-                Concluir
+                Cancelar
               </Button>
-            ) : (
-              <Button
-                onClick={handleConfirmarGravacaoRetorno}
-                disabled={isGravandoRetorno || resumoRetornoModal.analise.totalNovas === 0}
-                className="bg-[#FF6A13] hover:bg-[#E85B06] text-white font-semibold"
-              >
-                {isGravandoRetorno
-                  ? 'Gravando e Alimentando Fluxo...'
-                  : `Confirmar e Gravar no CRM (${resumoRetornoModal.analise.totalNovas} novos)`}
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
+              {resumoRetornoModal?.analise?.arquivoJaImportado ||
+              (resumoRetornoModal?.analise?.totalNovas ?? 0) === 0 ? (
+                <Button
+                  variant="default"
+                  onClick={() => setResumoRetornoModal(null)}
+                  className="bg-neutral-800 hover:bg-neutral-900 text-white"
+                >
+                  Concluir
+                </Button>
+              ) : (
+                <Button
+                  onClick={handleConfirmarGravacaoRetorno}
+                  disabled={
+                    isGravandoRetorno || (resumoRetornoModal?.analise?.totalNovas ?? 0) === 0
+                  }
+                  className="bg-[#FF6A13] hover:bg-[#E85B06] text-white font-semibold"
+                >
+                  {isGravandoRetorno
+                    ? 'Gravando e Alimentando Fluxo...'
+                    : `Confirmar e Gravar no CRM (${resumoRetornoModal?.analise?.totalNovas ?? 0} novos)`}
+                </Button>
+              )}
+            </DialogFooter>
+          </DialogContent>
+        )}
       </Dialog>
       {/* Modal Destrutivo de Excluir Extrato (Exige digitar o nome exato) */}
       <Dialog
@@ -2249,17 +2263,19 @@ export function ExtratosComprovantesTab({
         </DialogContent>
       </Dialog>
       {/* Modal de Prévia e Deduplicação de Extratos (OFX, CSV, XLSX) */}
-      <PreviaImportacaoExtratoModal
-        open={!!modalPreviaExtrato}
-        onOpenChange={(open) => {
-          if (!open && !isGravandoExtrato) setModalPreviaExtrato(null)
-        }}
-        analise={modalPreviaExtrato?.analise || null}
-        formato={modalPreviaExtrato?.formato || 'ofx'}
-        contaBancaria={contasBancarias.find((c) => c.id === modalPreviaExtrato?.contaBancariaId)}
-        isGravando={isGravandoExtrato}
-        onConfirmarGravacao={handleConfirmarGravacaoPreviaExtrato}
-      />
+      {modalPreviaExtrato && (
+        <PreviaImportacaoExtratoModal
+          open={!!modalPreviaExtrato}
+          onOpenChange={(open) => {
+            if (!open && !isGravandoExtrato) setModalPreviaExtrato(null)
+          }}
+          analise={modalPreviaExtrato?.analise || null}
+          formato={modalPreviaExtrato?.formato || 'ofx'}
+          contaBancaria={contasBancarias.find((c) => c.id === modalPreviaExtrato?.contaBancariaId)}
+          isGravando={isGravandoExtrato}
+          onConfirmarGravacao={handleConfirmarGravacaoPreviaExtrato}
+        />
+      )}
       {/* Modal de Captura Mobile / Extração IA de Comprovantes */}
       <CapturaComprovanteModal
         open={modalCapturaIaAberto}
