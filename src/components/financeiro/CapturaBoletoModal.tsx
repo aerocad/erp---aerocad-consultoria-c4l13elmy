@@ -35,6 +35,7 @@ import {
 import {
   extrairDadosBoleto,
   salvarContaPagarComComprovante,
+  atualizarContaPagarComComprovante,
   consultarQrCodeFiscalBackend,
   type BoletoExtraido,
   type ComprovanteExtraido,
@@ -48,8 +49,14 @@ import { useFinanceiroVisibilidade } from '@/contexts/FinanceiroVisibilidadeCont
 import { PLANO_CONTAS_AEROCAD, sugerirPlanoContasPorCategoria } from '@/lib/planoContas'
 import { formatCurrencyRaw } from '@/lib/format'
 import { toast } from 'sonner'
-import type { ProjetoRecord, ContaBancariaRecord, CredorRecord } from '@/types/crm'
+import type {
+  ProjetoRecord,
+  ContaBancariaRecord,
+  CredorRecord,
+  ContaPagarRecord,
+} from '@/types/crm'
 import { salvarCredor, CATEGORIA_CREDOR_LABELS } from '@/services/credores'
+import { obterDocumentosSegregados } from '@/services/documentosContasPagar'
 import { Copy, Printer } from 'lucide-react'
 
 export interface CapturaBoletoModalProps {
@@ -59,6 +66,7 @@ export interface CapturaBoletoModalProps {
   contasBancarias: ContaBancariaRecord[]
   credores?: CredorRecord[]
   openModalNovoCredor?: () => void
+  contaEdicao?: ContaPagarRecord | null
   onContaCriada: () => void
 }
 
@@ -70,6 +78,7 @@ export function CapturaBoletoModal({
   projetos,
   contasBancarias,
   credores = [],
+  contaEdicao = null,
   onContaCriada,
 }: CapturaBoletoModalProps) {
   const { podeVerValores } = useFinanceiroVisibilidade()
@@ -136,7 +145,7 @@ export function CapturaBoletoModal({
   function resetarModal() {
     setEtapa('upload')
     setArquivo(null)
-    if (previewUrl) {
+    if (previewUrl && !contaEdicao) {
       URL.revokeObjectURL(previewUrl)
       setPreviewUrl(null)
     }
@@ -165,6 +174,54 @@ export function CapturaBoletoModal({
     setModoEssencialAtivo(false)
     setInfoInferencia(null)
   }
+
+  // Preenchimento automático quando aberto em modo de reedição (contaEdicao)
+  useEffect(() => {
+    if (!open) {
+      resetarModal()
+      return
+    }
+
+    if (contaEdicao) {
+      setBeneficiario(contaEdicao.fornecedor || '')
+      setCnpjCpf(contaEdicao.cnpj_cpf_beneficiario || '')
+      setLinhaDigitavel(contaEdicao.codigo_barras_linha_digitavel || '')
+      setNumeroDoc(contaEdicao.numero_documento || '')
+      setValorDoc(contaEdicao.valor ? String(contaEdicao.valor) : '')
+      setValorDesconto(contaEdicao.valor_desconto ? String(contaEdicao.valor_desconto) : '0')
+      setValorJurosMulta(
+        contaEdicao.valor_juros_multa ? String(contaEdicao.valor_juros_multa) : '0',
+      )
+      setVencimento(
+        contaEdicao.data_vencimento
+          ? contaEdicao.data_vencimento.slice(0, 10)
+          : new Date().toISOString().slice(0, 10),
+      )
+      setDescricao(contaEdicao.descricao || '')
+      setCategoria(contaEdicao.categoria || 'despesas_operacionais')
+      setPlanoContasCodigo(contaEdicao.plano_contas_codigo || '3.1.1')
+      setPlanoContasNome(
+        contaEdicao.plano_contas_nome || 'Despesas Administrativas Gerais & Escritório',
+      )
+      setContaBancariaId(contaEdicao.conta_bancaria || contasBancarias[0]?.id || '')
+      setProjetoId(contaEdicao.projeto || '')
+      setObservacoes(contaEdicao.observacoes || '')
+      setCredorId(contaEdicao.credor || '')
+
+      const docs = obterDocumentosSegregados(contaEdicao)
+      if (docs.length > 0) {
+        setPreviewUrl(docs[0].url)
+        setIsPdf(docs[0].isPdf)
+      } else {
+        setPreviewUrl(null)
+        setIsPdf(false)
+      }
+
+      setEtapa('conferencia')
+      setModoEssencialAtivo(false)
+      setErroAnalise(null)
+    }
+  }, [open, contaEdicao])
 
   async function processarArquivoSelecionado(file: File) {
     const isImage = file.type.startsWith('image/')
@@ -464,36 +521,30 @@ export function CapturaBoletoModal({
   }
 
   async function handleSalvarContaPagar() {
-    if (!beneficiario.trim()) {
-      toast.error('Informe o fornecedor / beneficiário do boleto.')
-      return
-    }
+    const fornecedorFinal = beneficiario.trim() || 'Beneficiário / Fornecedor a identificar'
 
     if (!valorDoc || parseFloat(valorDoc) <= 0) {
-      toast.error('Informe um valor de documento válido.')
+      toast.error('Informe um valor de documento válido nos campos editáveis abaixo.')
       return
     }
 
-    if (!vencimento) {
-      toast.error('Informe a data de vencimento do boleto.')
-      return
-    }
+    const dataFinal = vencimento || new Date().toISOString().slice(0, 10)
 
-    if (!arquivo) {
-      toast.error('Arquivo do boleto não encontrado.')
+    if (!arquivo && !contaEdicao && !previewUrl) {
+      toast.error('Arquivo do boleto não encontrado. Selecione ou anexe o documento.')
       return
     }
 
     setEtapa('salvando')
 
     try {
-      await salvarContaPagarComComprovante({
-        descricao: descricao.trim() || `Boleto - ${beneficiario}`,
-        fornecedor: beneficiario.trim(),
+      const payloadBase = {
+        descricao: descricao.trim() || `Boleto - ${fornecedorFinal}`,
+        fornecedor: fornecedorFinal,
         categoria,
         valor: valorLiquidoFinal,
-        data_vencimento: vencimento,
-        forma_pagamento: 'boleto',
+        data_vencimento: dataFinal,
+        forma_pagamento: 'boleto' as const,
         numero_documento: numeroDoc || undefined,
         projetoId: projetoId || null,
         credorId: credorId || null,
@@ -503,6 +554,7 @@ export function CapturaBoletoModal({
           chaveAcesso ? `Chave de Acesso Fiscal: ${chaveAcesso}` : null,
           serieDoc ? `Série Fiscal: ${serieDoc}` : null,
           `Conta Bancária PJ: ${contasBancarias.find((c) => c.id === contaBancariaId)?.apelido || 'Não associada'}`,
+          contaEdicao ? 'Revisão e correção de valores do boleto bancário' : null,
         ]
           .filter(Boolean)
           .join('\n'),
@@ -514,9 +566,23 @@ export function CapturaBoletoModal({
         plano_contas_codigo: planoContasCodigo,
         plano_contas_nome: planoContasNome,
         conta_bancaria: contaBancariaId || undefined,
-      })
+      }
 
-      toast.success('Conta a pagar cadastrada com boleto anexado e classificação contábil!')
+      if (contaEdicao) {
+        // MODO ATUALIZAÇÃO
+        await atualizarContaPagarComComprovante({
+          ...payloadBase,
+          contaId: contaEdicao.id,
+        })
+        toast.success(
+          `Conta a pagar de ${fornecedorFinal} atualizada com sucesso para R$ ${valorLiquidoFinal.toFixed(2)}!`,
+        )
+      } else {
+        // MODO CRIAÇÃO
+        await salvarContaPagarComComprovante(payloadBase)
+        toast.success('Conta a pagar cadastrada com boleto anexado e classificação contábil!')
+      }
+
       onContaCriada()
       onOpenChange(false)
       resetarModal()
@@ -543,14 +609,19 @@ export function CapturaBoletoModal({
             </span>
             <div>
               <DialogTitle className="text-base font-bold text-neutral-900 flex items-center gap-2">
-                <span>Extrair Dados de Boleto Bancário</span>
+                <span>
+                  {contaEdicao
+                    ? 'Revisar Boleto & Corrigir Valores'
+                    : 'Extrair Dados de Boleto Bancário'}
+                </span>
                 <span className="text-[10px] uppercase font-bold tracking-wide px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
-                  Boleto (Documento de Cobrança)
+                  {contaEdicao ? 'Modo de Edição / Atualização' : 'Boleto (Documento de Cobrança)'}
                 </span>
               </DialogTitle>
               <p className="text-xs text-neutral-500">
-                Leitura de linha digitável, código de barras e valores para emissão da conta a pagar
-                pendente
+                {contaEdicao
+                  ? 'Confira o boleto anexado ao lado e ajuste qualquer valor, data ou dado do credor. A conta será atualizada diretamente.'
+                  : 'Leitura de linha digitável, código de barras e valores para emissão da conta a pagar pendente'}
               </p>
             </div>
           </div>
@@ -715,13 +786,22 @@ export function CapturaBoletoModal({
 
             {/* DESTAQUE DOS 5 CAMPOS ESSENCIAIS NO TOPO DO PAINEL DE CONFERÊNCIA */}
             <div className="p-3 rounded-xl border border-orange-200 bg-orange-50/50 shadow-sm space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-neutral-900 flex items-center gap-1.5">
-                  <Sparkles className="h-4 w-4 text-[#FF6A13]" />
-                  Campos Essenciais Extraídos (Prioridade Contábil)
-                </span>
-                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-white text-orange-800 border border-orange-200">
-                  {modoEssencialAtivo ? 'Modo Essencial' : 'Conferência Rápida'}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                <div>
+                  <span className="text-xs font-bold text-neutral-900 flex items-center gap-1.5">
+                    <Sparkles className="h-4 w-4 text-[#FF6A13]" />
+                    {contaEdicao
+                      ? 'Revisão dos Valores e Dados do Boleto'
+                      : 'Resumo da Leitura (Confira e corrija nos campos editáveis abaixo)'}
+                  </span>
+                  <p className="text-[11px] text-neutral-600 mt-0.5">
+                    {contaEdicao
+                      ? 'Estes cartões refletem os valores em tempo real. Você pode alterar qualquer dado no formulário abaixo.'
+                      : 'Estas etiquetas são um resumo da extração. TODOS os dados são totalmente editáveis no formulário abaixo.'}
+                  </p>
+                </div>
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-white text-orange-800 border border-orange-200 self-start sm:self-auto shrink-0">
+                  {contaEdicao ? 'Modo de Correção' : '100% Editável'}
                 </span>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
@@ -1266,7 +1346,7 @@ export function CapturaBoletoModal({
                 className="bg-[#FF6A13] hover:bg-[#E85B06] text-white text-xs font-semibold h-8"
               >
                 <CheckCircle2 className="h-4 w-4 mr-1.5" />
-                Gravar Conta a Pagar com Boleto
+                {contaEdicao ? 'Salvar Correção do Boleto' : 'Gravar Conta a Pagar com Boleto'}
               </Button>
             </div>
           )}

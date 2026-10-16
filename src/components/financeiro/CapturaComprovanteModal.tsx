@@ -55,6 +55,10 @@ import { PLANO_CONTAS_AEROCAD, sugerirPlanoContasPorCategoria } from '@/lib/plan
 import type { ProjetoRecord, CredorRecord, ContaBancariaRecord } from '@/types/crm'
 import { Building2, Copy, Printer, Plus, CheckCircle2 } from 'lucide-react'
 
+import type { ContaPagarRecord } from '@/types/crm'
+import { atualizarContaPagarComComprovante } from '@/services/comprovantesVision'
+import { obterDocumentosSegregados } from '@/services/documentosContasPagar'
+
 interface CapturaComprovanteModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -62,6 +66,7 @@ interface CapturaComprovanteModalProps {
   contasBancarias?: ContaBancariaRecord[]
   credores?: CredorRecord[]
   isMobile: boolean
+  contaEdicao?: ContaPagarRecord | null
   onSuccess: () => Promise<void> | void
 }
 
@@ -72,6 +77,7 @@ export function CapturaComprovanteModal({
   contasBancarias = [],
   credores = [],
   isMobile,
+  contaEdicao = null,
   onSuccess,
 }: CapturaComprovanteModalProps) {
   const { user } = useAuth()
@@ -132,10 +138,10 @@ export function CapturaComprovanteModal({
     termo_detectado?: string
   } | null>(null)
 
-  // Limpa estados ao fechar
+  // Quando abre em modo de reedição (contaEdicao) ou fecha o modal
   useEffect(() => {
     if (!open) {
-      if (previewUrl) {
+      if (previewUrl && !contaEdicao) {
         URL.revokeObjectURL(previewUrl)
       }
       setEtapa('selecao')
@@ -152,8 +158,47 @@ export function CapturaComprovanteModal({
       setCreditoTipo('a_vista')
       setNumParcelas(1)
       setContaBancariaId('')
+      return
     }
-  }, [open])
+
+    // Se estiver abrindo com uma conta já existente para reedição / correção de valores
+    if (contaEdicao) {
+      setFornecedor(contaEdicao.fornecedor || '')
+      setCnpjCpf(contaEdicao.cnpj_cpf_beneficiario || '')
+      setDataEmissao(
+        contaEdicao.data_vencimento
+          ? contaEdicao.data_vencimento.slice(0, 10)
+          : new Date().toISOString().slice(0, 10),
+      )
+      setValorTotal(contaEdicao.valor || '')
+      setCategoria(contaEdicao.categoria || 'despesas_operacionais')
+      setFormaPagamento(contaEdicao.forma_pagamento || 'cartao_debito')
+      setPlanoContasCodigo(contaEdicao.plano_contas_codigo || '3.1.5')
+      setPlanoContasNome(
+        contaEdicao.plano_contas_nome || 'Combustível, Pedágios e Locação de Veículos',
+      )
+      setContaBancariaId(contaEdicao.conta_bancaria || '')
+      setProjetoId(contaEdicao.projeto || 'nenhum')
+      setDescricaoItens(contaEdicao.descricao || '')
+      setObservacoes(contaEdicao.observacoes || '')
+      setCredorId(contaEdicao.credor || '')
+
+      // Localizar o comprovante gravado no banco
+      const docs = obterDocumentosSegregados(contaEdicao)
+      if (docs.length > 0) {
+        const docPrincipal = docs[0]
+        setPreviewUrl(docPrincipal.url)
+        setIsPdf(docPrincipal.isPdf)
+      } else {
+        setPreviewUrl(null)
+        setIsPdf(false)
+      }
+
+      setEtapa('conferencia')
+      setModoEssencialAtivo(false)
+      setAvisoExtracao(null)
+    }
+  }, [open, contaEdicao])
 
   // Trata a seleção do arquivo (câmera, galeria ou desktop)
   async function handleFileChosen(file: File) {
@@ -407,34 +452,30 @@ export function CapturaComprovanteModal({
     await executarExtracao(arquivoSelecionado)
   }
 
-  // Confirmar e salvar como Conta a Pagar
+  // Confirmar e salvar como Conta a Pagar (Criação ou Atualização)
   async function handleSalvarContaPagar() {
-    if (!arquivoSelecionado) {
-      toast.error('Nenhum comprovante anexado.')
+    // Em criação exige arquivo selecionado; em edição/revisão já existe comprovante persistido
+    if (!arquivoSelecionado && !contaEdicao && !previewUrl) {
+      toast.error('Nenhum comprovante anexado. Selecione ou fotografe o documento.')
       return
     }
 
-    if (!fornecedor.trim()) {
-      toast.error('Informe a Razão Social ou Estabelecimento.')
-      return
-    }
+    // Permite digitação manual do estabelecimento mesmo se a leitura automática não extraiu
+    const fornecedorFinal = fornecedor.trim() || 'Despesa / Estabelecimento a identificar'
 
     const valorNum = typeof valorTotal === 'number' ? valorTotal : parseFloat(String(valorTotal))
     if (isNaN(valorNum) || valorNum <= 0) {
-      toast.error('Informe um valor total válido para a despesa.')
+      toast.error('Informe o valor total da despesa nos campos editáveis abaixo.')
       return
     }
 
-    if (!dataEmissao) {
-      toast.error('Informe a data da compra / emissão.')
-      return
-    }
+    const dataFinal = dataEmissao || new Date().toISOString().slice(0, 10)
 
     setIsSubmitting(true)
     try {
       const descFinal = descricaoItens.trim()
         ? descricaoItens.trim()
-        : `${fornecedor} - ${infoInferencia?.descricao_produto_inferido || 'Despesa Operacional'}`
+        : `${fornecedorFinal} - ${infoInferencia?.descricao_produto_inferido || 'Despesa Operacional'}`
 
       const infoPagtoTexto =
         formaPagamento === 'cartao_credito'
@@ -443,12 +484,12 @@ export function CapturaComprovanteModal({
             ? 'Cartão de Débito'
             : formaPagamento.toUpperCase()
 
-      await salvarContaPagarComComprovante({
+      const payloadBase = {
         descricao: descFinal,
-        fornecedor: fornecedor.trim(),
+        fornecedor: fornecedorFinal,
         categoria,
         valor: valorNum,
-        data_vencimento: dataEmissao,
+        data_vencimento: dataFinal,
         forma_pagamento: formaPagamento,
         projetoId: projetoId === 'nenhum' ? null : projetoId,
         conta_bancaria: contaBancariaId || undefined,
@@ -460,7 +501,9 @@ export function CapturaComprovanteModal({
           infoInferencia?.descricao_produto_inferido
             ? `Produto/Despesa inferido: ${infoInferencia.descricao_produto_inferido}`
             : '',
-          'Captura enxuta de comprovante / cupom fiscal',
+          contaEdicao
+            ? 'Revisão e correção de valores de comprovante fiscal'
+            : 'Captura enxuta de comprovante / cupom fiscal',
         ]
           .filter(Boolean)
           .join('\n'),
@@ -469,16 +512,30 @@ export function CapturaComprovanteModal({
         credorId: credorId || null,
         plano_contas_codigo: planoContasCodigo,
         plano_contas_nome: planoContasNome,
-      })
+      }
 
-      toast.success(
-        `Conta a pagar de R$ ${valorNum.toFixed(2)} cadastrada com sucesso com o comprovante anexado!`,
-      )
+      if (contaEdicao) {
+        // MODO ATUALIZAÇÃO: Atualiza a conta existente (NUNCA duplica)
+        await atualizarContaPagarComComprovante({
+          ...payloadBase,
+          contaId: contaEdicao.id,
+        })
+        toast.success(
+          `Conta a pagar de ${fornecedorFinal} atualizada com sucesso para R$ ${valorNum.toFixed(2)}!`,
+        )
+      } else {
+        // MODO CRIAÇÃO: Grava nova conta
+        await salvarContaPagarComComprovante(payloadBase)
+        toast.success(
+          `Conta a pagar de R$ ${valorNum.toFixed(2)} cadastrada com sucesso com o comprovante anexado!`,
+        )
+      }
+
       onOpenChange(false)
       await onSuccess()
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
-      toast.error(`Erro ao criar conta a pagar: ${msg}`)
+      toast.error(`Erro ao salvar conta a pagar: ${msg}`)
     } finally {
       setIsSubmitting(false)
     }
@@ -495,15 +552,22 @@ export function CapturaComprovanteModal({
             <div>
               <DialogTitle className="text-base sm:text-lg font-bold text-neutral-900 flex items-center gap-2">
                 <span>
-                  {isMobile ? 'Fotografar Comprovante com IA' : 'Capturar & Extrair Comprovante'}
+                  {contaEdicao
+                    ? 'Revisar Comprovante & Corrigir Valores'
+                    : isMobile
+                      ? 'Fotografar Comprovante com IA'
+                      : 'Capturar & Extrair Comprovante'}
                 </span>
                 <span className="text-[10px] uppercase font-bold tracking-wide px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300">
-                  Comprovante (Documento de Pagamento Efetivado)
+                  {contaEdicao
+                    ? 'Modo de Edição / Atualização'
+                    : 'Comprovante (Documento de Pagamento Efetivado)'}
                 </span>
               </DialogTitle>
               <DialogDescription className="text-xs text-neutral-500">
-                Extraia automaticamente dados de comprovantes de pagamento liquidados (PIX, TED,
-                cupons fiscais e recibos).
+                {contaEdicao
+                  ? 'Confira o comprovante anexado ao lado e ajuste manualmente qualquer valor ou dado cadastral. A conta será atualizada diretamente.'
+                  : 'Extraia automaticamente dados de comprovantes de pagamento liquidados (PIX, TED, cupons fiscais e recibos).'}
               </DialogDescription>
             </div>
           </div>
@@ -719,13 +783,22 @@ export function CapturaComprovanteModal({
 
             {/* DESTAQUE DOS 5 CAMPOS ESSENCIAIS NO TOPO DO PAINEL DE CONFERÊNCIA */}
             <div className="p-3 rounded-xl border border-orange-200 bg-orange-50/50 shadow-sm space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-neutral-900 flex items-center gap-1.5">
-                  <Sparkles className="h-4 w-4 text-[#FF6A13]" />
-                  Os 5 Campos Vitais do Comprovante (Padrão Enxuto)
-                </span>
-                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-white text-orange-800 border border-orange-200">
-                  Leitura Enxuta
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                <div>
+                  <span className="text-xs font-bold text-neutral-900 flex items-center gap-1.5">
+                    <Sparkles className="h-4 w-4 text-[#FF6A13]" />
+                    {contaEdicao
+                      ? 'Revisão dos Valores e Dados da Conta'
+                      : 'Resumo da Leitura (Confira e corrija nos campos editáveis abaixo)'}
+                  </span>
+                  <p className="text-[11px] text-neutral-600 mt-0.5">
+                    {contaEdicao
+                      ? 'Estes cartões refletem os valores em tempo real. Você pode alterar qualquer dado no formulário abaixo.'
+                      : 'Estas etiquetas são um resumo da extração. TODOS os dados são totalmente editáveis no formulário abaixo.'}
+                  </p>
+                </div>
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-white text-orange-800 border border-orange-200 self-start sm:self-auto shrink-0">
+                  {contaEdicao ? 'Modo de Correção' : '100% Editável'}
                 </span>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
@@ -1261,18 +1334,20 @@ export function CapturaComprovanteModal({
                 <Button
                   size="sm"
                   onClick={handleSalvarContaPagar}
-                  disabled={isSubmitting || !fornecedor || !valorTotal}
+                  disabled={isSubmitting || !valorTotal}
                   className="w-full sm:w-auto bg-[#FF6A13] hover:bg-[#E85B06] text-white h-8 text-xs font-semibold shadow-sm"
                 >
                   {isSubmitting ? (
                     <>
                       <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                      Criando Conta a Pagar...
+                      {contaEdicao ? 'Atualizando Conta a Pagar...' : 'Criando Conta a Pagar...'}
                     </>
                   ) : (
                     <>
                       <Check className="mr-1.5 h-3.5 w-3.5" />
-                      Confirmar e Criar Conta a Pagar
+                      {contaEdicao
+                        ? 'Salvar Correção de Valores'
+                        : 'Confirmar e Criar Conta a Pagar'}
                     </>
                   )}
                 </Button>

@@ -16,6 +16,7 @@ import {
   Barcode,
   Camera,
   Landmark,
+  Sparkles,
 } from 'lucide-react'
 import { CapturaBoletoModal } from '@/components/financeiro/CapturaBoletoModal'
 import { CapturaComprovanteModal } from '@/components/financeiro/CapturaComprovanteModal'
@@ -125,6 +126,7 @@ export function ContasPagarTab({
   const isMobile = useIsMobile()
   const [modalBoletoAberto, setModalBoletoAberto] = useState(false)
   const [modalComprovanteFiscalAberto, setModalComprovanteFiscalAberto] = useState(false)
+  const [contaParaRevisao, setContaParaRevisao] = useState<ContaPagarRecord | null>(null)
   const [contasBancarias, setContasBancarias] = useState<ContaBancariaRecord[]>([])
   const [filtroContaBancaria, setFiltroContaBancaria] = useState<string>('todos')
 
@@ -841,10 +843,35 @@ export function ContasPagarTab({
                                   variant="outline"
                                   onClick={() => handleReabrirConta(conta)}
                                   className="h-7 text-xs border-neutral-300 text-neutral-600 hover:bg-neutral-100"
-                                  title="Reabrir conta para correção"
+                                  title="Reabrir conta para status pendente"
                                 >
                                   <RotateCcw className="mr-1 h-3 w-3" />
                                   Reabrir
+                                </Button>
+                              )}
+
+                              {/* AÇÃO REVISAR LEITURA / CORRIGIR VALORES COM FOTO LADO A LADO */}
+                              {Boolean(
+                                conta.comprovante ||
+                                (Array.isArray(conta.comprovantes_metadados) &&
+                                  conta.comprovantes_metadados.length > 0),
+                              ) && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    setContaParaRevisao(conta)
+                                    if (conta.forma_pagamento === 'boleto') {
+                                      setModalBoletoAberto(true)
+                                    } else {
+                                      setModalComprovanteFiscalAberto(true)
+                                    }
+                                  }}
+                                  className="h-7 px-2 text-xs border-orange-300 text-[#FF6A13] hover:bg-orange-50 font-semibold shadow-sm"
+                                  title="Reabrir foto original e corrigir valores manualmente"
+                                >
+                                  <Sparkles className="mr-1 h-3 w-3" />
+                                  Revisar leitura
                                 </Button>
                               )}
 
@@ -853,10 +880,10 @@ export function ContasPagarTab({
                                 variant="ghost"
                                 onClick={() => abrirModalEdicao(conta)}
                                 className="h-7 px-2 text-xs text-neutral-600 hover:text-neutral-900"
+                                title="Editar dados cadastrais"
                               >
                                 Editar
                               </Button>
-
                               <Button
                                 size="sm"
                                 variant="ghost"
@@ -1299,29 +1326,37 @@ export function ContasPagarTab({
         </DialogContent>
       </Dialog>
 
-      {/* Modal de Extração de Boleto por IA */}
+      {/* Modal de Extração de Boleto por IA & Revisão */}
       <CapturaBoletoModal
         open={modalBoletoAberto}
         credores={credores}
         openModalNovoCredor={() => {
           // Permite alternar se necessário
         }}
-        onOpenChange={setModalBoletoAberto}
+        onOpenChange={(aberto) => {
+          setModalBoletoAberto(aberto)
+          if (!aberto) setContaParaRevisao(null)
+        }}
         projetos={projetos}
         contasBancarias={contasBancarias}
+        contaEdicao={contaParaRevisao}
         onContaCriada={async () => {
           await onReload()
         }}
       />
 
-      {/* Modal de Fotografia / QR Code / DANFE / Cupom Fiscal com IA */}
+      {/* Modal de Fotografia / QR Code / DANFE / Cupom Fiscal com IA & Revisão */}
       <CapturaComprovanteModal
         open={modalComprovanteFiscalAberto}
-        onOpenChange={setModalComprovanteFiscalAberto}
+        onOpenChange={(aberto) => {
+          setModalComprovanteFiscalAberto(aberto)
+          if (!aberto) setContaParaRevisao(null)
+        }}
         projetos={projetos}
         contasBancarias={contasBancarias}
         credores={credores ?? []}
         isMobile={isMobile}
+        contaEdicao={contaParaRevisao}
         onSuccess={async () => {
           await onReload()
         }}

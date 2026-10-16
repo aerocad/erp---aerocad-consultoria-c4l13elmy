@@ -1,5 +1,5 @@
 import pb from '@/lib/pocketbase/client'
-import { createOne } from '@/services/api'
+import { createOne, updateOne } from '@/services/api'
 import {
   preProcessarImagemDocumento,
   type PreprocessamentoOpcoes,
@@ -424,6 +424,115 @@ export interface SalvarContaPagarComprovanteParams {
   plano_contas_codigo?: string
   plano_contas_nome?: string
   conta_bancaria?: string
+}
+
+export interface AtualizarContaPagarComComprovanteParams extends SalvarContaPagarComprovanteParams {
+  contaId: string
+}
+
+/**
+ * Atualiza uma conta a pagar existente (modo de reedição/revisão de comprovante),
+ * opcionalmente substituindo ou adicionando um novo comprovante se um novo arquivo for enviado.
+ */
+export async function atualizarContaPagarComComprovante(
+  params: AtualizarContaPagarComComprovanteParams,
+): Promise<ContaPagarRecord> {
+  const {
+    contaId,
+    descricao,
+    fornecedor,
+    categoria,
+    valor,
+    data_vencimento,
+    forma_pagamento,
+    numero_documento,
+    projetoId,
+    observacoes,
+    arquivoComprovante,
+    arquivosComprovantes,
+    userId,
+  } = params
+
+  const payload: Record<string, unknown> = {
+    descricao,
+    fornecedor,
+    categoria,
+    valor,
+    data_vencimento: `${data_vencimento} 12:00:00.000Z`,
+    forma_pagamento,
+    numero_documento: numero_documento || '',
+    observacoes: observacoes || '',
+    codigo_barras_linha_digitavel: params.codigo_barras_linha_digitavel || '',
+    cnpj_cpf_beneficiario: params.cnpj_cpf_beneficiario || '',
+    valor_desconto: params.valor_desconto || 0,
+    valor_juros_multa: params.valor_juros_multa || 0,
+    plano_contas_codigo: params.plano_contas_codigo || '',
+    plano_contas_nome: params.plano_contas_nome || '',
+    conta_bancaria: params.conta_bancaria || null,
+    credor: params.credorId || null,
+    projeto: projetoId || null,
+  }
+
+  // 1. Atualizar campos cadastrais da conta existente
+  const contaAtualizada = await updateOne<ContaPagarRecord>('contas_pagar', contaId, payload)
+
+  // 2. Se um novo arquivo foi selecionado na revisão, fazer o upload mantendo ou atualizando os metadados
+  const listaNovosArquivos: ArquivoSegregadoUpload[] = []
+  if (arquivosComprovantes && arquivosComprovantes.length > 0) {
+    for (const item of arquivosComprovantes) {
+      if (item instanceof File) {
+        listaNovosArquivos.push({ file: item, nomeOriginal: item.name })
+      } else if (item && item.file) {
+        listaNovosArquivos.push(item)
+      }
+    }
+  } else if (arquivoComprovante) {
+    listaNovosArquivos.push({
+      file: arquivoComprovante,
+      tipo: forma_pagamento === 'boleto' ? 'boleto' : 'comprovante_pix',
+      nomeOriginal: arquivoComprovante.name,
+    })
+  }
+
+  if (listaNovosArquivos.length > 0) {
+    const formData = new FormData()
+    for (const item of listaNovosArquivos) {
+      formData.append('comprovante', item.file)
+    }
+
+    // Metadados dos novos arquivos mesclados com os existentes se houver
+    const metadadosNovos = listaNovosArquivos.map((item) => ({
+      file: item.file.name,
+      tipo: item.tipo || (forma_pagamento === 'boleto' ? 'boleto' : 'comprovante_pix'),
+      nome_original: item.nomeOriginal || item.file.name,
+      tamanho: item.file.size,
+    }))
+
+    const metadadosAtuais = Array.isArray(contaAtualizada.comprovantes_metadados)
+      ? contaAtualizada.comprovantes_metadados
+      : []
+
+    formData.append(
+      'comprovantes_metadados',
+      JSON.stringify([...metadadosAtuais, ...metadadosNovos]),
+    )
+    await pb.collection('contas_pagar').update(contaId, formData)
+  }
+
+  // 3. Registrar auditoria de revisão
+  try {
+    const textoAtividade = `Comprovante revisado/editado manualmente: Conta a pagar de ${fornecedor} atualizada para R$ ${valor.toFixed(2)}`
+    await createOne('atividades', {
+      usuario: userId || pb.authStore.record?.id || null,
+      texto: textoAtividade,
+      projeto: projetoId || null,
+      tipo: 'financeiro',
+    })
+  } catch (ativErr) {
+    console.log('Não foi possível gravar log de atividade:', ativErr)
+  }
+
+  return contaAtualizada
 }
 
 /**

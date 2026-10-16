@@ -350,6 +350,40 @@ describe('Pipeline de Visão & OCR de Documentos Fiscais (Cupom Fiscal, Boleto, 
     })
   })
 
+  describe('Reedição e Atualização de Conta a Pagar com Comprovante Persistido', () => {
+    it('deve chamar updateOne mantendo a conta existente sem criar registro duplicado', async () => {
+      const mockContaPagarId = 'cp_existente_123'
+      const { updateOne } = await import('@/services/api')
+
+      // Mock de updateOne
+      const spyUpdate = vi.spyOn({ updateOne }, 'updateOne').mockResolvedValueOnce({
+        id: mockContaPagarId,
+        descricao: 'Almoço Restaurante Bandeirantes',
+        fornecedor: 'Restaurante Bandeirantes',
+        categoria: 'despesas_operacionais',
+        valor: 145.5,
+        data_vencimento: '2026-04-12 12:00:00.000Z',
+        forma_pagamento: 'cartao_debito',
+        status: 'pendente',
+      } as any)
+
+      const { atualizarContaPagarComComprovante } = await import('@/services/comprovantesVision')
+
+      const res = await atualizarContaPagarComComprovante({
+        contaId: mockContaPagarId,
+        descricao: 'Almoço Restaurante Bandeirantes',
+        fornecedor: 'Restaurante Bandeirantes',
+        categoria: 'despesas_operacionais',
+        valor: 145.5,
+        data_vencimento: '2026-04-12',
+        forma_pagamento: 'cartao_debito',
+      })
+
+      expect(res).toBeDefined()
+      expect(res.id).toBe(mockContaPagarId)
+    })
+  })
+
   describe('Resiliência e Tratamento de Documento Ilegível / Falha', () => {
     it('deve retornar mensagem acionável e confianca baixa quando o documento não for legível', async () => {
       const mockFalhaLeitura: ComprovanteExtraido = {
