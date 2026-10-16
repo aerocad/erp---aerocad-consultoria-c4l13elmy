@@ -44,6 +44,347 @@ routerAdd(
         )
       }
 
+      // Heurística de Inferência de Categoria e Produto por Estabelecimento
+      function inferirCategoriaEstabelecimento(nome, cnpj, descItens) {
+        const texto = ((nome || '') + ' ' + (descItens || '')).toLowerCase()
+        const regras = [
+          {
+            termos: [
+              'posto',
+              'combustivel',
+              'gasolina',
+              'etanol',
+              'diesel',
+              'ipiranga',
+              'petrobras',
+              'shell',
+              'vibra',
+              'raizen',
+              'auto posto',
+              'autoposto',
+              'abastecedora',
+            ],
+            segmento: 'Combustíveis & Lubrificantes',
+            produto: 'Combustíveis e abastecimento de veículos em campo',
+            categoria: 'despesas_operacionais',
+            planoCodigo: '3.1.5',
+            planoNome: 'Combustível, Pedágios e Locação de Veículos',
+          },
+          {
+            termos: [
+              'restaurante',
+              'churrascaria',
+              'pizzaria',
+              'lanchonete',
+              'refeicao',
+              'refeicoes',
+              'bife',
+              'buffet',
+              'bistro',
+              'mcdonald',
+              'burger king',
+              'subway',
+              'habib',
+              'grill',
+            ],
+            segmento: 'Alimentação & Restaurantes',
+            produto: 'Despesas com refeições e alimentação da equipe',
+            categoria: 'despesas_operacionais',
+            planoCodigo: '3.1.4',
+            planoNome: 'Viagens, Hospedagem e Diárias em Campo',
+          },
+          {
+            termos: [
+              'supermercado',
+              'mercado',
+              'mercearia',
+              'hipermercado',
+              'atacadao',
+              'assai',
+              'carrefour',
+              'pao de acucar',
+              'extra',
+              'muffato',
+              'savegnago',
+              'hortifruti',
+            ],
+            segmento: 'Alimentação / Supermercados',
+            produto: 'Gêneros alimentícios e insumos de copa/campo',
+            categoria: 'despesas_operacionais',
+            planoCodigo: '3.1.4',
+            planoNome: 'Viagens, Hospedagem e Diárias em Campo',
+          },
+          {
+            termos: [
+              'padaria',
+              'panificadora',
+              'panificacao',
+              'confeitaria',
+              'cafeteria',
+              'cafe',
+              'coffee',
+            ],
+            segmento: 'Panificação & Confeitaria',
+            produto: 'Despesas com café da manhã e panificação em trânsito',
+            categoria: 'despesas_operacionais',
+            planoCodigo: '3.1.4',
+            planoNome: 'Viagens, Hospedagem e Diárias em Campo',
+          },
+          {
+            termos: [
+              'farmacia',
+              'drogaria',
+              'drogasil',
+              'raia',
+              'pacheco',
+              'pague menos',
+              'panvel',
+              'medicamentos',
+            ],
+            segmento: 'Saúde & Farmácia',
+            produto: 'Medicamentos básicos, primeiros socorros e itens de higiene',
+            categoria: 'despesas_operacionais',
+            planoCodigo: '3.1.1',
+            planoNome: 'Despesas Administrativas Gerais & Escritório',
+          },
+          {
+            termos: ['estacionamento', 'garagem', 'park', 'parking', 'estapar', 'valet'],
+            segmento: 'Estacionamento & Garagem',
+            produto: 'Estacionamento de veículos técnicos / diárias em aeroportos',
+            categoria: 'despesas_operacionais',
+            planoCodigo: '3.1.5',
+            planoNome: 'Combustível, Pedágios e Locação de Veículos',
+          },
+          {
+            termos: [
+              'pedagio',
+              'sem parar',
+              'conectcar',
+              'veloe',
+              'concessionaria de rodovias',
+              'ccr',
+              'ecorodovias',
+              'arteris',
+            ],
+            segmento: 'Pedágio & Rodovias',
+            produto: 'Tarifas de pedágio em deslocamento técnico rodoviário',
+            categoria: 'despesas_operacionais',
+            planoCodigo: '3.1.5',
+            planoNome: 'Combustível, Pedágios e Locação de Veículos',
+          },
+          {
+            termos: [
+              'papelaria',
+              'kalunga',
+              'livraria',
+              'copiadora',
+              'suprimentos',
+              'materiais para escritorio',
+            ],
+            segmento: 'Material de Consumo & Escritório',
+            produto: 'Material de consumo, papelaria técnica e suprimentos',
+            categoria: 'despesas_operacionais',
+            planoCodigo: '3.1.1',
+            planoNome: 'Despesas Administrativas Gerais & Escritório',
+          },
+          {
+            termos: [
+              'hotel',
+              'hoteis',
+              'pousada',
+              'resort',
+              'ibis',
+              'accor',
+              'mercure',
+              'novotel',
+              'hospedagem',
+              'airbnb',
+            ],
+            segmento: 'Hospedagem & Hotelaria',
+            produto: 'Diárias de hospedagem e hotel em missões de campo',
+            categoria: 'despesas_operacionais',
+            planoCodigo: '3.1.4',
+            planoNome: 'Viagens, Hospedagem e Diárias em Campo',
+          },
+          {
+            termos: [
+              'latam',
+              'gol linhas',
+              'azul linhas',
+              'voepass',
+              'passagem aerea',
+              'aeroporto',
+              'infraero',
+              'aena',
+              'fraport',
+              'zurich airport',
+            ],
+            segmento: 'Passagens & Transporte Aéreo',
+            produto: 'Passagens aéreas, taxas aeroportuárias e despacho de bagagem técnica',
+            categoria: 'despesas_operacionais',
+            planoCodigo: '3.1.4',
+            planoNome: 'Viagens, Hospedagem e Diárias em Campo',
+          },
+          {
+            termos: [
+              'localiza',
+              'movida',
+              'unidas',
+              'locadora de veiculos',
+              'aluguel de carros',
+              'rent a car',
+            ],
+            segmento: 'Locação de Veículos',
+            produto: 'Aluguel de veículos utilitários e 4x4 para vistoria em sítios aeroportuários',
+            categoria: 'despesas_operacionais',
+            planoCodigo: '3.1.5',
+            planoNome: 'Combustível, Pedágios e Locação de Veículos',
+          },
+          {
+            termos: ['uber', '99 tecnologia', '99app', 'radiotaxi', 'taxi'],
+            segmento: 'Transporte Urbano & Aplicativos',
+            produto: 'Deslocamentos urbanos por aplicativo ou táxi',
+            categoria: 'despesas_operacionais',
+            planoCodigo: '3.1.5',
+            planoNome: 'Combustível, Pedágios e Locação de Veículos',
+          },
+          {
+            termos: ['grafica', 'plotagem', 'ploter', 'reprografia', 'plantas tecnicas'],
+            segmento: 'Gráfica & Plotagem Técnica',
+            produto: 'Plotagem de pranchas CAD A0/A1 e encadernações técnicas',
+            categoria: 'despesas_operacionais',
+            planoCodigo: '3.1.1',
+            planoNome: 'Despesas Administrativas Gerais & Escritório',
+          },
+          {
+            termos: [
+              'ferragens',
+              'ferramentas',
+              'materiais de construcao',
+              'leroy merlin',
+              'tintas',
+              'epi',
+              'equipamentos de protecao',
+            ],
+            segmento: 'Ferramentas, EPI & Materiais',
+            produto: 'Equipamentos de proteção individual (EPI), trenas e ferramentas',
+            categoria: 'despesas_operacionais',
+            planoCodigo: '3.1.1',
+            planoNome: 'Despesas Administrativas Gerais & Escritório',
+          },
+          {
+            termos: ['kabum', 'dell', 'lenovo', 'computadores', 'informatica', 'hardware'],
+            segmento: 'Equipamentos de TI & Hardware',
+            produto: 'Hardware, periféricos e peças de computador de engenharia',
+            categoria: 'equipamentos',
+            planoCodigo: '3.1.2',
+            planoNome: 'Softwares, Licenças CAD/GIS, Servidores & TI',
+          },
+          {
+            termos: [
+              'autodesk',
+              'microsoft',
+              'google cloud',
+              'aws',
+              'software',
+              'adobe',
+              'chatgpt',
+              'openai',
+              'bentley',
+              'trimble',
+            ],
+            segmento: 'Softwares & Licenças Técnicas',
+            produto: 'Assinaturas de software CAD/BIM, nuvem e ferramentas de cálculo',
+            categoria: 'equipamentos',
+            planoCodigo: '3.1.2',
+            planoNome: 'Softwares, Licenças CAD/GIS, Servidores & TI',
+          },
+          {
+            termos: ['cartorio', 'tabelionato', 'registro de imoveis', 'tabeliao'],
+            segmento: 'Cartórios & Tabelionatos',
+            produto: 'Autenticações, reconhecimento de firma e certidões imobiliárias',
+            categoria: 'despesas_operacionais',
+            planoCodigo: '3.1.1',
+            planoNome: 'Despesas Administrativas Gerais & Escritório',
+          },
+          {
+            termos: [
+              'anac',
+              'decea',
+              'aeronautica',
+              'receita federal',
+              'prefeitura',
+              'sefaz',
+              'gru',
+              'dam',
+              'taxas',
+            ],
+            segmento: 'Taxas & Órgãos Reguladores',
+            produto: 'Taxas de fiscalização ANAC, DECEA, GRU, prefeituras e órgãos ambientais',
+            categoria: 'impostos',
+            planoCodigo: '3.3.1',
+            planoNome: 'Tributos Municipais (ISS / Taxas Aeroportuárias)',
+          },
+          {
+            termos: [
+              'vivo',
+              'telefonica',
+              'claro',
+              'tim',
+              'telecomunicacoes',
+              'provedor de internet',
+              'fibra',
+            ],
+            segmento: 'Telecomunicações & Internet',
+            produto: 'Internet banda larga, telefonia móvel e links de dados',
+            categoria: 'despesas_operacionais',
+            planoCodigo: '3.1.1',
+            planoNome: 'Despesas Administrativas Gerais & Escritório',
+          },
+          {
+            termos: [
+              'engenharia consultiva',
+              'geotecnia',
+              'sondagens',
+              'topografia',
+              'ensaios de solo',
+            ],
+            segmento: 'Subcontratação Técnica de Engenharia',
+            produto: 'Serviços terceirizados de sondagem SPT, ensaios geotécnicos e topografia',
+            categoria: 'terceirizados',
+            planoCodigo: '3.2.1',
+            planoNome: 'Honorários de Engenharia e Subcontratação Técnica (Topografia/Sondagem)',
+          },
+        ]
+
+        for (let i = 0; i < regras.length; i++) {
+          const r = regras[i]
+          for (let j = 0; j < r.termos.length; j++) {
+            const t = r.termos[j]
+            if (texto.indexOf(t) !== -1) {
+              return {
+                sucesso: true,
+                segmento: r.segmento,
+                produto: r.produto,
+                categoria: r.categoria,
+                planoCodigo: r.planoCodigo,
+                planoNome: r.planoNome,
+                termo: t,
+              }
+            }
+          }
+        }
+
+        return {
+          sucesso: false,
+          segmento: 'Outros',
+          produto: 'Despesa operacional geral',
+          categoria: 'despesas_operacionais',
+          planoCodigo: '3.1.1',
+          planoNome: 'Despesas Administrativas Gerais & Escritório',
+          termo: null,
+        }
+      }
       // Leitura de metadados de pré-processamento enviados pelo cliente
       let preProcessado = false
       let dimensoesInfo = ''
@@ -76,11 +417,22 @@ routerAdd(
         ? ` (Imagem pré-processada com realce de contraste +12% e redimensionamento para leitura de documento fiscal/cupom${dimensoesInfo ? ', dimensões originais: ' + dimensoesInfo : ''})`
         : ''
 
+      const diretrizModoEssencial = `
+REQUISITO ESSENCIAL:
+Se houver qualquer dificuldade de leitura completa de itens ou campos acessórios do cupom ou nota, ATIVE o modo essencial (modo_essencial: true) e extraia com prioridade os 5 dados vitais:
+1. data_emissao (AAAA-MM-DD)
+2. valor_total (R$)
+3. forma_pagamento_sugerida (pix, cartao_credito, cartao_debito, dinheiro, boleto, outro)
+4. fornecedor (Nome/Razão do estabelecimento)
+5. cnpj_cpf (CNPJ do emitente)
+E infira o tipo de produto e categoria contábil com base no nome do estabelecimento (se posto de combustível -> combustíveis 3.1.5; se restaurante/supermercado -> alimentação 3.1.4; se farmácia -> saúde 3.1.1; se pedágio/estacionamento -> veículo/deslocamento 3.1.5; etc.).`
+
       if (rawContent && rawContent.trim().length > 0) {
         promptMessage = `Analise o seguinte conteúdo extraído do documento fiscal (${fileName}${contextoOtimizacao}).
 Pode ser um DANFE (NF-e formato A4), um Cupom Fiscal (NFC-e/SAT) ou outro comprovante fiscal:
 - Se for DANFE NF-e: extraia Emitente, CNPJ, Destinatário, Número, Série, Chave de Acesso de 44 dígitos, Data de Emissão, Valor Total, Impostos, Itens e condições de pagamento.
 - Se for Cupom Fiscal (NFC-e/SAT): extraia Estabelecimento, CNPJ, Número/Extrato, Chave de Acesso de 44 dígitos se houver, Itens, Valor Total e Forma de Pagamento.
+${diretrizModoEssencial}
 Classifique contabilmente no Plano de Contas AEROCAD e retorne o JSON estruturado puro conforme suas instruções:\n\n${rawContent.slice(0, 4500)}`
       } else {
         promptMessage = `Analise a foto/digitalização do documento fiscal anexado (${fileName}${contextoOtimizacao}).
@@ -95,7 +447,8 @@ Pode ser um DANFE (Nota Fiscal Eletrônica NF-e em folha A4), Cupom Fiscal Eletr
 8. Valor total da nota / valor pago (R$) e impostos destacados.
 9. Forma de pagamento sugerida (pix, boleto, cartao_credito, cartao_debito, dinheiro, ted_doc, outro).
 10. Descrição sucinta dos itens e lista detalhada se visível.
-11. Categoria AEROCAD (despesas_operacionais, terceirizados, impostos, equipamentos, folha, outros) e código do Plano de Contas (ex: 3.1.4 para despesas de campo/viagem, 3.2.1 para terceiros de engenharia, 3.1.1 administrativo, 3.4.1 equipamentos).
+${diretrizModoEssencial}
+11. Categoria AEROCAD (despesas_operacionais, terceirizados, impostos, equipamentos, folha, outros) e código do Plano de Contas (ex: 3.1.4 para alimentação/viagem, 3.1.5 para combustível/pedágio, 3.2.1 terceiros, 3.1.1 administrativo).
 Retorne EXCLUSIVAMENTE o JSON estruturado puro.`
       }
 
@@ -114,9 +467,11 @@ Retorne EXCLUSIVAMENTE o JSON estruturado puro.`
           agentErr.message,
         )
         const systemPrompt = `Você é um auditor contábil e fiscal do CRM AEROCAD especializado em cupons fiscais (NFC-e, SAT), comprovantes PIX, recibos e notas fiscais.
+Priorize a extração dos 5 campos essenciais: data, valor total, forma de pagamento, estabelecimento e CNPJ. Se a leitura for parcial, ative modo_essencial=true.
 Analise a imagem/documento e retorne EXCLUSIVAMENTE um JSON puro:
 {
   "sucesso": true,
+  "modo_essencial": false,
   "tipo_documento": "cupom_fiscal",
   "fornecedor": "Razão Social ou Nome do Estabelecimento",
   "cnpj_cpf": "00.000.000/0000-00",
@@ -126,13 +481,13 @@ Analise a imagem/documento e retorne EXCLUSIVAMENTE um JSON puro:
   "valor_impostos": null,
   "forma_pagamento_sugerida": "pix",
   "categoria_sugerida": "despesas_operacionais",
-  "plano_contas_codigo": "3.1.4",
-  "plano_contas_nome": "Despesas de Viagens e Campo",
+  "plano_contas_codigo": "3.1.5",
+  "plano_contas_nome": "Combustível, Pedágios e Locação de Veículos",
   "descricao_itens": "Resumo claro dos itens (ex: Abastecimento Gasolina Comum)",
   "observacoes": "Chave de acesso se houver ou detalhes adicionais",
   "confianca": "alta"
 }
-Se os dados não puderem ser identificados, defina sucesso=false, fornecedor="", valor_total=0 e erro="Não foi possível ler o documento — aproxime a câmera, garanta boa iluminação ou anexe o PDF".`
+Se os dados não puderem ser identificados de forma alguma, defina sucesso=false, fornecedor="", valor_total=0 e erro="Não foi possível ler o documento — aproxime a câmera, garanta boa iluminação ou anexe o PDF".`
 
         const fallbackReply = $ai.chat({
           model: 'fast',
@@ -159,9 +514,11 @@ Se os dados não puderem ser identificados, defina sucesso=false, fornecedor="",
         }
       }
 
+      // Se falhou parse ou veio incompleto, tentar extração essencial heurística
       if (!extractedData) {
         extractedData = {
           sucesso: false,
+          modo_essencial: false,
           tipo_documento: 'outro',
           fornecedor: '',
           cnpj_cpf: '',
@@ -179,6 +536,57 @@ Se os dados não puderem ser identificados, defina sucesso=false, fornecedor="",
           confianca: 'baixa',
           erro: 'não foi possível ler o documento — aproxime a câmera, garanta boa iluminação ou anexe o PDF',
         }
+      }
+
+      // Aplica enriquecimento de inferência de categoria pelo estabelecimento
+      const inf = inferirCategoriaEstabelecimento(
+        extractedData.fornecedor,
+        extractedData.cnpj_cpf,
+        extractedData.descricao_itens,
+      )
+
+      if (inf && inf.sucesso) {
+        extractedData.inferencia_categoria = {
+          segmento: inf.segmento,
+          descricao_produto_inferido: inf.produto,
+          categoria: inf.categoria,
+          plano_contas_codigo: inf.planoCodigo,
+          plano_contas_nome: inf.planoNome,
+          termo_detectado: inf.termo,
+        }
+        // Se a IA não inferiu categoria ou deixou genérica
+        if (!extractedData.categoria_sugerida || extractedData.categoria_sugerida === 'outros') {
+          extractedData.categoria_sugerida = inf.categoria
+        }
+        if (!extractedData.plano_contas_codigo || extractedData.plano_contas_codigo === '3.1.1') {
+          extractedData.plano_contas_codigo = inf.planoCodigo
+          extractedData.plano_contas_nome = inf.planoNome
+        }
+        if (!extractedData.descricao_itens || extractedData.descricao_itens.length < 5) {
+          extractedData.descricao_itens = inf.produto
+        }
+      }
+
+      // Checa se caiu em Modo Essencial: quando tem os 5 campos vitais mas faltou dados acessórios
+      const temCamposEssenciais =
+        Boolean(extractedData.fornecedor || extractedData.cnpj_cpf) &&
+        (typeof extractedData.valor_total === 'number'
+          ? extractedData.valor_total > 0
+          : Boolean(extractedData.valor_total)) &&
+        Boolean(extractedData.data_emissao)
+
+      const faltaDadosAcessorios =
+        !extractedData.numero_documento ||
+        !extractedData.chave_acesso ||
+        !extractedData.itens_detalhados ||
+        extractedData.itens_detalhados.length === 0
+
+      if (extractedData.sucesso !== false && temCamposEssenciais && faltaDadosAcessorios) {
+        if (extractedData.modo_essencial === undefined) {
+          extractedData.modo_essencial = true
+        }
+        extractedData.aviso_modo_essencial =
+          'Leitura parcial — dados essenciais extraídos, confira e complete o restante'
       }
 
       return e.json(200, {
@@ -317,30 +725,51 @@ routerAdd(
         const valorTotalNum = parseFloat(valorSatStr.replace(',', '.')) || 0
         const decompostoSat = chaveSat ? decomporChave(chaveSat) : null
 
+        const dadosSat = {
+          tipo_documento: 'cupom_fiscal',
+          fornecedor: decompostoSat ? `Fornecedor CNPJ ${decompostoSat.cnpj_emitente}` : '',
+          cnpj_cpf: decompostoSat ? decompostoSat.cnpj_emitente : '',
+          data_emissao: dataEmissaoSat,
+          numero_documento: decompostoSat ? decompostoSat.numero_documento : '',
+          serie: decompostoSat ? decompostoSat.serie : '',
+          chave_acesso: chaveSat,
+          destinatario: cpfCnpjDest ? `Destinatário doc ${cpfCnpjDest}` : '',
+          cnpj_destinatario: cpfCnpjDest,
+          valor_total: valorTotalNum,
+          valor_impostos: null,
+          forma_pagamento_sugerida: 'pix',
+          categoria_sugerida: 'despesas_operacionais',
+          plano_contas_codigo: '3.1.5',
+          plano_contas_nome: 'Combustível, Pedágios e Locação de Veículos',
+          descricao_itens: 'Despesa Cupom Fiscal Eletrônico SAT (Extrato)',
+          observacoes: `Chave SAT: ${chaveSat}`,
+          confianca: 'alta',
+        }
+
+        const infSat = inferirCategoriaEstabelecimento(
+          dadosSat.fornecedor,
+          dadosSat.cnpj_cpf,
+          dadosSat.descricao_itens,
+        )
+        if (infSat && infSat.sucesso) {
+          dadosSat.inferencia_categoria = {
+            segmento: infSat.segmento,
+            descricao_produto_inferido: infSat.produto,
+            categoria: infSat.categoria,
+            plano_contas_codigo: infSat.planoCodigo,
+            plano_contas_nome: infSat.planoNome,
+            termo_detectado: infSat.termo,
+          }
+          dadosSat.categoria_sugerida = infSat.categoria
+          dadosSat.plano_contas_codigo = infSat.planoCodigo
+          dadosSat.plano_contas_nome = infSat.planoNome
+        }
+
         return e.json(200, {
           sucesso: true,
           origem: 'sat_qrcode_pipe',
           chave_acesso: chaveSat,
-          dados: {
-            tipo_documento: 'cupom_fiscal',
-            fornecedor: decompostoSat ? `Fornecedor CNPJ ${decompostoSat.cnpj_emitente}` : '',
-            cnpj_cpf: decompostoSat ? decompostoSat.cnpj_emitente : '',
-            data_emissao: dataEmissaoSat,
-            numero_documento: decompostoSat ? decompostoSat.numero_documento : '',
-            serie: decompostoSat ? decompostoSat.serie : '',
-            chave_acesso: chaveSat,
-            destinatario: cpfCnpjDest ? `Destinatário doc ${cpfCnpjDest}` : '',
-            cnpj_destinatario: cpfCnpjDest,
-            valor_total: valorTotalNum,
-            valor_impostos: null,
-            forma_pagamento_sugerida: 'pix',
-            categoria_sugerida: 'despesas_operacionais',
-            plano_contas_codigo: '3.1.4',
-            plano_contas_nome: 'Despesas de Viagens e Campo',
-            descricao_itens: 'Despesa Cupom Fiscal Eletrônico SAT (Extrato)',
-            observacoes: `Chave SAT: ${chaveSat}`,
-            confianca: 'alta',
-          },
+          dados: dadosSat,
           portal_consultado: false,
           mensagem: 'Dados fiscais decodificados diretamente da estrutura oficial do QR Code SAT.',
         })
@@ -454,6 +883,26 @@ Retorne EXCLUSIVAMENTE um JSON puro:
         } catch (aiErr) {
           console.log('Falha na interpretação do HTML SEFAZ por IA:', aiErr.message)
         }
+      }
+
+      // Inferência para dados da SEFAZ
+      const infSefaz = inferirCategoriaEstabelecimento(
+        dadosFinais.fornecedor,
+        dadosFinais.cnpj_cpf,
+        dadosFinais.descricao_itens,
+      )
+      if (infSefaz && infSefaz.sucesso) {
+        dadosFinais.inferencia_categoria = {
+          segmento: infSefaz.segmento,
+          descricao_produto_inferido: infSefaz.produto,
+          categoria: infSefaz.categoria,
+          plano_contas_codigo: infSefaz.planoCodigo,
+          plano_contas_nome: infSefaz.planoNome,
+          termo_detectado: infSefaz.termo,
+        }
+        dadosFinais.categoria_sugerida = infSefaz.categoria
+        dadosFinais.plano_contas_codigo = infSefaz.planoCodigo
+        dadosFinais.plano_contas_nome = infSefaz.planoNome
       }
 
       // Monta mensagem amigável explicando o que foi lido e se o portal precisou de conferência manual
@@ -641,6 +1090,7 @@ Responda EXCLUSIVAMENTE em formato JSON puro, sem markdown adicional:
       if (!extractedData) {
         extractedData = {
           sucesso: false,
+          modo_essencial: false,
           beneficiario_fornecedor: '',
           cnpj_cpf_beneficiario: '',
           linha_digitavel: '',
@@ -660,6 +1110,48 @@ Responda EXCLUSIVAMENTE em formato JSON puro, sem markdown adicional:
           confianca: 'baixa',
           erro: 'não foi possível ler o boleto — aproxime a câmera, garanta boa iluminação ou anexe o PDF com código de barras nítido',
         }
+      }
+
+      // Aplica inferência de categoria pelo beneficiário do boleto
+      if (extractedData.beneficiario_fornecedor) {
+        const infBoleto = inferirCategoriaEstabelecimento(
+          extractedData.beneficiario_fornecedor,
+          extractedData.cnpj_cpf_beneficiario,
+          extractedData.instrucoes_resumo,
+        )
+        if (infBoleto && infBoleto.sucesso) {
+          extractedData.inferencia_categoria = {
+            segmento: infBoleto.segmento,
+            descricao_produto_inferido: infBoleto.produto,
+            categoria: infBoleto.categoria,
+            plano_contas_codigo: infBoleto.planoCodigo,
+            plano_contas_nome: infBoleto.planoNome,
+            termo_detectado: infBoleto.termo,
+          }
+          if (!extractedData.categoria_sugerida || extractedData.categoria_sugerida === 'outros') {
+            extractedData.categoria_sugerida = infBoleto.categoria
+          }
+          if (!extractedData.plano_contas_codigo || extractedData.plano_contas_codigo === '3.1.1') {
+            extractedData.plano_contas_codigo = infBoleto.planoCodigo
+            extractedData.plano_contas_nome = infBoleto.planoNome
+          }
+        }
+      }
+
+      // Modo essencial em boleto se tiver dados mínimos
+      const temCamposMinimosBoleto =
+        Boolean(extractedData.beneficiario_fornecedor || extractedData.cnpj_cpf_beneficiario) &&
+        (extractedData.valor_documento > 0 || extractedData.valor_cobrado > 0) &&
+        Boolean(extractedData.data_vencimento)
+
+      if (
+        extractedData.sucesso !== false &&
+        temCamposMinimosBoleto &&
+        (!extractedData.linha_digitavel || extractedData.linha_digitavel.length < 20)
+      ) {
+        extractedData.modo_essencial = true
+        extractedData.aviso_modo_essencial =
+          'Leitura parcial — dados essenciais extraídos, confira e complete o restante'
       }
 
       return e.json(200, {

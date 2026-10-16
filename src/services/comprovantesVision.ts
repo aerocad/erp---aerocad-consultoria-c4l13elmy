@@ -6,7 +6,14 @@ import {
 } from '@/services/imagePreprocessor'
 import type { ContaPagarRecord } from '@/types/crm'
 
-export type TipoDocumentoFiscal = 'nfe' | 'nfse' | 'cupom_fiscal' | 'recibo' | 'fatura' | 'outro'
+export type TipoDocumentoFiscal =
+  | 'nfe'
+  | 'nfse'
+  | 'cupom_fiscal'
+  | 'recibo'
+  | 'fatura'
+  | 'boleto'
+  | 'outro'
 
 export interface ItemFiscalDanfe {
   descricao: string
@@ -49,9 +56,22 @@ export interface ComprovanteExtraido {
   plano_contas_nome?: string
   descricao_itens: string
   itens_detalhados?: ItemFiscalDanfe[]
+  itens_danfe?: ItemFiscalDanfe[]
   observacoes?: string
   confianca?: 'alta' | 'media' | 'baixa'
   erro?: string
+  // Modo Essencial (leitura parcial focada nos 5 campos essenciais)
+  modo_essencial?: boolean
+  aviso_modo_essencial?: string | null
+  // Inferência heurística de categoria por estabelecimento
+  inferencia_categoria?: {
+    segmento?: string
+    descricao_produto_inferido?: string
+    categoria?: string
+    plano_contas_codigo?: string
+    plano_contas_nome?: string
+    termo_detectado?: string
+  }
   // Metadados da consulta do QR code / SEFAZ
   metadados_qr?: {
     qr_detectado?: boolean
@@ -89,6 +109,17 @@ export interface BoletoExtraido {
   instrucoes_resumo?: string
   confianca?: 'alta' | 'media' | 'baixa'
   erro?: string
+  // Modo Essencial e inferência
+  modo_essencial?: boolean
+  aviso_modo_essencial?: string | null
+  inferencia_categoria?: {
+    segmento?: string
+    descricao_produto_inferido?: string
+    categoria?: string
+    plano_contas_codigo?: string
+    plano_contas_nome?: string
+    termo_detectado?: string
+  }
 }
 
 export interface ContratoExtraido {
@@ -133,7 +164,8 @@ export const TIPO_DOC_LABELS: Record<TipoDocumentoFiscal, string> = {
   nfse: 'NFS-e (Nota de Serviços)',
   cupom_fiscal: 'Cupom Fiscal (NFC-e / SAT)',
   recibo: 'Recibo / Quitação',
-  fatura: 'Fatura Comercial / Boleto',
+  fatura: 'Fatura Comercial',
+  boleto: 'Boleto Bancário (Cobrança)',
   outro: 'Outro Comprovante',
 }
 
@@ -178,7 +210,42 @@ export async function extrairDadosComprovante(
   }
 
   const json: ExtracaoComprovanteResponse = await res.json()
-  return json.dados
+  const dados = json.dados
+
+  // Aplica enriquecimento de inferência de categoria por estabelecimento se ainda não definido
+  try {
+    const { inferirCategoriaPorEstabelecimento } =
+      await import('@/services/categoriaInferenciaEngine')
+    const inf = inferirCategoriaPorEstabelecimento(
+      dados.fornecedor,
+      dados.cnpj_cpf,
+      dados.descricao_itens,
+    )
+    if (inf && inf.sucesso) {
+      if (!dados.inferencia_categoria) {
+        dados.inferencia_categoria = {
+          segmento: inf.segmento,
+          descricao_produto_inferido: inf.descricaoProdutoInferido,
+          categoria: inf.categoria,
+          plano_contas_codigo: inf.planoContasCodigo,
+          plano_contas_nome: inf.planoContasNome,
+          termo_detectado: inf.termoDetectado,
+        }
+      }
+      // Se não havia categoria ou plano definidos, preenche com a inferência
+      if (!dados.categoria_sugerida || dados.categoria_sugerida === 'outros') {
+        dados.categoria_sugerida = inf.categoria as any
+      }
+      if (!dados.plano_contas_codigo) {
+        dados.plano_contas_codigo = inf.planoContasCodigo
+        dados.plano_contas_nome = inf.planoContasNome
+      }
+    }
+  } catch (infErr) {
+    console.warn('Erro ao enriquecer inferência no cliente:', infErr)
+  }
+
+  return dados
 }
 
 export interface ConsultaQrResponse {
@@ -252,7 +319,41 @@ export async function extrairDadosBoleto(
   }
 
   const json: ExtracaoBoletoResponse = await res.json()
-  return json.dados
+  const dados = json.dados
+
+  // Aplica enriquecimento de inferência de categoria por estabelecimento para boletos
+  try {
+    const { inferirCategoriaPorEstabelecimento } =
+      await import('@/services/categoriaInferenciaEngine')
+    const inf = inferirCategoriaPorEstabelecimento(
+      dados.beneficiario_fornecedor,
+      dados.cnpj_cpf_beneficiario,
+      dados.instrucoes_resumo,
+    )
+    if (inf && inf.sucesso) {
+      if (!dados.inferencia_categoria) {
+        dados.inferencia_categoria = {
+          segmento: inf.segmento,
+          descricao_produto_inferido: inf.descricaoProdutoInferido,
+          categoria: inf.categoria,
+          plano_contas_codigo: inf.planoContasCodigo,
+          plano_contas_nome: inf.planoContasNome,
+          termo_detectado: inf.termoDetectado,
+        }
+      }
+      if (!dados.categoria_sugerida || dados.categoria_sugerida === 'outros') {
+        dados.categoria_sugerida = inf.categoria as any
+      }
+      if (!dados.plano_contas_codigo) {
+        dados.plano_contas_codigo = inf.planoContasCodigo
+        dados.plano_contas_nome = inf.planoContasNome
+      }
+    }
+  } catch (infErr) {
+    console.warn('Erro ao enriquecer inferência no cliente para boleto:', infErr)
+  }
+
+  return dados
 }
 
 /**

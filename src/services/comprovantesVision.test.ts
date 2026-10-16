@@ -189,6 +189,167 @@ describe('Pipeline de Visão & OCR de Documentos Fiscais (Cupom Fiscal, Boleto, 
     })
   })
 
+  describe('Modo Essencial de Extração e Inferência de Categoria por Estabelecimento', () => {
+    it('deve ativar modo essencial e extrair os 5 campos vitais quando a leitura de itens for parcial', async () => {
+      const mockModoEssencial: ComprovanteExtraido = {
+        sucesso: true,
+        modo_essencial: true,
+        aviso_modo_essencial:
+          'Leitura parcial — dados essenciais extraídos, confira e complete o restante',
+        tipo_documento: 'cupom_fiscal',
+        fornecedor: 'AUTO POSTO BANDEIRANTES LTDA',
+        cnpj_cpf: '12.345.678/0001-90',
+        data_emissao: '2026-04-15',
+        numero_documento: '',
+        valor_total: 285.5,
+        valor_impostos: null,
+        descricao_itens: 'Abastecimento Gasolina Comum',
+        forma_pagamento_sugerida: 'cartao_debito',
+        categoria_sugerida: 'despesas_operacionais',
+        plano_contas_codigo: '3.1.5',
+        plano_contas_nome: 'Combustível, Pedágios e Locação de Veículos',
+        confianca: 'media',
+      }
+
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          sucesso: true,
+          dados: mockModoEssencial,
+        }),
+      } as Response)
+
+      const fakeCupomPosto = new File(['cupom-posto-bytes'], 'cupom_posto_gasolina.jpg', {
+        type: 'image/jpeg',
+      })
+
+      const dados = await extrairDadosComprovante(fakeCupomPosto)
+
+      expect(dados.sucesso).toBe(true)
+      expect(dados.modo_essencial).toBe(true)
+      expect(dados.fornecedor).toBe('AUTO POSTO BANDEIRANTES LTDA')
+      expect(dados.cnpj_cpf).toBe('12.345.678/0001-90')
+      expect(dados.data_emissao).toBe('2026-04-15')
+      expect(dados.valor_total).toBe(285.5)
+      expect(dados.forma_pagamento_sugerida).toBe('cartao_debito')
+      expect(dados.inferencia_categoria?.segmento).toBe('Combustíveis & Lubrificantes')
+      expect(dados.plano_contas_codigo).toBe('3.1.5')
+    })
+
+    it('deve inferir corretamente categorias para postos, restaurantes, farmácias, pedágios, hotéis e TI', async () => {
+      const { inferirCategoriaPorEstabelecimento } = await import('./categoriaInferenciaEngine')
+
+      // 1. Posto de gasolina
+      const rPosto = inferirCategoriaPorEstabelecimento('Posto Ipiranga Rota do Sol')
+      expect(rPosto.sucesso).toBe(true)
+      expect(rPosto.categoria).toBe('despesas_operacionais')
+      expect(rPosto.planoContasCodigo).toBe('3.1.5')
+      expect(rPosto.segmento).toContain('Combustíveis')
+
+      // 2. Restaurante / Alimentação
+      const rRestaurante = inferirCategoriaPorEstabelecimento('Churrascaria Boiadeiro Grill')
+      expect(rRestaurante.sucesso).toBe(true)
+      expect(rRestaurante.planoContasCodigo).toBe('3.1.4')
+      expect(rRestaurante.segmento).toContain('Alimentação')
+
+      // 3. Supermercado
+      const rMercado = inferirCategoriaPorEstabelecimento('Supermercado Carrefour Bairro')
+      expect(rMercado.sucesso).toBe(true)
+      expect(rMercado.planoContasCodigo).toBe('3.1.4')
+
+      // 4. Padaria
+      const rPadaria = inferirCategoriaPorEstabelecimento('Panificadora & Confeitaria Pão de Ouro')
+      expect(rPadaria.sucesso).toBe(true)
+      expect(rPadaria.planoContasCodigo).toBe('3.1.4')
+
+      // 5. Farmácia
+      const rFarmacia = inferirCategoriaPorEstabelecimento('Drogaria Raia São Paulo')
+      expect(rFarmacia.sucesso).toBe(true)
+      expect(rFarmacia.planoContasCodigo).toBe('3.1.1')
+
+      // 6. Estacionamento
+      const rEstac = inferirCategoriaPorEstabelecimento('Estapar Estacionamentos Aeroporto')
+      expect(rEstac.sucesso).toBe(true)
+      expect(rEstac.planoContasCodigo).toBe('3.1.5')
+
+      // 7. Pedágio
+      const rPedagio = inferirCategoriaPorEstabelecimento('Concessionária AutoBan Rodovias')
+      expect(rPedagio.sucesso).toBe(true)
+      expect(rPedagio.planoContasCodigo).toBe('3.1.5')
+
+      // 8. Papelaria
+      const rPapelaria = inferirCategoriaPorEstabelecimento('Kalunga Comércio e Papelaria')
+      expect(rPapelaria.sucesso).toBe(true)
+      expect(rPapelaria.planoContasCodigo).toBe('3.1.1')
+
+      // 9. Hotel
+      const rHotel = inferirCategoriaPorEstabelecimento('Hotel Ibis Aeroporto Congonhas')
+      expect(rHotel.sucesso).toBe(true)
+      expect(rHotel.planoContasCodigo).toBe('3.1.4')
+
+      // 10. Companhia aérea
+      const rAereo = inferirCategoriaPorEstabelecimento('Latam Airlines Brasil')
+      expect(rAereo.sucesso).toBe(true)
+      expect(rAereo.planoContasCodigo).toBe('3.1.4')
+
+      // 11. Locadora
+      const rLocadora = inferirCategoriaPorEstabelecimento('Localiza Rent a Car')
+      expect(rLocadora.sucesso).toBe(true)
+      expect(rLocadora.planoContasCodigo).toBe('3.1.5')
+
+      // 12. Táxi / Uber
+      const rTaxi = inferirCategoriaPorEstabelecimento('Uber do Brasil Tecnologia Ltda')
+      expect(rTaxi.sucesso).toBe(true)
+      expect(rTaxi.planoContasCodigo).toBe('3.1.5')
+
+      // 13. Gráfica / Plotagem
+      const rGrafica = inferirCategoriaPorEstabelecimento('Copiadora & Plotagem Central A0')
+      expect(rGrafica.sucesso).toBe(true)
+      expect(rGrafica.planoContasCodigo).toBe('3.1.1')
+
+      // 14. Ferramentas / EPI
+      const rEpi = inferirCategoriaPorEstabelecimento('Leroy Merlin Ferragens e Materiais')
+      expect(rEpi.sucesso).toBe(true)
+      expect(rEpi.planoContasCodigo).toBe('3.1.1')
+
+      // 15. Equipamentos de TI
+      const rTi = inferirCategoriaPorEstabelecimento('Kabum Eletrônicos e Informática')
+      expect(rTi.sucesso).toBe(true)
+      expect(rTi.categoria).toBe('equipamentos')
+      expect(rTi.planoContasCodigo).toBe('3.1.2')
+
+      // 16. Softwares CAD
+      const rSoftware = inferirCategoriaPorEstabelecimento('Autodesk do Brasil Software')
+      expect(rSoftware.sucesso).toBe(true)
+      expect(rSoftware.categoria).toBe('equipamentos')
+      expect(rSoftware.planoContasCodigo).toBe('3.1.2')
+
+      // 17. Cartório
+      const rCartorio = inferirCategoriaPorEstabelecimento('1º Tabelionato de Notas e Protesto')
+      expect(rCartorio.sucesso).toBe(true)
+      expect(rCartorio.planoContasCodigo).toBe('3.1.1')
+
+      // 18. Taxas públicas / ANAC
+      const rOrgao = inferirCategoriaPorEstabelecimento(
+        'ANAC - Agência Nacional de Aviação Civil GRU',
+      )
+      expect(rOrgao.sucesso).toBe(true)
+      expect(rOrgao.categoria).toBe('impostos')
+      expect(rOrgao.planoContasCodigo).toBe('3.3.1')
+
+      // 19. Telecomunicações
+      const rTelecom = inferirCategoriaPorEstabelecimento('Vivo Telefônica Brasil S.A.')
+      expect(rTelecom.sucesso).toBe(true)
+      expect(rTelecom.planoContasCodigo).toBe('3.1.1')
+
+      // 20. Terceirizados de engenharia
+      const rTerceiros = inferirCategoriaPorEstabelecimento('Geotecnia e Sondagens Especiais Ltda')
+      expect(rTerceiros.sucesso).toBe(true)
+      expect(rTerceiros.categoria).toBe('terceirizados')
+      expect(rTerceiros.planoContasCodigo).toBe('3.2.1')
+    })
+  })
+
   describe('Resiliência e Tratamento de Documento Ilegível / Falha', () => {
     it('deve retornar mensagem acionável e confianca baixa quando o documento não for legível', async () => {
       const mockFalhaLeitura: ComprovanteExtraido = {

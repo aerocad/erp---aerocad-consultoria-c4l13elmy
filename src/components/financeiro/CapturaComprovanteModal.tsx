@@ -121,6 +121,12 @@ export function CapturaComprovanteModal({
   const [observacoes, setObservacoes] = useState('')
   const [confianca, setConfianca] = useState<'alta' | 'media' | 'baixa'>('alta')
   const [avisoExtracao, setAvisoExtracao] = useState<string | null>(null)
+  const [modoEssencialAtivo, setModoEssencialAtivo] = useState<boolean>(false)
+  const [infoInferencia, setInfoInferencia] = useState<{
+    segmento?: string
+    descricao_produto_inferido?: string
+    termo_detectado?: string
+  } | null>(null)
 
   // Limpa estados ao fechar
   useEffect(() => {
@@ -139,6 +145,8 @@ export function CapturaComprovanteModal({
       setChaveAcesso('')
       setSerieDoc('')
       setDadosCompletosDoc({})
+      setModoEssencialAtivo(false)
+      setInfoInferencia(null)
     }
   }, [open])
 
@@ -310,6 +318,12 @@ export function CapturaComprovanteModal({
     )
     setObservacoes(extraido.observacoes || '')
     setConfianca(extraido.confianca || 'media')
+    setModoEssencialAtivo(Boolean(extraido.modo_essencial))
+    if (extraido.inferencia_categoria) {
+      setInfoInferencia(extraido.inferencia_categoria)
+    } else {
+      setInfoInferencia(null)
+    }
 
     // Tentar vincular automaticamente a um credor existente por CNPJ/CPF ou Razão Social
     if (credores.length > 0) {
@@ -345,14 +359,14 @@ export function CapturaComprovanteModal({
     setSalvandoCredorRapido(true)
     try {
       const novo = await salvarCredor({
-        nome: fornecedor.trim(),
+        nome_razao_social: fornecedor.trim(),
         tipo_pessoa: cnpjCpf.replace(/\D/g, '').length === 11 ? 'pf' : 'pj',
-        cpf_cnpj: cnpjCpf.trim() || undefined,
+        cnpj_cpf: cnpjCpf.trim() || '00.000.000/0000-00',
         categoria: 'outros',
         status: 'ativo',
         observacoes: 'Cadastrado automaticamente via leitura de comprovante fiscal',
       })
-      toast.success(`Credor "${novo.nome}" cadastrado com sucesso!`)
+      toast.success(`Credor "${novo.nome_razao_social}" cadastrado com sucesso!`)
       setCredorId(novo.id)
       setMostrarCadastroCredor(false)
     } catch (err: unknown) {
@@ -690,7 +704,35 @@ export function CapturaComprovanteModal({
               </p>
             </div>
 
-            {avisoExtracao && (
+            {/* Banner Discreto de Leitura Essencial / Parcial */}
+            {modoEssencialAtivo && (
+              <div className="p-3 rounded-lg bg-blue-50/80 border border-blue-200 text-xs text-blue-950 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                <div className="flex items-start gap-2">
+                  <Sparkles className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold block text-blue-900">
+                      Leitura parcial — dados essenciais extraídos
+                    </span>
+                    <span className="text-[11px] text-blue-800">
+                      Os 5 campos vitais (data, valor, forma de pagamento, estabelecimento e CNPJ)
+                      foram capturados e a categoria inferida automaticamente. Confira e complete o
+                      restante.
+                    </span>
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleReprocessarMesmaFoto}
+                  className="h-7 text-xs text-blue-950 border-blue-300 bg-white hover:bg-blue-100 shrink-0 shadow-sm font-semibold"
+                >
+                  <RefreshCw className="mr-1.5 h-3.5 w-3.5 text-[#FF6A13]" />
+                  Reprocessar mesma foto
+                </Button>
+              </div>
+            )}
+
+            {avisoExtracao && !modoEssencialAtivo && (
               <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-900 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                 <div className="flex items-start gap-2">
                   <HelpCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
@@ -710,6 +752,85 @@ export function CapturaComprovanteModal({
                 </Button>
               </div>
             )}
+
+            {/* DESTAQUE DOS 5 CAMPOS ESSENCIAIS NO TOPO DO PAINEL DE CONFERÊNCIA */}
+            <div className="p-3 rounded-xl border border-orange-200 bg-orange-50/50 shadow-sm space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-neutral-900 flex items-center gap-1.5">
+                  <Sparkles className="h-4 w-4 text-[#FF6A13]" />
+                  Campos Essenciais Extraídos (Prioridade Contábil)
+                </span>
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-white text-orange-800 border border-orange-200">
+                  {modoEssencialAtivo ? 'Modo Essencial' : 'Conferência Rápida'}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
+                {/* 1. Data */}
+                <div className="p-2 rounded-lg bg-white border border-neutral-200/80 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+                  <span className="text-[10px] text-neutral-500 font-medium block">
+                    1. Data Emissão
+                  </span>
+                  <span
+                    className="font-bold text-neutral-900 font-mono text-xs truncate block"
+                    title={dataEmissao}
+                  >
+                    {dataEmissao ? dataEmissao.split('-').reverse().join('/') : '—'}
+                  </span>
+                </div>
+                {/* 2. Valor */}
+                <div className="p-2 rounded-lg bg-white border border-neutral-200/80 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+                  <span className="text-[10px] text-neutral-500 font-medium block">
+                    2. Valor Total
+                  </span>
+                  <span
+                    className="font-bold text-[#FF6A13] font-mono text-xs truncate block"
+                    title={String(valorTotal)}
+                  >
+                    {valorTotal !== '' && valorTotal !== undefined
+                      ? podeVerValores
+                        ? `R$ ${Number(valorTotal).toFixed(2)}`
+                        : '••••'
+                      : '—'}
+                  </span>
+                </div>
+                {/* 3. Forma de Pagamento */}
+                <div className="p-2 rounded-lg bg-white border border-neutral-200/80 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+                  <span className="text-[10px] text-neutral-500 font-medium block">
+                    3. Forma Pagto
+                  </span>
+                  <span
+                    className="font-semibold text-neutral-800 uppercase text-[11px] truncate block"
+                    title={formaPagamento}
+                  >
+                    {formaPagamento}
+                  </span>
+                </div>
+                {/* 4. Estabelecimento */}
+                <div className="p-2 rounded-lg bg-white border border-neutral-200/80 shadow-[0_1px_2px_rgba(0,0,0,0.03)] col-span-1 sm:col-span-1">
+                  <span className="text-[10px] text-neutral-500 font-medium block">
+                    4. Estabelecimento
+                  </span>
+                  <span
+                    className="font-semibold text-neutral-900 text-[11px] truncate block"
+                    title={fornecedor}
+                  >
+                    {fornecedor || '—'}
+                  </span>
+                </div>
+                {/* 5. CNPJ */}
+                <div className="p-2 rounded-lg bg-white border border-neutral-200/80 shadow-[0_1px_2px_rgba(0,0,0,0.03)] col-span-2 sm:col-span-1">
+                  <span className="text-[10px] text-neutral-500 font-medium block">
+                    5. CNPJ Emitente
+                  </span>
+                  <span
+                    className="font-semibold text-neutral-700 font-mono text-[11px] truncate block"
+                    title={cnpjCpf}
+                  >
+                    {cnpjCpf || '—'}
+                  </span>
+                </div>
+              </div>
+            </div>
 
             <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
               {/* COLUNA ESQUERDA: PRÉVIA DA FOTO / DOCUMENTO */}
@@ -1028,10 +1149,22 @@ export function CapturaComprovanteModal({
                   </div>
                 </div>
 
-                {/* Classificação Contábil Editável (Plano de Contas) */}
+                {/* Classificação Contábil Editável (Plano de Contas) com Inferência pelo Estabelecimento */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1">
-                    <Label className="text-xs">Classificação Contábil (Plano de Contas)</Label>
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs font-semibold">
+                        Classificação Contábil (Plano de Contas)
+                      </Label>
+                      {infoInferencia && (
+                        <span
+                          className="text-[10px] font-semibold text-orange-700 bg-orange-100 px-1.5 py-0.2 rounded border border-orange-200"
+                          title={`Inferido por: ${infoInferencia.termo_detectado || 'nome do estabelecimento'}`}
+                        >
+                          sugerido pelo estabelecimento
+                        </span>
+                      )}
+                    </div>
                     <Select
                       value={planoContasCodigo}
                       onValueChange={(val) => {
@@ -1044,13 +1177,19 @@ export function CapturaComprovanteModal({
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {PLANO_CONTAS_AEROCAD.filter((p) => p.tipo === 'despesa').map((p) => (
+                        {PLANO_CONTAS_AEROCAD.filter((p) => p.natureza === 'despesa').map((p) => (
                           <SelectItem key={p.codigo} value={p.codigo}>
                             {p.codigo} - {p.nome}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
+                    {infoInferencia && (
+                      <p className="text-[10px] text-neutral-500 italic">
+                        Segmento: {infoInferencia.segmento} (
+                        {infoInferencia.descricao_produto_inferido})
+                      </p>
+                    )}
                   </div>
 
                   <div className="space-y-1">

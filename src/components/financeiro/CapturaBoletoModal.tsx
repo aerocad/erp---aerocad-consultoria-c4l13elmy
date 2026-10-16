@@ -79,6 +79,12 @@ export function CapturaBoletoModal({
   const [isPdf, setIsPdf] = useState(false)
   const [dadosExtraidos, setDadosExtraidos] = useState<BoletoExtraido | null>(null)
   const [erroAnalise, setErroAnalise] = useState<string | null>(null)
+  const [modoEssencialAtivo, setModoEssencialAtivo] = useState<boolean>(false)
+  const [infoInferencia, setInfoInferencia] = useState<{
+    segmento?: string
+    descricao_produto_inferido?: string
+    termo_detectado?: string
+  } | null>(null)
 
   // Integração com Credores
   const [credorId, setCredorId] = useState<string>('')
@@ -156,6 +162,8 @@ export function CapturaBoletoModal({
     setObservacoes('')
     setCredorId('')
     setMostrarCadastroCredor(false)
+    setModoEssencialAtivo(false)
+    setInfoInferencia(null)
   }
 
   async function processarArquivoSelecionado(file: File) {
@@ -203,6 +211,12 @@ export function CapturaBoletoModal({
 
       const extraido = await extrairDadosBoleto(file)
       setDadosExtraidos(extraido)
+      setModoEssencialAtivo(Boolean(extraido.modo_essencial))
+      if (extraido.inferencia_categoria) {
+        setInfoInferencia(extraido.inferencia_categoria)
+      } else {
+        setInfoInferencia(null)
+      }
 
       // Pré-preenche os campos conferíveis, mesclando dados do QR Code se houver
       const fornFinal = dadosQrBackend?.fornecedor || extraido.beneficiario_fornecedor || ''
@@ -632,7 +646,36 @@ export function CapturaBoletoModal({
         {/* ETAPA 3: CONFERÊNCIA LADO A LADO */}
         {etapa === 'conferencia' && (
           <div className="space-y-4 py-2">
-            {erroAnalise && (
+            {/* Banner Discreto de Leitura Essencial */}
+            {modoEssencialAtivo && (
+              <div className="p-3 rounded-lg bg-blue-50/80 border border-blue-200 text-xs text-blue-950 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                <div className="flex items-start gap-2">
+                  <Sparkles className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold block text-blue-900">
+                      Leitura parcial — dados essenciais extraídos
+                    </span>
+                    <span className="text-[11px] text-blue-800">
+                      Os 5 campos essenciais (data, valor, forma de pagamento,
+                      estabelecimento/beneficiário e CNPJ) foram extraídos e a categoria inferida.
+                      Confira e complete os demais campos.
+                    </span>
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={handleReprocessarMesmoBoleto}
+                  className="h-7 text-xs bg-white text-blue-950 border-blue-300 hover:bg-blue-100 shrink-0 font-semibold"
+                >
+                  <RotateCcw className="h-3 w-3 mr-1 text-[#FF6A13]" />
+                  Reprocessar mesma foto
+                </Button>
+              </div>
+            )}
+
+            {erroAnalise && !modoEssencialAtivo && (
               <Alert
                 variant="destructive"
                 className="py-2.5 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2"
@@ -658,6 +701,81 @@ export function CapturaBoletoModal({
                 </Button>
               </Alert>
             )}
+
+            {/* DESTAQUE DOS 5 CAMPOS ESSENCIAIS NO TOPO DO PAINEL DE CONFERÊNCIA */}
+            <div className="p-3 rounded-xl border border-orange-200 bg-orange-50/50 shadow-sm space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-neutral-900 flex items-center gap-1.5">
+                  <Sparkles className="h-4 w-4 text-[#FF6A13]" />
+                  Campos Essenciais Extraídos (Prioridade Contábil)
+                </span>
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-white text-orange-800 border border-orange-200">
+                  {modoEssencialAtivo ? 'Modo Essencial' : 'Conferência Rápida'}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
+                {/* 1. Data */}
+                <div className="p-2 rounded-lg bg-white border border-neutral-200/80 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+                  <span className="text-[10px] text-neutral-500 font-medium block">
+                    1. Vencimento / Data
+                  </span>
+                  <span
+                    className="font-bold text-neutral-900 font-mono text-xs truncate block"
+                    title={vencimento}
+                  >
+                    {vencimento ? vencimento.split('-').reverse().join('/') : '—'}
+                  </span>
+                </div>
+                {/* 2. Valor */}
+                <div className="p-2 rounded-lg bg-white border border-neutral-200/80 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+                  <span className="text-[10px] text-neutral-500 font-medium block">
+                    2. Valor Previsto
+                  </span>
+                  <span
+                    className="font-bold text-[#FF6A13] font-mono text-xs truncate block"
+                    title={String(valorLiquidoFinal)}
+                  >
+                    {podeVerValores ? `R$ ${valorLiquidoFinal.toFixed(2)}` : '••••'}
+                  </span>
+                </div>
+                {/* 3. Forma de Pagamento */}
+                <div className="p-2 rounded-lg bg-white border border-neutral-200/80 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+                  <span className="text-[10px] text-neutral-500 font-medium block">
+                    3. Forma Pagto
+                  </span>
+                  <span
+                    className="font-semibold text-neutral-800 uppercase text-[11px] truncate block"
+                    title="BOLETO BANCÁRIO"
+                  >
+                    BOLETO
+                  </span>
+                </div>
+                {/* 4. Estabelecimento / Beneficiário */}
+                <div className="p-2 rounded-lg bg-white border border-neutral-200/80 shadow-[0_1px_2px_rgba(0,0,0,0.03)] col-span-1 sm:col-span-1">
+                  <span className="text-[10px] text-neutral-500 font-medium block">
+                    4. Favorecido / Beneficiário
+                  </span>
+                  <span
+                    className="font-semibold text-neutral-900 text-[11px] truncate block"
+                    title={beneficiario}
+                  >
+                    {beneficiario || '—'}
+                  </span>
+                </div>
+                {/* 5. CNPJ */}
+                <div className="p-2 rounded-lg bg-white border border-neutral-200/80 shadow-[0_1px_2px_rgba(0,0,0,0.03)] col-span-2 sm:col-span-1">
+                  <span className="text-[10px] text-neutral-500 font-medium block">
+                    5. CNPJ Beneficiário
+                  </span>
+                  <span
+                    className="font-semibold text-neutral-700 font-mono text-[11px] truncate block"
+                    title={cnpjCpf}
+                  >
+                    {cnpjCpf || '—'}
+                  </span>
+                </div>
+              </div>
+            </div>
 
             {/* Faixa explícita de distinção de natureza: Boleto de cobrança vs Comprovante de quitação */}
             <div className="p-2.5 rounded-lg border border-amber-300 bg-amber-50/70 text-xs space-y-1">
@@ -970,9 +1088,23 @@ export function CapturaBoletoModal({
                       Classificação Contábil & Categoria
                     </span>
                     <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-200/80 text-amber-900 font-medium">
-                      Sugerido pela IA (Sempre Editável)
+                      {infoInferencia
+                        ? 'sugerido pelo estabelecimento'
+                        : 'Sugerido pela IA (Sempre Editável)'}
                     </span>
                   </div>
+
+                  {infoInferencia && (
+                    <div className="px-2 py-1 rounded bg-orange-100/60 border border-orange-200 text-[11px] text-orange-950 flex items-center justify-between">
+                      <span>
+                        Inferência: <strong>{infoInferencia.segmento}</strong> (
+                        {infoInferencia.descricao_produto_inferido})
+                      </span>
+                      <span className="text-[10px] text-orange-800 font-medium">
+                        sugerido pelo estabelecimento
+                      </span>
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <div className="space-y-1">
