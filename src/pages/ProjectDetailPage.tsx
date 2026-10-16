@@ -18,9 +18,12 @@ import {
   Users,
   WalletCards,
   Layers,
+  TrendingUp,
+  ArrowUpRight,
 } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
+import { ConverterProjetoModal } from '@/components/projetos/ConverterProjetoModal'
 
 import { AnexosList } from '@/components/common/AnexosList'
 import { AssistenteIAPanel } from '@/components/common/AssistenteIAPanel'
@@ -112,8 +115,10 @@ export default function ProjectDetailPage() {
     'geral' | 'equipe' | 'financeiro' | 'tecnico' | 'prazos'
   >('geral')
   const [arquivarModalOpen, setArquivarModalOpen] = useState(false)
+  const [converterOppModalOpen, setConverterOppModalOpen] = useState(false)
   const canWrite = ['admin', 'comercial', 'tecnico'].includes(user?.role || '')
   const isAdmin = user?.role === 'admin'
+  const canConvertOpp = ['admin', 'comercial'].includes(user?.role || '')
   const canManageOS = ['admin', 'tecnico'].includes(user?.role || '')
   const canEditName = ['admin', 'tecnico'].includes(user?.role || '')
   const canEditProject = ['admin', 'tecnico', 'financeiro'].includes(user?.role || '')
@@ -315,6 +320,24 @@ export default function ProjectDetailPage() {
               <CrmBadge tone={project.trilha === 'registro' ? 'green' : 'orange'}>
                 {trailLabels[project.trilha]}
               </CrmBadge>
+
+              {/* Badge/Chip de Oportunidade Vinculada */}
+              {(project.oportunidade || project.expand?.oportunidade) && (
+                <Link
+                  to={`/funil?destaque=${project.oportunidade || project.expand?.oportunidade?.id}`}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-orange-200 bg-orange-50 px-2.5 py-0.5 text-xs font-semibold text-[#D65100] hover:bg-orange-100 hover:text-[#B23B00] transition"
+                  title="Acessar oportunidade vinculada no funil comercial"
+                >
+                  <TrendingUp className="h-3 w-3 text-[#FF6A13]" />
+                  <span>
+                    Oportunidade:{' '}
+                    {project.expand?.oportunidade?.titulo
+                      ? `"${project.expand.oportunidade.titulo.slice(0, 32)}..."`
+                      : 'Vinculada'}
+                  </span>
+                  <ArrowUpRight className="h-3 w-3 opacity-60" />
+                </Link>
+              )}
               {project.expand?.coordenador_colaborador && (
                 <span className="inline-flex items-center gap-1 rounded-full border border-neutral-300 bg-neutral-100 px-2.5 py-0.5 text-xs text-neutral-700">
                   <span className="text-[10px] text-neutral-400 uppercase font-semibold">
@@ -383,6 +406,26 @@ export default function ProjectDetailPage() {
                 >
                   <Users className="h-3.5 w-3.5 mr-1 text-[#FF6A13]" />
                   <span>Equipe Técnica</span>
+                </Button>
+              )}
+              {canConvertOpp && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setConverterOppModalOpen(true)}
+                  className="h-8 px-2.5 border-[#FF6A13]/40 bg-white text-[#D65100] hover:bg-orange-50 shrink-0 font-medium text-xs"
+                  title={
+                    project.oportunidade
+                      ? 'Ver oportunidade comercial vinculada'
+                      : 'Transformar projeto em oportunidade no funil'
+                  }
+                >
+                  <TrendingUp className="h-3.5 w-3.5 mr-1.5 text-[#FF6A13]" />
+                  <span>
+                    {project.oportunidade || project.expand?.oportunidade
+                      ? 'Ver oportunidade'
+                      : 'Transformar em oportunidade'}
+                  </span>
                 </Button>
               )}
             </div>
@@ -1257,6 +1300,17 @@ export default function ProjectDetailPage() {
         projeto={project}
         onSuccess={(atualizado) => {
           setProject((prev) => (prev ? { ...prev, ...atualizado } : atualizado))
+          void load()
+        }}
+      />
+
+      {/* Modal de Transformar Projeto em Oportunidade */}
+      <ConverterProjetoModal
+        open={converterOppModalOpen}
+        onOpenChange={setConverterOppModalOpen}
+        projeto={project}
+        usuarioAtual={user}
+        onConverted={() => {
           void load()
         }}
       />

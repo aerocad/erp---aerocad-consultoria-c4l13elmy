@@ -26,7 +26,7 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { useAuth } from '@/contexts/AuthContext'
 import { trailPhases } from '@/lib/crm'
-import { createOne, listAll } from '@/services/api'
+import { createOne, listAll, updateOne } from '@/services/api'
 import type {
   ClienteRecord,
   ColaboradorRecord,
@@ -151,6 +151,30 @@ export function ProjetoDialog({ open, onOpenChange, presetClient, oportunidade, 
         prazo: form.prazo ? `${form.prazo} 12:00:00.000Z` : '',
         percentual_concluido: Number(form.percentual_concluido),
       })
+
+      // Se originado de oportunidade, sincroniza o vínculo bidirecional
+      if (oportunidade) {
+        try {
+          await updateOne('oportunidades', oportunidade.id, {
+            projeto: record.id,
+            etapa: 'ganho',
+            data_fechamento: new Date().toISOString(),
+          })
+          if (user) {
+            await createOne('atividades', {
+              usuario: user.id,
+              texto: `Conversão: Oportunidade "${oportunidade.titulo}" transformada no Projeto ${record.numero} (${record.nome}).`,
+              cliente: record.cliente,
+              oportunidade: oportunidade.id,
+              projeto: record.id,
+              tipo: 'conversao_oportunidade_projeto',
+            })
+          }
+        } catch (linkErr) {
+          console.warn('Aviso ao sincronizar oportunidade vinculada:', linkErr)
+        }
+      }
+
       toast.success(`Projeto ${record.numero} criado`)
       onSaved(record)
       onOpenChange(false)

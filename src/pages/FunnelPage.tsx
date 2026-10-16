@@ -8,9 +8,10 @@ import {
   MessageSquare,
   ExternalLink,
 } from 'lucide-react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { buildWhatsAppChatUrl } from '@/services/whatsappService'
 import { toast } from 'sonner'
+import { FolderKanban, ArrowUpRight } from 'lucide-react'
 
 import { CrmBadge } from '@/components/common/CrmBadge'
 import { EmptyState, ErrorState, PageLoading } from '@/components/common/States'
@@ -61,7 +62,7 @@ export default function FunnelPage() {
   const { data, loading, error, reload, setData } = useCrmData<OportunidadeRecord>(
     'oportunidades',
     {
-      expand: 'cliente,responsavel,responsavel_colaborador,tipo_servico',
+      expand: 'cliente,responsavel,responsavel_colaborador,tipo_servico,projeto',
       sort: '-updated',
       realtime: true,
     },
@@ -163,14 +164,39 @@ export default function FunnelPage() {
   }
 
   async function convertToProject() {
-    if (selected) setProjectOpen(true)
+    if (!selected) return
+    if (selected.projeto || selected.expand?.projeto) {
+      const projId = selected.projeto || selected.expand?.projeto?.id
+      toast.info('Esta oportunidade já possui um projeto vinculado. Redirecionando...')
+      setSelected(null)
+      navigate(`/projetos/${projId}`)
+      return
+    }
+    setProjectOpen(true)
   }
-  function onProjectCreated(project: ProjetoRecord) {
-    if (selected)
-      void updateOne('oportunidades', selected.id, {
-        etapa: 'ganho',
-        data_fechamento: new Date().toISOString(),
-      })
+
+  async function onProjectCreated(project: ProjetoRecord) {
+    if (selected) {
+      try {
+        await updateOne('oportunidades', selected.id, {
+          projeto: project.id,
+          etapa: 'ganho',
+          data_fechamento: new Date().toISOString(),
+        })
+        if (user) {
+          await createOne('atividades', {
+            usuario: user.id,
+            texto: `Conversão: Oportunidade "${selected.titulo}" convertida no Projeto ${project.numero} (${project.nome}).`,
+            cliente: selected.cliente,
+            oportunidade: selected.id,
+            projeto: project.id,
+            tipo: 'conversao_oportunidade_projeto',
+          })
+        }
+      } catch (err) {
+        console.warn('Erro ao atualizar vínculo da oportunidade com projeto:', err)
+      }
+    }
     setSelected(null)
     navigate(`/projetos/${project.id}`)
   }
@@ -285,6 +311,24 @@ export default function FunnelPage() {
                       <p className="mono-value mt-4 text-lg font-bold text-[#D65100]">
                         {formatCurrency(item.valor_estimado)}
                       </p>
+                      {/* Badge / Chip de Projeto Vinculado */}
+                      {(item.projeto || item.expand?.projeto) && (
+                        <div className="mt-2.5">
+                          <Link
+                            to={`/projetos/${item.projeto || item.expand?.projeto?.id}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="inline-flex items-center gap-1.5 rounded-full border border-orange-200 bg-orange-50/90 px-2.5 py-0.5 text-[10px] font-bold text-[#D65100] hover:bg-orange-100 hover:text-[#B23B00] transition"
+                            title="Ir para o projeto vinculado"
+                          >
+                            <FolderKanban className="h-3 w-3 text-[#FF6A13]" />
+                            <span>
+                              Vinculada ao projeto {item.expand?.projeto?.numero || 'existente'}
+                            </span>
+                            <ArrowUpRight className="h-2.5 w-2.5 opacity-60" />
+                          </Link>
+                        </div>
+                      )}
+
                       <div className="mt-3 flex items-center justify-between">
                         <CrmBadge tone="gray" className="max-w-[170px] truncate">
                           {item.trilha_prevista_nome ||
@@ -397,6 +441,23 @@ export default function FunnelPage() {
                       'Não atribuído'}
                   </span>
                 </div>
+                {(selected.projeto || selected.expand?.projeto) && (
+                  <div className="flex items-center justify-between pt-1 border-t border-neutral-200">
+                    <span className="text-neutral-500 font-medium">Projeto Vinculado:</span>
+                    <Link
+                      to={`/projetos/${selected.projeto || selected.expand?.projeto?.id}`}
+                      className="inline-flex items-center gap-1 font-bold text-[#D65100] hover:underline"
+                    >
+                      <FolderKanban className="h-3.5 w-3.5 text-[#FF6A13]" />
+                      <span>
+                        {selected.expand?.projeto?.numero
+                          ? `Projeto ${selected.expand.projeto.numero}`
+                          : 'Ver Projeto'}
+                      </span>
+                      <ArrowUpRight className="h-3 w-3" />
+                    </Link>
+                  </div>
+                )}
               </div>
               <div>
                 <Label>Etapa</Label>
@@ -472,6 +533,32 @@ export default function FunnelPage() {
                   }}
                 />
               </div>
+              {/* Alerta de projeto já vinculado se existir */}
+              {(selected.projeto || selected.expand?.projeto) && (
+                <div className="rounded-lg border border-orange-200 bg-orange-50/70 p-3 text-xs text-[#8A3B00] flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <FolderKanban className="h-4 w-4 text-[#FF6A13] shrink-0" />
+                    <div>
+                      <p className="font-bold">Oportunidade já convertida em projeto</p>
+                      <p className="text-[11px] text-neutral-600">
+                        {selected.expand?.projeto?.numero
+                          ? `Vinculada ao projeto ${selected.expand.projeto.numero} (${selected.expand.projeto.nome || ''})`
+                          : 'Projeto cadastrado e sincronizado.'}
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    asChild
+                    size="sm"
+                    className="h-7 text-xs bg-[#FF6A13] hover:bg-[#E85B06] text-white shrink-0"
+                  >
+                    <Link to={`/projetos/${selected.projeto || selected.expand?.projeto?.id}`}>
+                      Acessar Projeto
+                    </Link>
+                  </Button>
+                </div>
+              )}
+
               <div className="flex flex-col gap-2">
                 <Button
                   variant="outline"
@@ -481,13 +568,29 @@ export default function FunnelPage() {
                 >
                   Editar oportunidade
                 </Button>
-                <Button
-                  onClick={convertToProject}
-                  disabled={!canWrite}
-                  className="w-full bg-[#FF6A13] hover:bg-[#E85B06]"
-                >
-                  Converter em projeto
-                </Button>
+                {selected.projeto || selected.expand?.projeto ? (
+                  <Button
+                    asChild
+                    variant="default"
+                    className="w-full bg-neutral-900 hover:bg-neutral-800 text-white font-semibold"
+                  >
+                    <Link to={`/projetos/${selected.projeto || selected.expand?.projeto?.id}`}>
+                      <FolderKanban className="mr-2 h-4 w-4 text-[#FF6A13]" />
+                      {selected.expand?.projeto?.numero
+                        ? `Acessar Projeto ${selected.expand.projeto.numero}`
+                        : 'Acessar Projeto Vinculado'}
+                    </Link>
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={convertToProject}
+                    disabled={!canWrite}
+                    className="w-full bg-[#FF6A13] hover:bg-[#E85B06] font-semibold"
+                  >
+                    <FolderKanban className="mr-2 h-4 w-4" />
+                    Converter em projeto
+                  </Button>
+                )}
               </div>
             </div>
           )}

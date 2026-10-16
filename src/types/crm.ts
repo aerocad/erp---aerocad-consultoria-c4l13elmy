@@ -71,11 +71,13 @@ export interface OportunidadeRecord extends RecordModel {
   origem_canal?: 'whatsapp' | 'site' | 'indicacao' | 'email' | 'outro'
   whatsapp_remetente?: string
   whatsapp_mensagem?: string
+  projeto?: string
   expand?: {
     cliente?: ClienteRecord
     responsavel?: UserRecord
     responsavel_colaborador?: ColaboradorRecord
     tipo_servico?: ServiceRecord
+    projeto?: ProjetoRecord
   }
 }
 

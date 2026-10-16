@@ -14,10 +14,11 @@ import {
   Square,
   X,
 } from 'lucide-react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
-import { Award, ShieldCheck } from 'lucide-react'
+import { Award, ShieldCheck, TrendingUp, ArrowUpRight } from 'lucide-react'
+import { ConverterProjetoModal } from '@/components/projetos/ConverterProjetoModal'
 import { CrmBadge } from '@/components/common/CrmBadge'
 import { EmptyState, ErrorState, PageLoading } from '@/components/common/States'
 import { SectionHeader } from '@/components/common/SectionHeader'
@@ -60,7 +61,7 @@ export default function ProjectsPage() {
   const [params, setParams] = useSearchParams()
   const projects = useCrmData<ProjetoRecord>('projetos', {
     expand:
-      'cliente,responsavel_tecnico,coordenador_colaborador,analista_colaborador,rts_colaboradores',
+      'cliente,responsavel_tecnico,coordenador_colaborador,analista_colaborador,rts_colaboradores,oportunidade',
     sort: '-numero',
     realtime: true,
   })
@@ -81,6 +82,7 @@ export default function ProjectsPage() {
   const [editingProject, setEditingProject] = useState<ProjetoRecord | null>(null)
   const [editingFullProject, setEditingFullProject] = useState<ProjetoRecord | null>(null)
   const [archivingProject, setArchivingProject] = useState<ProjetoRecord | null>(null)
+  const [convertingProject, setConvertingProject] = useState<ProjetoRecord | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [batchAction, setBatchAction] = useState<'arquivar' | 'desarquivar' | null>(null)
 
@@ -124,6 +126,7 @@ export default function ProjectsPage() {
   const canEditName = ['admin', 'tecnico'].includes(user?.role || '')
   const canEditFull = ['admin', 'tecnico', 'financeiro'].includes(user?.role || '')
   const canArchive = ['admin', 'tecnico'].includes(user?.role || '')
+  const canConvertOpp = ['admin', 'comercial'].includes(user?.role || '')
 
   // Alterna seleção individual de projeto de forma confiável
   const handleToggleSelect = (id: string, e?: React.SyntheticEvent) => {
@@ -870,6 +873,20 @@ export default function ProjectsPage() {
                                 Editar apenas nome
                               </DropdownMenuItem>
                             )}
+                            {canConvertOpp && (
+                              <DropdownMenuItem
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setConvertingProject(item)
+                                }}
+                                className="text-xs flex items-center gap-2 cursor-pointer font-medium text-[#D65100]"
+                              >
+                                <TrendingUp className="h-3.5 w-3.5 text-[#FF6A13]" />
+                                {item.oportunidade || item.expand?.oportunidade
+                                  ? 'Ver oportunidade vinculada'
+                                  : 'Transformar em oportunidade'}
+                              </DropdownMenuItem>
+                            )}
 
                             {/* Acesso rápido para trocar prioridade diretamente no menu */}
                             {canWrite && (
@@ -965,6 +982,26 @@ export default function ProjectsPage() {
                   <p className="mt-1 text-sm text-[#737373] truncate">
                     {item.expand?.cliente?.razao_social}
                   </p>
+
+                  {/* Badge de Oportunidade Vinculada se houver */}
+                  {(item.oportunidade || item.expand?.oportunidade) && (
+                    <div className="mt-2">
+                      <Link
+                        to={`/funil?destaque=${item.oportunidade || item.expand?.oportunidade?.id}`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50/90 px-2 py-0.5 text-[10px] font-bold text-[#D65100] hover:bg-orange-100 hover:text-[#B23B00] transition"
+                        title="Ir para a oportunidade vinculada no funil"
+                      >
+                        <TrendingUp className="h-3 w-3 text-[#FF6A13]" />
+                        <span>
+                          {item.expand?.oportunidade?.titulo
+                            ? `Oportunidade: ${item.expand.oportunidade.titulo.slice(0, 24)}...`
+                            : 'Oportunidade vinculada'}
+                        </span>
+                        <ArrowUpRight className="h-2.5 w-2.5 opacity-60" />
+                      </Link>
+                    </div>
+                  )}
 
                   {/* Equipe Técnica Resumida no Card */}
                   <div className="mt-2.5 flex flex-wrap items-center gap-1.5 text-[11px]">
@@ -1100,6 +1137,19 @@ export default function ProjectsPage() {
         }
         onSuccess={() => {
           setSelectedIds(new Set())
+          void projects.reload()
+        }}
+      />
+
+      {/* Modal de Transformar Projeto em Oportunidade */}
+      <ConverterProjetoModal
+        open={Boolean(convertingProject)}
+        onOpenChange={(open) => {
+          if (!open) setConvertingProject(null)
+        }}
+        projeto={convertingProject}
+        usuarioAtual={user}
+        onConverted={() => {
           void projects.reload()
         }}
       />

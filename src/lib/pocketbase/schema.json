@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-16T05:34:09.528Z",
+  "generatedAt": "2026-10-16T05:54:30.032Z",
   "collections": [
     {
       "name": "users",
@@ -574,12 +574,20 @@
           "type": "text",
           "required": false,
           "system": false
+        },
+        {
+          "name": "projeto",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "projetos"
         }
       ],
       "indexes": [
         "CREATE INDEX idx_oportunidades_etapa ON oportunidades (etapa)",
         "CREATE INDEX idx_oportunidades_cliente ON oportunidades (cliente)",
-        "CREATE INDEX idx_oportunidades_responsavel ON oportunidades (responsavel)"
+        "CREATE INDEX idx_oportunidades_responsavel ON oportunidades (responsavel)",
+        "CREATE INDEX `idx_oportunidades_projeto` ON `oportunidades` (projeto)"
       ]
     },
     {
