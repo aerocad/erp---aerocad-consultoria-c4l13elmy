@@ -3,351 +3,364 @@
 /**
  * Hook HTTP para Processamento Contábil e Documental com IA Skip Cloud:
  * 1. POST /backend/v1/comprovantes/extrair (comprovantes fiscais, recibos, despesas)
- * 2. POST /backend/v1/boletos/extrair (boletos bancários em PDF ou foto JPG/PNG)
- * 3. POST /backend/v1/contratos/extrair (contratos de prestação de serviços / subcontratação em PDF)
+ * 2. POST /backend/v1/fiscal/consultar-qr (consulta SEFAZ / decodificação de QR code fiscal)
+ * 3. POST /backend/v1/boletos/extrair (boletos bancários em PDF ou foto JPG/PNG)
+ * 4. POST /backend/v1/contratos/extrair (contratos de prestação de serviços / subcontratação em PDF)
+ *
+ * REGRA CRÍTICA DO RUNTIME POCKETBASE (JSVM):
+ * O PocketBase executa callbacks de rotas em pools isoladas de JSVM.
+ * Funções e variáveis declaradas no escopo top-level NÃO são acessíveis em runtime dentro dos callbacks.
+ * TODA a lógica, funções utilitárias e constantes auxiliares devem ser declaradas INLINE dentro do corpo
+ * de cada callback registrado com routerAdd.
  */
-
-// Heurística Global Compartilhada de Inferência de Categoria e Produto por Estabelecimento
-function inferirCategoriaEstabelecimento(nome, cnpj, descItens) {
-  const texto = ((nome || '') + ' ' + (descItens || '')).toLowerCase()
-  const regras = [
-    {
-      termos: [
-        'posto',
-        'combustivel',
-        'gasolina',
-        'etanol',
-        'diesel',
-        'ipiranga',
-        'petrobras',
-        'shell',
-        'vibra',
-        'raizen',
-        'auto posto',
-        'autoposto',
-        'abastecedora',
-      ],
-      segmento: 'Combustíveis & Lubrificantes',
-      produto: 'Combustíveis e abastecimento de veículos em campo',
-      categoria: 'despesas_operacionais',
-      planoCodigo: '3.1.5',
-      planoNome: 'Combustível, Pedágios e Locação de Veículos',
-    },
-    {
-      termos: [
-        'restaurante',
-        'churrascaria',
-        'pizzaria',
-        'lanchonete',
-        'refeicao',
-        'refeicoes',
-        'bife',
-        'buffet',
-        'bistro',
-        'mcdonald',
-        'burger king',
-        'subway',
-        'habib',
-        'grill',
-      ],
-      segmento: 'Alimentação & Restaurantes',
-      produto: 'Despesas com refeições e alimentação da equipe',
-      categoria: 'despesas_operacionais',
-      planoCodigo: '3.1.4',
-      planoNome: 'Viagens, Hospedagem e Diárias em Campo',
-    },
-    {
-      termos: [
-        'supermercado',
-        'mercado',
-        'mercearia',
-        'hipermercado',
-        'atacadao',
-        'assai',
-        'carrefour',
-        'pao de acucar',
-        'extra',
-        'muffato',
-        'savegnago',
-        'hortifruti',
-      ],
-      segmento: 'Alimentação / Supermercados',
-      produto: 'Gêneros alimentícios e insumos de copa/campo',
-      categoria: 'despesas_operacionais',
-      planoCodigo: '3.1.4',
-      planoNome: 'Viagens, Hospedagem e Diárias em Campo',
-    },
-    {
-      termos: [
-        'padaria',
-        'panificadora',
-        'panificacao',
-        'confeitaria',
-        'cafeteria',
-        'cafe',
-        'coffee',
-      ],
-      segmento: 'Panificação & Confeitaria',
-      produto: 'Despesas com café da manhã e panificação em trânsito',
-      categoria: 'despesas_operacionais',
-      planoCodigo: '3.1.4',
-      planoNome: 'Viagens, Hospedagem e Diárias em Campo',
-    },
-    {
-      termos: [
-        'farmacia',
-        'drogaria',
-        'drogasil',
-        'raia',
-        'pacheco',
-        'pague menos',
-        'panvel',
-        'medicamentos',
-      ],
-      segmento: 'Saúde & Farmácia',
-      produto: 'Medicamentos básicos, primeiros socorros e itens de higiene',
-      categoria: 'despesas_operacionais',
-      planoCodigo: '3.1.1',
-      planoNome: 'Despesas Administrativas Gerais & Escritório',
-    },
-    {
-      termos: ['estacionamento', 'garagem', 'park', 'parking', 'estapar', 'valet'],
-      segmento: 'Estacionamento & Garagem',
-      produto: 'Estacionamento de veículos técnicos / diárias em aeroportos',
-      categoria: 'despesas_operacionais',
-      planoCodigo: '3.1.5',
-      planoNome: 'Combustível, Pedágios e Locação de Veículos',
-    },
-    {
-      termos: [
-        'pedagio',
-        'sem parar',
-        'conectcar',
-        'veloe',
-        'concessionaria de rodovias',
-        'ccr',
-        'ecorodovias',
-        'arteris',
-      ],
-      segmento: 'Pedágio & Rodovias',
-      produto: 'Tarifas de pedágio em deslocamento técnico rodoviário',
-      categoria: 'despesas_operacionais',
-      planoCodigo: '3.1.5',
-      planoNome: 'Combustível, Pedágios e Locação de Veículos',
-    },
-    {
-      termos: [
-        'papelaria',
-        'kalunga',
-        'livraria',
-        'copiadora',
-        'suprimentos',
-        'materiais para escritorio',
-      ],
-      segmento: 'Material de Consumo & Escritório',
-      produto: 'Material de consumo, papelaria técnica e suprimentos',
-      categoria: 'despesas_operacionais',
-      planoCodigo: '3.1.1',
-      planoNome: 'Despesas Administrativas Gerais & Escritório',
-    },
-    {
-      termos: [
-        'hotel',
-        'hoteis',
-        'pousada',
-        'resort',
-        'ibis',
-        'accor',
-        'mercure',
-        'novotel',
-        'hospedagem',
-        'airbnb',
-      ],
-      segmento: 'Hospedagem & Hotelaria',
-      produto: 'Diárias de hospedagem e hotel em missões de campo',
-      categoria: 'despesas_operacionais',
-      planoCodigo: '3.1.4',
-      planoNome: 'Viagens, Hospedagem e Diárias em Campo',
-    },
-    {
-      termos: [
-        'latam',
-        'gol linhas',
-        'azul linhas',
-        'voepass',
-        'passagem aerea',
-        'aeroporto',
-        'infraero',
-        'aena',
-        'fraport',
-        'zurich airport',
-      ],
-      segmento: 'Passagens & Transporte Aéreo',
-      produto: 'Passagens aéreas, taxas aeroportuárias e despacho de bagagem técnica',
-      categoria: 'despesas_operacionais',
-      planoCodigo: '3.1.4',
-      planoNome: 'Viagens, Hospedagem e Diárias em Campo',
-    },
-    {
-      termos: [
-        'localiza',
-        'movida',
-        'unidas',
-        'locadora de veiculos',
-        'aluguel de carros',
-        'rent a car',
-      ],
-      segmento: 'Locação de Veículos',
-      produto: 'Aluguel de veículos utilitários e 4x4 para vistoria em sítios aeroportuários',
-      categoria: 'despesas_operacionais',
-      planoCodigo: '3.1.5',
-      planoNome: 'Combustível, Pedágios e Locação de Veículos',
-    },
-    {
-      termos: ['uber', '99 tecnologia', '99app', 'radiotaxi', 'taxi'],
-      segmento: 'Transporte Urbano & Aplicativos',
-      produto: 'Deslocamentos urbanos por aplicativo ou táxi',
-      categoria: 'despesas_operacionais',
-      planoCodigo: '3.1.5',
-      planoNome: 'Combustível, Pedágios e Locação de Veículos',
-    },
-    {
-      termos: ['grafica', 'plotagem', 'ploter', 'reprografia', 'plantas tecnicas'],
-      segmento: 'Gráfica & Plotagem Técnica',
-      produto: 'Plotagem de pranchas CAD A0/A1 e encadernações técnicas',
-      categoria: 'despesas_operacionais',
-      planoCodigo: '3.1.1',
-      planoNome: 'Despesas Administrativas Gerais & Escritório',
-    },
-    {
-      termos: [
-        'ferragens',
-        'ferramentas',
-        'materiais de construcao',
-        'leroy merlin',
-        'tintas',
-        'epi',
-        'equipamentos de protecao',
-      ],
-      segmento: 'Ferramentas, EPI & Materiais',
-      produto: 'Equipamentos de proteção individual (EPI), trenas e ferramentas',
-      categoria: 'despesas_operacionais',
-      planoCodigo: '3.1.1',
-      planoNome: 'Despesas Administrativas Gerais & Escritório',
-    },
-    {
-      termos: ['kabum', 'dell', 'lenovo', 'computadores', 'informatica', 'hardware'],
-      segmento: 'Equipamentos de TI & Hardware',
-      produto: 'Hardware, periféricos e peças de computador de engenharia',
-      categoria: 'equipamentos',
-      planoCodigo: '3.1.2',
-      planoNome: 'Softwares, Licenças CAD/GIS, Servidores & TI',
-    },
-    {
-      termos: [
-        'autodesk',
-        'microsoft',
-        'google cloud',
-        'aws',
-        'software',
-        'adobe',
-        'chatgpt',
-        'openai',
-        'bentley',
-        'trimble',
-      ],
-      segmento: 'Softwares & Licenças Técnicas',
-      produto: 'Assinaturas de software CAD/BIM, nuvem e ferramentas de cálculo',
-      categoria: 'equipamentos',
-      planoCodigo: '3.1.2',
-      planoNome: 'Softwares, Licenças CAD/GIS, Servidores & TI',
-    },
-    {
-      termos: ['cartorio', 'tabelionato', 'registro de imoveis', 'tabeliao'],
-      segmento: 'Cartórios & Tabelionatos',
-      produto: 'Autenticações, reconhecimento de firma e certidões imobiliárias',
-      categoria: 'despesas_operacionais',
-      planoCodigo: '3.1.1',
-      planoNome: 'Despesas Administrativas Gerais & Escritório',
-    },
-    {
-      termos: [
-        'anac',
-        'decea',
-        'aeronautica',
-        'receita federal',
-        'prefeitura',
-        'sefaz',
-        'gru',
-        'dam',
-        'taxas',
-      ],
-      segmento: 'Taxas & Órgãos Reguladores',
-      produto: 'Taxas de fiscalização ANAC, DECEA, GRU, prefeituras e órgãos ambientais',
-      categoria: 'impostos',
-      planoCodigo: '3.3.1',
-      planoNome: 'Tributos Municipais (ISS / Taxas Aeroportuárias)',
-    },
-    {
-      termos: [
-        'vivo',
-        'telefonica',
-        'claro',
-        'tim',
-        'telecomunicacoes',
-        'provedor de internet',
-        'fibra',
-      ],
-      segmento: 'Telecomunicações & Internet',
-      produto: 'Internet banda larga, telefonia móvel e links de dados',
-      categoria: 'despesas_operacionais',
-      planoCodigo: '3.1.1',
-      planoNome: 'Despesas Administrativas Gerais & Escritório',
-    },
-    {
-      termos: ['engenharia consultiva', 'geotecnia', 'sondagens', 'topografia', 'ensaios de solo'],
-      segmento: 'Subcontratação Técnica de Engenharia',
-      produto: 'Serviços terceirizados de sondagem SPT, ensaios geotécnicos e topografia',
-      categoria: 'terceirizados',
-      planoCodigo: '3.2.1',
-      planoNome: 'Honorários de Engenharia e Subcontratação Técnica (Topografia/Sondagem)',
-    },
-  ]
-
-  for (let i = 0; i < regras.length; i++) {
-    const r = regras[i]
-    for (let j = 0; j < r.termos.length; j++) {
-      const t = r.termos[j]
-      if (texto.indexOf(t) !== -1) {
-        return {
-          sucesso: true,
-          segmento: r.segmento,
-          produto: r.produto,
-          categoria: r.categoria,
-          planoCodigo: r.planoCodigo,
-          planoNome: r.planoNome,
-          termo: t,
-        }
-      }
-    }
-  }
-
-  return {
-    sucesso: false,
-    segmento: 'Outros',
-    produto: 'Despesa operacional geral',
-    categoria: 'despesas_operacionais',
-    planoCodigo: '3.1.1',
-    planoNome: 'Despesas Administrativas Gerais & Escritório',
-    termo: null,
-  }
-}
 
 // 1. EXTRAÇÃO DE COMPROVANTES GERAIS
 routerAdd(
   'POST',
   '/backend/v1/comprovantes/extrair',
   (e) => {
+    // Função utilitária inline de inferência de categoria por estabelecimento
+    function inferirCategoriaEstabelecimento(nome, cnpj, descItens) {
+      const texto = ((nome || '') + ' ' + (descItens || '')).toLowerCase()
+      const regras = [
+        {
+          termos: [
+            'posto',
+            'combustivel',
+            'gasolina',
+            'etanol',
+            'diesel',
+            'ipiranga',
+            'petrobras',
+            'shell',
+            'vibra',
+            'raizen',
+            'auto posto',
+            'autoposto',
+            'abastecedora',
+          ],
+          segmento: 'Combustíveis & Lubrificantes',
+          produto: 'Combustíveis e abastecimento de veículos em campo',
+          categoria: 'despesas_operacionais',
+          planoCodigo: '3.1.5',
+          planoNome: 'Combustível, Pedágios e Locação de Veículos',
+        },
+        {
+          termos: [
+            'restaurante',
+            'churrascaria',
+            'pizzaria',
+            'lanchonete',
+            'refeicao',
+            'refeicoes',
+            'bife',
+            'buffet',
+            'bistro',
+            'mcdonald',
+            'burger king',
+            'subway',
+            'habib',
+            'grill',
+          ],
+          segmento: 'Alimentação & Restaurantes',
+          produto: 'Despesas com refeições e alimentação da equipe',
+          categoria: 'despesas_operacionais',
+          planoCodigo: '3.1.4',
+          planoNome: 'Viagens, Hospedagem e Diárias em Campo',
+        },
+        {
+          termos: [
+            'supermercado',
+            'mercado',
+            'mercearia',
+            'hipermercado',
+            'atacadao',
+            'assai',
+            'carrefour',
+            'pao de acucar',
+            'extra',
+            'muffato',
+            'savegnago',
+            'hortifruti',
+          ],
+          segmento: 'Alimentação / Supermercados',
+          produto: 'Gêneros alimentícios e insumos de copa/campo',
+          categoria: 'despesas_operacionais',
+          planoCodigo: '3.1.4',
+          planoNome: 'Viagens, Hospedagem e Diárias em Campo',
+        },
+        {
+          termos: [
+            'padaria',
+            'panificadora',
+            'panificacao',
+            'confeitaria',
+            'cafeteria',
+            'cafe',
+            'coffee',
+          ],
+          segmento: 'Panificação & Confeitaria',
+          produto: 'Despesas com café da manhã e panificação em trânsito',
+          categoria: 'despesas_operacionais',
+          planoCodigo: '3.1.4',
+          planoNome: 'Viagens, Hospedagem e Diárias em Campo',
+        },
+        {
+          termos: [
+            'farmacia',
+            'drogaria',
+            'drogasil',
+            'raia',
+            'pacheco',
+            'pague menos',
+            'panvel',
+            'medicamentos',
+          ],
+          segmento: 'Saúde & Farmácia',
+          produto: 'Medicamentos básicos, primeiros socorros e itens de higiene',
+          categoria: 'despesas_operacionais',
+          planoCodigo: '3.1.1',
+          planoNome: 'Despesas Administrativas Gerais & Escritório',
+        },
+        {
+          termos: ['estacionamento', 'garagem', 'park', 'parking', 'estapar', 'valet'],
+          segmento: 'Estacionamento & Garagem',
+          produto: 'Estacionamento de veículos técnicos / diárias em aeroportos',
+          categoria: 'despesas_operacionais',
+          planoCodigo: '3.1.5',
+          planoNome: 'Combustível, Pedágios e Locação de Veículos',
+        },
+        {
+          termos: [
+            'pedagio',
+            'sem parar',
+            'conectcar',
+            'veloe',
+            'concessionaria de rodovias',
+            'ccr',
+            'ecorodovias',
+            'arteris',
+          ],
+          segmento: 'Pedágio & Rodovias',
+          produto: 'Tarifas de pedágio em deslocamento técnico rodoviário',
+          categoria: 'despesas_operacionais',
+          planoCodigo: '3.1.5',
+          planoNome: 'Combustível, Pedágios e Locação de Veículos',
+        },
+        {
+          termos: [
+            'papelaria',
+            'kalunga',
+            'livraria',
+            'copiadora',
+            'suprimentos',
+            'materiais para escritorio',
+          ],
+          segmento: 'Material de Consumo & Escritório',
+          produto: 'Material de consumo, papelaria técnica e suprimentos',
+          categoria: 'despesas_operacionais',
+          planoCodigo: '3.1.1',
+          planoNome: 'Despesas Administrativas Gerais & Escritório',
+        },
+        {
+          termos: [
+            'hotel',
+            'hoteis',
+            'pousada',
+            'resort',
+            'ibis',
+            'accor',
+            'mercure',
+            'novotel',
+            'hospedagem',
+            'airbnb',
+          ],
+          segmento: 'Hospedagem & Hotelaria',
+          produto: 'Diárias de hospedagem e hotel em missões de campo',
+          categoria: 'despesas_operacionais',
+          planoCodigo: '3.1.4',
+          planoNome: 'Viagens, Hospedagem e Diárias em Campo',
+        },
+        {
+          termos: [
+            'latam',
+            'gol linhas',
+            'azul linhas',
+            'voepass',
+            'passagem aerea',
+            'aeroporto',
+            'infraero',
+            'aena',
+            'fraport',
+            'zurich airport',
+          ],
+          segmento: 'Passagens & Transporte Aéreo',
+          produto: 'Passagens aéreas, taxas aeroportuárias e despacho de bagagem técnica',
+          categoria: 'despesas_operacionais',
+          planoCodigo: '3.1.4',
+          planoNome: 'Viagens, Hospedagem e Diárias em Campo',
+        },
+        {
+          termos: [
+            'localiza',
+            'movida',
+            'unidas',
+            'locadora de veiculos',
+            'aluguel de carros',
+            'rent a car',
+          ],
+          segmento: 'Locação de Veículos',
+          produto: 'Aluguel de veículos utilitários e 4x4 para vistoria em sítios aeroportuários',
+          categoria: 'despesas_operacionais',
+          planoCodigo: '3.1.5',
+          planoNome: 'Combustível, Pedágios e Locação de Veículos',
+        },
+        {
+          termos: ['uber', '99 tecnologia', '99app', 'radiotaxi', 'taxi'],
+          segmento: 'Transporte Urbano & Aplicativos',
+          produto: 'Deslocamentos urbanos por aplicativo ou táxi',
+          categoria: 'despesas_operacionais',
+          planoCodigo: '3.1.5',
+          planoNome: 'Combustível, Pedágios e Locação de Veículos',
+        },
+        {
+          termos: ['grafica', 'plotagem', 'ploter', 'reprografia', 'plantas tecnicas'],
+          segmento: 'Gráfica & Plotagem Técnica',
+          produto: 'Plotagem de pranchas CAD A0/A1 e encadernações técnicas',
+          categoria: 'despesas_operacionais',
+          planoCodigo: '3.1.1',
+          planoNome: 'Despesas Administrativas Gerais & Escritório',
+        },
+        {
+          termos: [
+            'ferragens',
+            'ferramentas',
+            'materiais de construcao',
+            'leroy merlin',
+            'tintas',
+            'epi',
+            'equipamentos de protecao',
+          ],
+          segmento: 'Ferramentas, EPI & Materiais',
+          produto: 'Equipamentos de proteção individual (EPI), trenas e ferramentas',
+          categoria: 'despesas_operacionais',
+          planoCodigo: '3.1.1',
+          planoNome: 'Despesas Administrativas Gerais & Escritório',
+        },
+        {
+          termos: ['kabum', 'dell', 'lenovo', 'computadores', 'informatica', 'hardware'],
+          segmento: 'Equipamentos de TI & Hardware',
+          produto: 'Hardware, periféricos e peças de computador de engenharia',
+          categoria: 'equipamentos',
+          planoCodigo: '3.1.2',
+          planoNome: 'Softwares, Licenças CAD/GIS, Servidores & TI',
+        },
+        {
+          termos: [
+            'autodesk',
+            'microsoft',
+            'google cloud',
+            'aws',
+            'software',
+            'adobe',
+            'chatgpt',
+            'openai',
+            'bentley',
+            'trimble',
+          ],
+          segmento: 'Softwares & Licenças Técnicas',
+          produto: 'Assinaturas de software CAD/BIM, nuvem e ferramentas de cálculo',
+          categoria: 'equipamentos',
+          planoCodigo: '3.1.2',
+          planoNome: 'Softwares, Licenças CAD/GIS, Servidores & TI',
+        },
+        {
+          termos: ['cartorio', 'tabelionato', 'registro de imoveis', 'tabeliao'],
+          segmento: 'Cartórios & Tabelionatos',
+          produto: 'Autenticações, reconhecimento de firma e certidões imobiliárias',
+          categoria: 'despesas_operacionais',
+          planoCodigo: '3.1.1',
+          planoNome: 'Despesas Administrativas Gerais & Escritório',
+        },
+        {
+          termos: [
+            'anac',
+            'decea',
+            'aeronautica',
+            'receita federal',
+            'prefeitura',
+            'sefaz',
+            'gru',
+            'dam',
+            'taxas',
+          ],
+          segmento: 'Taxas & Órgãos Reguladores',
+          produto: 'Taxas de fiscalização ANAC, DECEA, GRU, prefeituras e órgãos ambientais',
+          categoria: 'impostos',
+          planoCodigo: '3.3.1',
+          planoNome: 'Tributos Municipais (ISS / Taxas Aeroportuárias)',
+        },
+        {
+          termos: [
+            'vivo',
+            'telefonica',
+            'claro',
+            'tim',
+            'telecomunicacoes',
+            'provedor de internet',
+            'fibra',
+          ],
+          segmento: 'Telecomunicações & Internet',
+          produto: 'Internet banda larga, telefonia móvel e links de dados',
+          categoria: 'despesas_operacionais',
+          planoCodigo: '3.1.1',
+          planoNome: 'Despesas Administrativas Gerais & Escritório',
+        },
+        {
+          termos: [
+            'engenharia consultiva',
+            'geotecnia',
+            'sondagens',
+            'topografia',
+            'ensaios de solo',
+          ],
+          segmento: 'Subcontratação Técnica de Engenharia',
+          produto: 'Serviços terceirizados de sondagem SPT, ensaios geotécnicos e topografia',
+          categoria: 'terceirizados',
+          planoCodigo: '3.2.1',
+          planoNome: 'Honorários de Engenharia e Subcontratação Técnica (Topografia/Sondagem)',
+        },
+      ]
+
+      for (let i = 0; i < regras.length; i++) {
+        const r = regras[i]
+        for (let j = 0; j < r.termos.length; j++) {
+          const t = r.termos[j]
+          if (texto.indexOf(t) !== -1) {
+            return {
+              sucesso: true,
+              segmento: r.segmento,
+              produto: r.produto,
+              categoria: r.categoria,
+              planoCodigo: r.planoCodigo,
+              planoNome: r.planoNome,
+              termo: t,
+            }
+          }
+        }
+      }
+
+      return {
+        sucesso: false,
+        segmento: 'Outros',
+        produto: 'Despesa operacional geral',
+        categoria: 'despesas_operacionais',
+        planoCodigo: '3.1.1',
+        planoNome: 'Despesas Administrativas Gerais & Escritório',
+        termo: null,
+      }
+    }
+
     try {
       const authUser = e.auth
       if (!authUser || !authUser.id) {
@@ -661,6 +674,419 @@ routerAdd(
   'POST',
   '/backend/v1/fiscal/consultar-qr',
   (e) => {
+    // Funções utilitárias inline
+    function inferirCategoriaEstabelecimento(nome, cnpj, descItens) {
+      const texto = ((nome || '') + ' ' + (descItens || '')).toLowerCase()
+      const regras = [
+        {
+          termos: [
+            'posto',
+            'combustivel',
+            'gasolina',
+            'etanol',
+            'diesel',
+            'ipiranga',
+            'petrobras',
+            'shell',
+            'vibra',
+            'raizen',
+            'auto posto',
+            'autoposto',
+            'abastecedora',
+          ],
+          segmento: 'Combustíveis & Lubrificantes',
+          produto: 'Combustíveis e abastecimento de veículos em campo',
+          categoria: 'despesas_operacionais',
+          planoCodigo: '3.1.5',
+          planoNome: 'Combustível, Pedágios e Locação de Veículos',
+        },
+        {
+          termos: [
+            'restaurante',
+            'churrascaria',
+            'pizzaria',
+            'lanchonete',
+            'refeicao',
+            'refeicoes',
+            'bife',
+            'buffet',
+            'bistro',
+            'mcdonald',
+            'burger king',
+            'subway',
+            'habib',
+            'grill',
+          ],
+          segmento: 'Alimentação & Restaurantes',
+          produto: 'Despesas com refeições e alimentação da equipe',
+          categoria: 'despesas_operacionais',
+          planoCodigo: '3.1.4',
+          planoNome: 'Viagens, Hospedagem e Diárias em Campo',
+        },
+        {
+          termos: [
+            'supermercado',
+            'mercado',
+            'mercearia',
+            'hipermercado',
+            'atacadao',
+            'assai',
+            'carrefour',
+            'pao de acucar',
+            'extra',
+            'muffato',
+            'savegnago',
+            'hortifruti',
+          ],
+          segmento: 'Alimentação / Supermercados',
+          produto: 'Gêneros alimentícios e insumos de copa/campo',
+          categoria: 'despesas_operacionais',
+          planoCodigo: '3.1.4',
+          planoNome: 'Viagens, Hospedagem e Diárias em Campo',
+        },
+        {
+          termos: [
+            'padaria',
+            'panificadora',
+            'panificacao',
+            'confeitaria',
+            'cafeteria',
+            'cafe',
+            'coffee',
+          ],
+          segmento: 'Panificação & Confeitaria',
+          produto: 'Despesas com café da manhã e panificação em trânsito',
+          categoria: 'despesas_operacionais',
+          planoCodigo: '3.1.4',
+          planoNome: 'Viagens, Hospedagem e Diárias em Campo',
+        },
+        {
+          termos: [
+            'farmacia',
+            'drogaria',
+            'drogasil',
+            'raia',
+            'pacheco',
+            'pague menos',
+            'panvel',
+            'medicamentos',
+          ],
+          segmento: 'Saúde & Farmácia',
+          produto: 'Medicamentos básicos, primeiros socorros e itens de higiene',
+          categoria: 'despesas_operacionais',
+          planoCodigo: '3.1.1',
+          planoNome: 'Despesas Administrativas Gerais & Escritório',
+        },
+        {
+          termos: ['estacionamento', 'garagem', 'park', 'parking', 'estapar', 'valet'],
+          segmento: 'Estacionamento & Garagem',
+          produto: 'Estacionamento de veículos técnicos / diárias em aeroportos',
+          categoria: 'despesas_operacionais',
+          planoCodigo: '3.1.5',
+          planoNome: 'Combustível, Pedágios e Locação de Veículos',
+        },
+        {
+          termos: [
+            'pedagio',
+            'sem parar',
+            'conectcar',
+            'veloe',
+            'concessionaria de rodovias',
+            'ccr',
+            'ecorodovias',
+            'arteris',
+          ],
+          segmento: 'Pedágio & Rodovias',
+          produto: 'Tarifas de pedágio em deslocamento técnico rodoviário',
+          categoria: 'despesas_operacionais',
+          planoCodigo: '3.1.5',
+          planoNome: 'Combustível, Pedágios e Locação de Veículos',
+        },
+        {
+          termos: [
+            'papelaria',
+            'kalunga',
+            'livraria',
+            'copiadora',
+            'suprimentos',
+            'materiais para escritorio',
+          ],
+          segmento: 'Material de Consumo & Escritório',
+          produto: 'Material de consumo, papelaria técnica e suprimentos',
+          categoria: 'despesas_operacionais',
+          planoCodigo: '3.1.1',
+          planoNome: 'Despesas Administrativas Gerais & Escritório',
+        },
+        {
+          termos: [
+            'hotel',
+            'hoteis',
+            'pousada',
+            'resort',
+            'ibis',
+            'accor',
+            'mercure',
+            'novotel',
+            'hospedagem',
+            'airbnb',
+          ],
+          segmento: 'Hospedagem & Hotelaria',
+          produto: 'Diárias de hospedagem e hotel em missões de campo',
+          categoria: 'despesas_operacionais',
+          planoCodigo: '3.1.4',
+          planoNome: 'Viagens, Hospedagem e Diárias em Campo',
+        },
+        {
+          termos: [
+            'latam',
+            'gol linhas',
+            'azul linhas',
+            'voepass',
+            'passagem aerea',
+            'aeroporto',
+            'infraero',
+            'aena',
+            'fraport',
+            'zurich airport',
+          ],
+          segmento: 'Passagens & Transporte Aéreo',
+          produto: 'Passagens aéreas, taxas aeroportuárias e despacho de bagagem técnica',
+          categoria: 'despesas_operacionais',
+          planoCodigo: '3.1.4',
+          planoNome: 'Viagens, Hospedagem e Diárias em Campo',
+        },
+        {
+          termos: [
+            'localiza',
+            'movida',
+            'unidas',
+            'locadora de veiculos',
+            'aluguel de carros',
+            'rent a car',
+          ],
+          segmento: 'Locação de Veículos',
+          produto: 'Aluguel de veículos utilitários e 4x4 para vistoria em sítios aeroportuários',
+          categoria: 'despesas_operacionais',
+          planoCodigo: '3.1.5',
+          planoNome: 'Combustível, Pedágios e Locação de Veículos',
+        },
+        {
+          termos: ['uber', '99 tecnologia', '99app', 'radiotaxi', 'taxi'],
+          segmento: 'Transporte Urbano & Aplicativos',
+          produto: 'Deslocamentos urbanos por aplicativo ou táxi',
+          categoria: 'despesas_operacionais',
+          planoCodigo: '3.1.5',
+          planoNome: 'Combustível, Pedágios e Locação de Veículos',
+        },
+        {
+          termos: ['grafica', 'plotagem', 'ploter', 'reprografia', 'plantas tecnicas'],
+          segmento: 'Gráfica & Plotagem Técnica',
+          produto: 'Plotagem de pranchas CAD A0/A1 e encadernações técnicas',
+          categoria: 'despesas_operacionais',
+          planoCodigo: '3.1.1',
+          planoNome: 'Despesas Administrativas Gerais & Escritório',
+        },
+        {
+          termos: [
+            'ferragens',
+            'ferramentas',
+            'materiais de construcao',
+            'leroy merlin',
+            'tintas',
+            'epi',
+            'equipamentos de protecao',
+          ],
+          segmento: 'Ferramentas, EPI & Materiais',
+          produto: 'Equipamentos de proteção individual (EPI), trenas e ferramentas',
+          categoria: 'despesas_operacionais',
+          planoCodigo: '3.1.1',
+          planoNome: 'Despesas Administrativas Gerais & Escritório',
+        },
+        {
+          termos: ['kabum', 'dell', 'lenovo', 'computadores', 'informatica', 'hardware'],
+          segmento: 'Equipamentos de TI & Hardware',
+          produto: 'Hardware, periféricos e peças de computador de engenharia',
+          categoria: 'equipamentos',
+          planoCodigo: '3.1.2',
+          planoNome: 'Softwares, Licenças CAD/GIS, Servidores & TI',
+        },
+        {
+          termos: [
+            'autodesk',
+            'microsoft',
+            'google cloud',
+            'aws',
+            'software',
+            'adobe',
+            'chatgpt',
+            'openai',
+            'bentley',
+            'trimble',
+          ],
+          segmento: 'Softwares & Licenças Técnicas',
+          produto: 'Assinaturas de software CAD/BIM, nuvem e ferramentas de cálculo',
+          categoria: 'equipamentos',
+          planoCodigo: '3.1.2',
+          planoNome: 'Softwares, Licenças CAD/GIS, Servidores & TI',
+        },
+        {
+          termos: ['cartorio', 'tabelionato', 'registro de imoveis', 'tabeliao'],
+          segmento: 'Cartórios & Tabelionatos',
+          produto: 'Autenticações, reconhecimento de firma e certidões imobiliárias',
+          categoria: 'despesas_operacionais',
+          planoCodigo: '3.1.1',
+          planoNome: 'Despesas Administrativas Gerais & Escritório',
+        },
+        {
+          termos: [
+            'anac',
+            'decea',
+            'aeronautica',
+            'receita federal',
+            'prefeitura',
+            'sefaz',
+            'gru',
+            'dam',
+            'taxas',
+          ],
+          segmento: 'Taxas & Órgãos Reguladores',
+          produto: 'Taxas de fiscalização ANAC, DECEA, GRU, prefeituras e órgãos ambientais',
+          categoria: 'impostos',
+          planoCodigo: '3.3.1',
+          planoNome: 'Tributos Municipais (ISS / Taxas Aeroportuárias)',
+        },
+        {
+          termos: [
+            'vivo',
+            'telefonica',
+            'claro',
+            'tim',
+            'telecomunicacoes',
+            'provedor de internet',
+            'fibra',
+          ],
+          segmento: 'Telecomunicações & Internet',
+          produto: 'Internet banda larga, telefonia móvel e links de dados',
+          categoria: 'despesas_operacionais',
+          planoCodigo: '3.1.1',
+          planoNome: 'Despesas Administrativas Gerais & Escritório',
+        },
+        {
+          termos: [
+            'engenharia consultiva',
+            'geotecnia',
+            'sondagens',
+            'topografia',
+            'ensaios de solo',
+          ],
+          segmento: 'Subcontratação Técnica de Engenharia',
+          produto: 'Serviços terceirizados de sondagem SPT, ensaios geotécnicos e topografia',
+          categoria: 'terceirizados',
+          planoCodigo: '3.2.1',
+          planoNome: 'Honorários de Engenharia e Subcontratação Técnica (Topografia/Sondagem)',
+        },
+      ]
+
+      for (let i = 0; i < regras.length; i++) {
+        const r = regras[i]
+        for (let j = 0; j < r.termos.length; j++) {
+          const t = r.termos[j]
+          if (texto.indexOf(t) !== -1) {
+            return {
+              sucesso: true,
+              segmento: r.segmento,
+              produto: r.produto,
+              categoria: r.categoria,
+              planoCodigo: r.planoCodigo,
+              planoNome: r.planoNome,
+              termo: t,
+            }
+          }
+        }
+      }
+
+      return {
+        sucesso: false,
+        segmento: 'Outros',
+        produto: 'Despesa operacional geral',
+        categoria: 'despesas_operacionais',
+        planoCodigo: '3.1.1',
+        planoNome: 'Despesas Administrativas Gerais & Escritório',
+        termo: null,
+      }
+    }
+
+    function extrairChave44(texto) {
+      if (!texto) return ''
+      const matchContinuo = texto.match(/\b\d{44}\b/)
+      if (matchContinuo) return matchContinuo[0]
+
+      const paramMatch = texto.match(/(?:chNFe|chave|p|C)=([0-9]{44})/i)
+      if (paramMatch) return paramMatch[1]
+
+      const pMatch = texto.match(/[?&]p=([0-9]{44})[|%7C]/i)
+      if (pMatch) return pMatch[1]
+
+      return ''
+    }
+
+    function decomporChave(chave) {
+      if (!chave || chave.length !== 44) return null
+      const ufs = {
+        11: 'RO',
+        12: 'AC',
+        13: 'AM',
+        14: 'RR',
+        15: 'PA',
+        16: 'AP',
+        17: 'TO',
+        21: 'MA',
+        22: 'PI',
+        23: 'CE',
+        24: 'RN',
+        25: 'PB',
+        26: 'PE',
+        27: 'AL',
+        28: 'SE',
+        29: 'BA',
+        31: 'MG',
+        32: 'ES',
+        33: 'RJ',
+        35: 'SP',
+        41: 'PR',
+        42: 'SC',
+        43: 'RS',
+        50: 'MS',
+        51: 'MT',
+        52: 'GO',
+        53: 'DF',
+      }
+      const cUF = chave.substring(0, 2)
+      const aamm = chave.substring(2, 6)
+      const ano = '20' + aamm.substring(0, 2)
+      const mes = aamm.substring(2, 4)
+      const cnpjCru = chave.substring(6, 20)
+      const modelo = chave.substring(20, 22)
+      const serie = chave.substring(22, 25).replace(/^0+/, '') || '1'
+      const nNF = chave.substring(25, 34).replace(/^0+/, '') || ''
+
+      const cnpjFmt = cnpjCru.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5')
+      const tipoDoc = modelo === '65' ? 'cupom_fiscal' : modelo === '59' ? 'cupom_fiscal' : 'nfe'
+
+      return {
+        chave,
+        uf: ufs[cUF] || cUF,
+        ano_mes: `${ano}-${mes}`,
+        data_aproximada: `${ano}-${mes}-01`,
+        cnpj_emitente: cnpjFmt,
+        cnpj_cru: cnpjCru,
+        modelo,
+        tipo_documento: tipoDoc,
+        serie,
+        numero_documento: nNF,
+      }
+    }
+
     try {
       const authUser = e.auth
       if (!authUser || !authUser.id) {
@@ -679,82 +1105,6 @@ routerAdd(
 
       if (!qrRaw) {
         return e.badRequestError('Conteúdo do QR code não informado (qr_content)')
-      }
-
-      // Função utilitária para extrair chave de 44 dígitos
-      function extrairChave44(texto) {
-        if (!texto) return ''
-        // Tenta achar 44 dígitos contínuos
-        const matchContinuo = texto.match(/\b\d{44}\b/)
-        if (matchContinuo) return matchContinuo[0]
-
-        // Tenta achar em query param: chNFe=..., p=..., chave=...
-        const paramMatch = texto.match(/(?:chNFe|chave|p|C)=([0-9]{44})/i)
-        if (paramMatch) return paramMatch[1]
-
-        // Procura padrão SEFAZ versão 2 onde p=35...|2|1|1|...
-        const pMatch = texto.match(/[?&]p=([0-9]{44})[|%7C]/i)
-        if (pMatch) return pMatch[1]
-
-        return ''
-      }
-
-      // Decompõe a chave de 44 dígitos se encontrada
-      function decomporChave(chave) {
-        if (!chave || chave.length !== 44) return null
-        const ufs = {
-          11: 'RO',
-          12: 'AC',
-          13: 'AM',
-          14: 'RR',
-          15: 'PA',
-          16: 'AP',
-          17: 'TO',
-          21: 'MA',
-          22: 'PI',
-          23: 'CE',
-          24: 'RN',
-          25: 'PB',
-          26: 'PE',
-          27: 'AL',
-          28: 'SE',
-          29: 'BA',
-          31: 'MG',
-          32: 'ES',
-          33: 'RJ',
-          35: 'SP',
-          41: 'PR',
-          42: 'SC',
-          43: 'RS',
-          50: 'MS',
-          51: 'MT',
-          52: 'GO',
-          53: 'DF',
-        }
-        const cUF = chave.substring(0, 2)
-        const aamm = chave.substring(2, 6)
-        const ano = '20' + aamm.substring(0, 2)
-        const mes = aamm.substring(2, 4)
-        const cnpjCru = chave.substring(6, 20)
-        const modelo = chave.substring(20, 22)
-        const serie = chave.substring(22, 25).replace(/^0+/, '') || '1'
-        const nNF = chave.substring(25, 34).replace(/^0+/, '') || ''
-
-        const cnpjFmt = cnpjCru.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5')
-        const tipoDoc = modelo === '65' ? 'cupom_fiscal' : modelo === '59' ? 'cupom_fiscal' : 'nfe'
-
-        return {
-          chave,
-          uf: ufs[cUF] || cUF,
-          ano_mes: `${ano}-${mes}`,
-          data_aproximada: `${ano}-${mes}-01`,
-          cnpj_emitente: cnpjFmt,
-          cnpj_cru: cnpjCru,
-          modelo,
-          tipo_documento: tipoDoc,
-          serie,
-          numero_documento: nNF,
-        }
       }
 
       // Análise do QR code (pode ser SAT pipe ou URL SEFAZ)
@@ -998,6 +1348,348 @@ routerAdd(
   'POST',
   '/backend/v1/boletos/extrair',
   (e) => {
+    // Função utilitária inline de inferência de categoria
+    function inferirCategoriaEstabelecimento(nome, cnpj, descItens) {
+      const texto = ((nome || '') + ' ' + (descItens || '')).toLowerCase()
+      const regras = [
+        {
+          termos: [
+            'posto',
+            'combustivel',
+            'gasolina',
+            'etanol',
+            'diesel',
+            'ipiranga',
+            'petrobras',
+            'shell',
+            'vibra',
+            'raizen',
+            'auto posto',
+            'autoposto',
+            'abastecedora',
+          ],
+          segmento: 'Combustíveis & Lubrificantes',
+          produto: 'Combustíveis e abastecimento de veículos em campo',
+          categoria: 'despesas_operacionais',
+          planoCodigo: '3.1.5',
+          planoNome: 'Combustível, Pedágios e Locação de Veículos',
+        },
+        {
+          termos: [
+            'restaurante',
+            'churrascaria',
+            'pizzaria',
+            'lanchonete',
+            'refeicao',
+            'refeicoes',
+            'bife',
+            'buffet',
+            'bistro',
+            'mcdonald',
+            'burger king',
+            'subway',
+            'habib',
+            'grill',
+          ],
+          segmento: 'Alimentação & Restaurantes',
+          produto: 'Despesas com refeições e alimentação da equipe',
+          categoria: 'despesas_operacionais',
+          planoCodigo: '3.1.4',
+          planoNome: 'Viagens, Hospedagem e Diárias em Campo',
+        },
+        {
+          termos: [
+            'supermercado',
+            'mercado',
+            'mercearia',
+            'hipermercado',
+            'atacadao',
+            'assai',
+            'carrefour',
+            'pao de acucar',
+            'extra',
+            'muffato',
+            'savegnago',
+            'hortifruti',
+          ],
+          segmento: 'Alimentação / Supermercados',
+          produto: 'Gêneros alimentícios e insumos de copa/campo',
+          categoria: 'despesas_operacionais',
+          planoCodigo: '3.1.4',
+          planoNome: 'Viagens, Hospedagem e Diárias em Campo',
+        },
+        {
+          termos: [
+            'padaria',
+            'panificadora',
+            'panificacao',
+            'confeitaria',
+            'cafeteria',
+            'cafe',
+            'coffee',
+          ],
+          segmento: 'Panificação & Confeitaria',
+          produto: 'Despesas com café da manhã e panificação em trânsito',
+          categoria: 'despesas_operacionais',
+          planoCodigo: '3.1.4',
+          planoNome: 'Viagens, Hospedagem e Diárias em Campo',
+        },
+        {
+          termos: [
+            'farmacia',
+            'drogaria',
+            'drogasil',
+            'raia',
+            'pacheco',
+            'pague menos',
+            'panvel',
+            'medicamentos',
+          ],
+          segmento: 'Saúde & Farmácia',
+          produto: 'Medicamentos básicos, primeiros socorros e itens de higiene',
+          categoria: 'despesas_operacionais',
+          planoCodigo: '3.1.1',
+          planoNome: 'Despesas Administrativas Gerais & Escritório',
+        },
+        {
+          termos: ['estacionamento', 'garagem', 'park', 'parking', 'estapar', 'valet'],
+          segmento: 'Estacionamento & Garagem',
+          produto: 'Estacionamento de veículos técnicos / diárias em aeroportos',
+          categoria: 'despesas_operacionais',
+          planoCodigo: '3.1.5',
+          planoNome: 'Combustível, Pedágios e Locação de Veículos',
+        },
+        {
+          termos: [
+            'pedagio',
+            'sem parar',
+            'conectcar',
+            'veloe',
+            'concessionaria de rodovias',
+            'ccr',
+            'ecorodovias',
+            'arteris',
+          ],
+          segmento: 'Pedágio & Rodovias',
+          produto: 'Tarifas de pedágio em deslocamento técnico rodoviário',
+          categoria: 'despesas_operacionais',
+          planoCodigo: '3.1.5',
+          planoNome: 'Combustível, Pedágios e Locação de Veículos',
+        },
+        {
+          termos: [
+            'papelaria',
+            'kalunga',
+            'livraria',
+            'copiadora',
+            'suprimentos',
+            'materiais para escritorio',
+          ],
+          segmento: 'Material de Consumo & Escritório',
+          produto: 'Material de consumo, papelaria técnica e suprimentos',
+          categoria: 'despesas_operacionais',
+          planoCodigo: '3.1.1',
+          planoNome: 'Despesas Administrativas Gerais & Escritório',
+        },
+        {
+          termos: [
+            'hotel',
+            'hoteis',
+            'pousada',
+            'resort',
+            'ibis',
+            'accor',
+            'mercure',
+            'novotel',
+            'hospedagem',
+            'airbnb',
+          ],
+          segmento: 'Hospedagem & Hotelaria',
+          produto: 'Diárias de hospedagem e hotel em missões de campo',
+          categoria: 'despesas_operacionais',
+          planoCodigo: '3.1.4',
+          planoNome: 'Viagens, Hospedagem e Diárias em Campo',
+        },
+        {
+          termos: [
+            'latam',
+            'gol linhas',
+            'azul linhas',
+            'voepass',
+            'passagem aerea',
+            'aeroporto',
+            'infraero',
+            'aena',
+            'fraport',
+            'zurich airport',
+          ],
+          segmento: 'Passagens & Transporte Aéreo',
+          produto: 'Passagens aéreas, taxas aeroportuárias e despacho de bagagem técnica',
+          categoria: 'despesas_operacionais',
+          planoCodigo: '3.1.4',
+          planoNome: 'Viagens, Hospedagem e Diárias em Campo',
+        },
+        {
+          termos: [
+            'localiza',
+            'movida',
+            'unidas',
+            'locadora de veiculos',
+            'aluguel de carros',
+            'rent a car',
+          ],
+          segmento: 'Locação de Veículos',
+          produto: 'Aluguel de veículos utilitários e 4x4 para vistoria em sítios aeroportuários',
+          categoria: 'despesas_operacionais',
+          planoCodigo: '3.1.5',
+          planoNome: 'Combustível, Pedágios e Locação de Veículos',
+        },
+        {
+          termos: ['uber', '99 tecnologia', '99app', 'radiotaxi', 'taxi'],
+          segmento: 'Transporte Urbano & Aplicativos',
+          produto: 'Deslocamentos urbanos por aplicativo ou táxi',
+          categoria: 'despesas_operacionais',
+          planoCodigo: '3.1.5',
+          planoNome: 'Combustível, Pedágios e Locação de Veículos',
+        },
+        {
+          termos: ['grafica', 'plotagem', 'ploter', 'reprografia', 'plantas tecnicas'],
+          segmento: 'Gráfica & Plotagem Técnica',
+          produto: 'Plotagem de pranchas CAD A0/A1 e encadernações técnicas',
+          categoria: 'despesas_operacionais',
+          planoCodigo: '3.1.1',
+          planoNome: 'Despesas Administrativas Gerais & Escritório',
+        },
+        {
+          termos: [
+            'ferragens',
+            'ferramentas',
+            'materiais de construcao',
+            'leroy merlin',
+            'tintas',
+            'epi',
+            'equipamentos de protecao',
+          ],
+          segmento: 'Ferramentas, EPI & Materiais',
+          produto: 'Equipamentos de proteção individual (EPI), trenas e ferramentas',
+          categoria: 'despesas_operacionais',
+          planoCodigo: '3.1.1',
+          planoNome: 'Despesas Administrativas Gerais & Escritório',
+        },
+        {
+          termos: ['kabum', 'dell', 'lenovo', 'computadores', 'informatica', 'hardware'],
+          segmento: 'Equipamentos de TI & Hardware',
+          produto: 'Hardware, periféricos e peças de computador de engenharia',
+          categoria: 'equipamentos',
+          planoCodigo: '3.1.2',
+          planoNome: 'Softwares, Licenças CAD/GIS, Servidores & TI',
+        },
+        {
+          termos: [
+            'autodesk',
+            'microsoft',
+            'google cloud',
+            'aws',
+            'software',
+            'adobe',
+            'chatgpt',
+            'openai',
+            'bentley',
+            'trimble',
+          ],
+          segmento: 'Softwares & Licenças Técnicas',
+          produto: 'Assinaturas de software CAD/BIM, nuvem e ferramentas de cálculo',
+          categoria: 'equipamentos',
+          planoCodigo: '3.1.2',
+          planoNome: 'Softwares, Licenças CAD/GIS, Servidores & TI',
+        },
+        {
+          termos: ['cartorio', 'tabelionato', 'registro de imoveis', 'tabeliao'],
+          segmento: 'Cartórios & Tabelionatos',
+          produto: 'Autenticações, reconhecimento de firma e certidões imobiliárias',
+          categoria: 'despesas_operacionais',
+          planoCodigo: '3.1.1',
+          planoNome: 'Despesas Administrativas Gerais & Escritório',
+        },
+        {
+          termos: [
+            'anac',
+            'decea',
+            'aeronautica',
+            'receita federal',
+            'prefeitura',
+            'sefaz',
+            'gru',
+            'dam',
+            'taxas',
+          ],
+          segmento: 'Taxas & Órgãos Reguladores',
+          produto: 'Taxas de fiscalização ANAC, DECEA, GRU, prefeituras e órgãos ambientais',
+          categoria: 'impostos',
+          planoCodigo: '3.3.1',
+          planoNome: 'Tributos Municipais (ISS / Taxas Aeroportuárias)',
+        },
+        {
+          termos: [
+            'vivo',
+            'telefonica',
+            'claro',
+            'tim',
+            'telecomunicacoes',
+            'provedor de internet',
+            'fibra',
+          ],
+          segmento: 'Telecomunicações & Internet',
+          produto: 'Internet banda larga, telefonia móvel e links de dados',
+          categoria: 'despesas_operacionais',
+          planoCodigo: '3.1.1',
+          planoNome: 'Despesas Administrativas Gerais & Escritório',
+        },
+        {
+          termos: [
+            'engenharia consultiva',
+            'geotecnia',
+            'sondagens',
+            'topografia',
+            'ensaios de solo',
+          ],
+          segmento: 'Subcontratação Técnica de Engenharia',
+          produto: 'Serviços terceirizados de sondagem SPT, ensaios geotécnicos e topografia',
+          categoria: 'terceirizados',
+          planoCodigo: '3.2.1',
+          planoNome: 'Honorários de Engenharia e Subcontratação Técnica (Topografia/Sondagem)',
+        },
+      ]
+
+      for (let i = 0; i < regras.length; i++) {
+        const r = regras[i]
+        for (let j = 0; j < r.termos.length; j++) {
+          const t = r.termos[j]
+          if (texto.indexOf(t) !== -1) {
+            return {
+              sucesso: true,
+              segmento: r.segmento,
+              produto: r.produto,
+              categoria: r.categoria,
+              planoCodigo: r.planoCodigo,
+              planoNome: r.planoNome,
+              termo: t,
+            }
+          }
+        }
+      }
+
+      return {
+        sucesso: false,
+        segmento: 'Outros',
+        produto: 'Despesa operacional geral',
+        categoria: 'despesas_operacionais',
+        planoCodigo: '3.1.1',
+        planoNome: 'Despesas Administrativas Gerais & Escritório',
+        termo: null,
+      }
+    }
+
     try {
       const authUser = e.auth
       if (!authUser || !authUser.id) {

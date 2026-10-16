@@ -171,7 +171,7 @@ export const TIPO_DOC_LABELS: Record<TipoDocumentoFiscal, string> = {
 
 /**
  * Envia arquivo de imagem ou PDF para o backend extrair dados via agente nativo Skip Cloud.
- * Pré-processa imagens automaticamente (otimização de contraste, redimensionamento para max 2048px, JPEG 0.92)
+ * Pré-processa imagens automaticamente (otimização de contraste, redimensionamento para max ~2800px, JPEG ~0.93)
  * antes do upload para garantir a melhor leitura OCR/Visão possível de cupons fiscais e recibos.
  */
 export async function extrairDadosComprovante(

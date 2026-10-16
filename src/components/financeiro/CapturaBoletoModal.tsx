@@ -211,7 +211,18 @@ export function CapturaBoletoModal({
 
       const extraido = await extrairDadosBoleto(file)
       setDadosExtraidos(extraido)
-      setModoEssencialAtivo(Boolean(extraido.modo_essencial))
+
+      // Ativa Modo Essencial se marcado ou se tiver campos essenciais com leitura parcial
+      const temDadoVitalBoleto =
+        Boolean(extraido.beneficiario_fornecedor || extraido.cnpj_cpf_beneficiario) ||
+        extraido.valor_documento > 0 ||
+        extraido.valor_cobrado > 0 ||
+        Boolean(extraido.data_vencimento)
+      const leituraParcialBoleto =
+        Boolean(extraido.modo_essencial) ||
+        (temDadoVitalBoleto && (!extraido.linha_digitavel || extraido.linha_digitavel.length < 20))
+
+      setModoEssencialAtivo(leituraParcialBoleto)
       if (extraido.inferencia_categoria) {
         setInfoInferencia(extraido.inferencia_categoria)
       } else {

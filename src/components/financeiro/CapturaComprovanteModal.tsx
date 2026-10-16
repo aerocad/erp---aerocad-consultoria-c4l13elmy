@@ -318,7 +318,19 @@ export function CapturaComprovanteModal({
     )
     setObservacoes(extraido.observacoes || '')
     setConfianca(extraido.confianca || 'media')
-    setModoEssencialAtivo(Boolean(extraido.modo_essencial))
+
+    // Ativa Modo Essencial se o backend marcou modo_essencial, OU se temos pelo menos um dado vital
+    // (fornecedor/CNPJ, valor > 0 ou data válida) com leitura parcial ou pendência de outros dados
+    const temDadoVital =
+      Boolean(forn || docLimpo) ||
+      (typeof extraido.valor_total === 'number' && extraido.valor_total > 0) ||
+      Boolean(extraido.data_emissao)
+    const leituraParcial =
+      Boolean(extraido.modo_essencial) ||
+      (temDadoVital &&
+        (!extraido.numero_documento || !extraido.chave_acesso || extraido.confianca !== 'alta'))
+
+    setModoEssencialAtivo(leituraParcial)
     if (extraido.inferencia_categoria) {
       setInfoInferencia(extraido.inferencia_categoria)
     } else {

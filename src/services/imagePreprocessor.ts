@@ -23,9 +23,9 @@ export interface PreprocessamentoOpcoes {
 }
 
 const OPCOES_PADRAO: PreprocessamentoOpcoes = {
-  maxLargura: 2048,
-  maxAltura: 2048,
-  qualidade: 0.92,
+  maxLargura: 2800,
+  maxAltura: 2800,
+  qualidade: 0.93,
   aumentarContraste: true,
 }
 
@@ -109,8 +109,8 @@ export async function preProcessarImagemDocumento(
     const origWidth = img.naturalWidth || img.width
     const origHeight = img.naturalHeight || img.height
 
-    const maxW = config.maxLargura || 2048
-    const maxH = config.maxAltura || 2048
+    const maxW = config.maxLargura || 2800
+    const maxH = config.maxAltura || 2800
 
     // Calcula dimensões preservando proporção
     let targetW = origWidth
@@ -161,7 +161,7 @@ export async function preProcessarImagemDocumento(
 
     // Converte para Blob JPEG otimizado
     const blob = await new Promise<Blob | null>((resolve) => {
-      canvas.toBlob((b) => resolve(b), 'image/jpeg', config.qualidade || 0.92)
+      canvas.toBlob((b) => resolve(b), 'image/jpeg', config.qualidade || 0.93)
     })
 
     if (!blob) {
