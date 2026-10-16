@@ -164,3 +164,128 @@ export async function loadConversationMessages(
   const rawMessages = (payload?.messages || payload || []) as AgentMessage[]
   return displayableMessages(rawMessages)
 }
+
+export interface PropostaBlocoFiltro {
+  campo: string
+  operador: 'equals' | 'contains' | 'in'
+  valor: unknown
+}
+
+export interface PropostaBlocoAlteracoes {
+  campo: string
+  valor_novo: unknown
+  valor_novo_label?: string
+  campos_adicionais?: Record<string, unknown>
+}
+
+export interface PropostaBlocoData {
+  tipo_operacao: string
+  colecao_alvo: 'contas_pagar' | 'contas_receber' | 'extratos_transacoes'
+  descricao_resumo: string
+  filtro: PropostaBlocoFiltro
+  alteracoes: PropostaBlocoAlteracoes
+  total_estimado?: number
+}
+
+export interface PreviaBlocoResultado {
+  colecao_alvo: string
+  filtro_aplicado: string
+  total_encontrados: number
+  amostra: Array<{
+    id: string
+    descricao: string
+    valor: number
+    data: string
+    categoria?: string
+    status?: string
+  }>
+}
+
+export interface ExecucaoBlocoResultado {
+  sucesso: boolean
+  audit_id?: string
+  colecao_alvo: string
+  campo_alterado: string
+  total_afetados: number
+  total_falhas: number
+  mensagem: string
+}
+
+export interface DesfazerBlocoResultado {
+  sucesso: boolean
+  audit_id: string
+  total_restaurados: number
+  total_falhas: number
+  descricao?: string
+  mensagem: string
+}
+
+/**
+ * Obtém prévia/contagem de registros atingidos pela operação em bloco
+ */
+export async function obterPreviaBloco(
+  colecaoAlvo: string,
+  filtro: PropostaBlocoFiltro,
+): Promise<PreviaBlocoResultado> {
+  const baseUrl = import.meta.env.VITE_POCKETBASE_URL
+  const res = await fetch(`${baseUrl}/backend/v1/assistente/bloco/previa`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: pb.authStore.token,
+    },
+    body: JSON.stringify({ colecao_alvo: colecaoAlvo, filtro }),
+  })
+
+  const payload = await res.json()
+  if (!res.ok) {
+    throw new Error(payload?.error || 'Erro ao obter prévia da operação em bloco')
+  }
+  return payload as PreviaBlocoResultado
+}
+
+/**
+ * Executa a operação em bloco aprovada pelo usuário com auditoria
+ */
+export async function executarOperacaoBloco(
+  proposta: PropostaBlocoData,
+): Promise<ExecucaoBlocoResultado> {
+  const baseUrl = import.meta.env.VITE_POCKETBASE_URL
+  const res = await fetch(`${baseUrl}/backend/v1/assistente/bloco/executar`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: pb.authStore.token,
+    },
+    body: JSON.stringify({ proposta }),
+  })
+
+  const payload = await res.json()
+  if (!res.ok) {
+    throw new Error(payload?.error || 'Erro ao executar operação em bloco')
+  }
+  return payload as ExecucaoBlocoResultado
+}
+
+/**
+ * Desfaz a última correção em bloco realizada
+ */
+export async function desfazerUltimaOperacaoBloco(
+  auditId?: string,
+): Promise<DesfazerBlocoResultado> {
+  const baseUrl = import.meta.env.VITE_POCKETBASE_URL
+  const res = await fetch(`${baseUrl}/backend/v1/assistente/bloco/desfazer`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: pb.authStore.token,
+    },
+    body: JSON.stringify({ audit_id: auditId }),
+  })
+
+  const payload = await res.json()
+  if (!res.ok) {
+    throw new Error(payload?.error || 'Erro ao desfazer operação em bloco')
+  }
+  return payload as DesfazerBlocoResultado
+}

@@ -1,6 +1,7 @@
 import { useMemo, useState, useEffect, type ChangeEvent } from 'react'
 import {
   AlertCircle,
+  AlertTriangle,
   ArrowDownLeft,
   ArrowUpRight,
   Camera,
@@ -143,6 +144,13 @@ export function ExtratosComprovantesTab({
     null,
   )
   const [isExcluindoTransacao, setIsExcluindoTransacao] = useState(false)
+
+  // Seleção múltipla de extratos para exclusão em bloco
+  const [selectedExtratoIds, setSelectedExtratoIds] = useState<string[]>([])
+  const [modalExcluirExtratosBlocoAberto, setModalExcluirExtratosBlocoAberto] = useState(false)
+  const [textoConfirmacaoExclusaoBloco, setTextoConfirmacaoExclusaoBloco] = useState('')
+  const [isExcluindoExtratosBloco, setIsExcluindoExtratosBloco] = useState(false)
+
   const [busca, setBusca] = useState('')
   const [filtroStatus, setFiltroStatus] = useState<string>('todos')
   const [filtroTipo, setFiltroTipo] = useState<string>('todos')
@@ -877,6 +885,7 @@ export function ExtratosComprovantesTab({
       setNomeConfirmacaoExclusao('')
       setExtratoSelecionadoId('todos')
       setSelectedTxIds([])
+      setSelectedExtratoIds((prev) => prev.filter((id) => id !== extratoId))
       await onReloadExtratos()
       await onReloadTransacoes()
     } catch (err: unknown) {
@@ -884,6 +893,98 @@ export function ExtratosComprovantesTab({
       toast.error(`Erro ao excluir extrato: ${msg}`)
     } finally {
       setIsExcluindoExtrato(false)
+    }
+  }
+
+  // Alternar seleção de um extrato para bloco
+  function alternarSelecaoExtrato(extratoId: string) {
+    if (!extratoId) return
+    setSelectedExtratoIds((prev) =>
+      prev.includes(extratoId) ? prev.filter((id) => id !== extratoId) : [...prev, extratoId],
+    )
+  }
+
+  // Selecionar ou desmarcar todos os extratos
+  const todosExtratosSelecionados = useMemo(() => {
+    if (listaExtratos.length === 0) return false
+    return listaExtratos.every((ex) => Boolean(ex?.id && selectedExtratoIds.includes(ex.id)))
+  }, [listaExtratos, selectedExtratoIds])
+
+  function alternarSelecaoTodosExtratos() {
+    if (todosExtratosSelecionados) {
+      setSelectedExtratoIds([])
+    } else {
+      setSelectedExtratoIds(listaExtratos.map((ex) => ex.id).filter(Boolean))
+    }
+  }
+
+  // Estatísticas de impacto da exclusão em bloco de extratos
+  const resumoImpactoExtratosBloco = useMemo(() => {
+    const extratosAlvo = listaExtratos.filter((ex) => selectedExtratoIds.includes(ex.id))
+    const idsAlvoSet = new Set(selectedExtratoIds)
+    const txsAlvo = listaTransacoes.filter((t) => t?.extrato && idsAlvoSet.has(t.extrato))
+    const txsConciliadas = txsAlvo.filter((t) => t.status_conciliacao === 'conciliado')
+
+    return {
+      extratosAlvo,
+      totalExtratos: extratosAlvo.length,
+      totalTransacoes: txsAlvo.length,
+      totalConciliadas: txsConciliadas.length,
+    }
+  }, [listaExtratos, listaTransacoes, selectedExtratoIds])
+
+  // Exclusão em bloco de extratos selecionados
+  async function handleConfirmarExclusaoExtratosBloco() {
+    if (selectedExtratoIds.length === 0) return
+    if (textoConfirmacaoExclusaoBloco.trim() !== 'EXCLUIR EXTRATOS') {
+      toast.error('Digite a frase exata "EXCLUIR EXTRATOS" para confirmar.')
+      return
+    }
+
+    setIsExcluindoExtratosBloco(true)
+    let totalApagados = 0
+    let totalTxsApagadas = 0
+
+    try {
+      const idsAlvo = [...selectedExtratoIds]
+      for (const extratoId of idsAlvo) {
+        // 1. Apaga transações filhas do extrato
+        const txsVinculadas = listaTransacoes.filter((t) => t?.extrato === extratoId)
+        for (const tx of txsVinculadas) {
+          try {
+            await deleteOne('extratos_transacoes', tx.id)
+            totalTxsApagadas++
+          } catch {
+            // prossegue
+          }
+        }
+
+        // 2. Apaga o registro do extrato e seus anexos no PocketBase
+        try {
+          await deleteOne('extratos', extratoId)
+          totalApagados++
+        } catch (errExtrato) {
+          console.warn(`Erro ao excluir extrato ${extratoId}:`, errExtrato)
+        }
+      }
+
+      toast.success(
+        `Exclusão em bloco concluída: ${totalApagados} extrato(s) e ${totalTxsApagadas} movimentação(ões) excluídos. Fluxo de caixa recalculado.`,
+      )
+
+      setSelectedExtratoIds([])
+      setModalExcluirExtratosBlocoAberto(false)
+      setTextoConfirmacaoExclusaoBloco('')
+      setExtratoSelecionadoId('todos')
+      setSelectedTxIds([])
+
+      // Recalcula e sincroniza apenas uma vez ao final do lote
+      await Promise.all([onReloadExtratos(), onReloadTransacoes()])
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      toast.error(`Falha ao excluir extratos em lote: ${msg}`)
+    } finally {
+      setIsExcluindoExtratosBloco(false)
     }
   }
 
@@ -1148,19 +1249,48 @@ export function ExtratosComprovantesTab({
           </span>
         </div>
       </div>
-      {/* Seção de Extratos Importados */}
+      {/* Seção de Extratos Importados com Exclusão em Bloco */}
       {listaExtratos.length > 0 && (
         <div className="crm-card p-3 space-y-2">
-          <div className="flex items-center justify-between text-xs font-semibold text-neutral-700">
-            <span>Extratos no Sistema ({listaExtratos.length})</span>
-            {extratoSelecionadoId !== 'todos' && (
-              <button
-                onClick={() => setExtratoSelecionadoId('todos')}
-                className="text-[11px] text-[#FF6A13] hover:underline"
-              >
-                (Ver transações de todos os extratos)
-              </button>
-            )}
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-semibold text-neutral-700">
+            <div className="flex items-center gap-2">
+              <span>Extratos no Sistema ({listaExtratos.length})</span>
+              {podeExcluirExtratos && (
+                <button
+                  type="button"
+                  onClick={alternarSelecaoTodosExtratos}
+                  className="text-[11px] text-neutral-500 hover:text-neutral-800 underline ml-2"
+                >
+                  {todosExtratosSelecionados ? 'Desmarcar todos' : 'Marcar todos'}
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              {podeExcluirExtratos && selectedExtratoIds.length > 0 && (
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={() => {
+                    setTextoConfirmacaoExclusaoBloco('')
+                    setModalExcluirExtratosBlocoAberto(true)
+                  }}
+                  className="h-7 text-xs font-semibold bg-rose-600 hover:bg-rose-700 text-white flex items-center gap-1.5 shadow-sm"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  <span>Excluir selecionados ({selectedExtratoIds.length})</span>
+                </Button>
+              )}
+
+              {extratoSelecionadoId !== 'todos' && (
+                <button
+                  onClick={() => setExtratoSelecionadoId('todos')}
+                  className="text-[11px] text-[#FF6A13] hover:underline"
+                >
+                  (Ver transações de todos os extratos)
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="flex flex-wrap gap-2">
@@ -1236,16 +1366,29 @@ export function ExtratosComprovantesTab({
                   )}
 
                   {podeExcluirExtratos && (
-                    <button
-                      onClick={() => {
-                        setModalExcluirExtrato(ex)
-                        setNomeConfirmacaoExclusao('')
-                      }}
-                      className="text-neutral-400 hover:text-rose-600 ml-1"
-                      title="Excluir este extrato (Restrito a Admin/Financeiro)"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </button>
+                    <div className="flex items-center gap-1 ml-1 pl-1 border-l border-neutral-200">
+                      <input
+                        type="checkbox"
+                        checked={selectedExtratoIds.includes(ex.id)}
+                        onChange={(e) => {
+                          e.stopPropagation()
+                          alternarSelecaoExtrato(ex.id)
+                        }}
+                        className="rounded border-neutral-300 text-rose-600 focus:ring-rose-500 h-3.5 w-3.5 cursor-pointer"
+                        title="Selecionar para exclusão em bloco"
+                      />
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setModalExcluirExtrato(ex)
+                          setNomeConfirmacaoExclusao('')
+                        }}
+                        className="text-neutral-400 hover:text-rose-600 p-0.5"
+                        title="Excluir este extrato individualmente"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    </div>
                   )}
                 </div>
               )
@@ -2153,7 +2296,7 @@ export function ExtratosComprovantesTab({
           </DialogContent>
         )}
       </Dialog>
-      {/* Modal Destrutivo de Excluir Extrato (Exige digitar o nome exato) */}
+      {/* Modal Destrutivo de Excluir Extrato Individual (Exige digitar o nome exato) */}
       <Dialog
         open={!!modalExcluirExtrato}
         onOpenChange={(open) => {
@@ -2220,6 +2363,126 @@ export function ExtratosComprovantesTab({
               className="bg-rose-600 hover:bg-rose-700 text-white font-semibold"
             >
               {isExcluindoExtrato ? 'Excluindo...' : 'Confirmar Exclusão Destrutiva'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {/* Modal Destrutivo de Excluir Extratos e Arquivos em Bloco */}
+      <Dialog
+        open={modalExcluirExtratosBlocoAberto}
+        onOpenChange={(open) => {
+          if (!open && !isExcluindoExtratosBloco) {
+            setModalExcluirExtratosBlocoAberto(false)
+            setTextoConfirmacaoExclusaoBloco('')
+          }
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-rose-600 flex items-center gap-2">
+              <Trash2 className="h-5 w-5 text-rose-600" />
+              Exclusão em Bloco de Extratos Bancários ({resumoImpactoExtratosBloco.totalExtratos})
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-3 text-xs">
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-rose-900 space-y-1.5">
+              <p className="font-bold flex items-center gap-1.5 text-rose-700">
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+                Ação destrutiva irreversível (Restrito a Admin):
+              </p>
+              <p>
+                Todos os arquivos originais anexados e{' '}
+                <strong>
+                  {resumoImpactoExtratosBloco.totalTransacoes} movimentações em cascata
+                </strong>{' '}
+                dos extratos selecionados serão removidos definitivamente. O Fluxo de Caixa será
+                recalculado ao término.
+              </p>
+              {resumoImpactoExtratosBloco.totalConciliadas > 0 && (
+                <div className="p-2 bg-amber-100/80 border border-amber-300 rounded text-amber-900 font-semibold text-[11px]">
+                  ⚠️ Atenção: {resumoImpactoExtratosBloco.totalConciliadas} transação(ões)
+                  selecionada(s) já foram conciliadas anteriormente! A exclusão desvinculará esses
+                  lançamentos.
+                </div>
+              )}
+            </div>
+
+            {/* Listagem detalhada dos extratos selecionados */}
+            <div className="space-y-1">
+              <Label className="text-neutral-700 font-semibold">
+                Extratos que serão excluídos ({resumoImpactoExtratosBloco.totalExtratos}):
+              </Label>
+              <div className="max-h-48 overflow-y-auto rounded-lg border border-neutral-200 divide-y divide-neutral-100 bg-neutral-50/50">
+                {resumoImpactoExtratosBloco.extratosAlvo.map((ex) => (
+                  <div key={ex.id} className="p-2 flex flex-col gap-0.5 text-[11px]">
+                    <div className="flex items-center justify-between font-medium text-neutral-800">
+                      <span className="truncate max-w-[280px]">{ex.nome_arquivo}</span>
+                      <span className="font-mono text-neutral-500">
+                        {ex.total_transacoes || 0} txs
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-[10px] text-neutral-400">
+                      <span>
+                        {ex.banco || 'Banco'} • Conta {ex.conta || 'N/A'}
+                      </span>
+                      <span>{ex.created ? formatDateBrasilia(ex.created) : ''}</span>
+                    </div>
+                    {ex.hash_arquivo && (
+                      <span className="font-mono text-[9px] text-neutral-400 truncate">
+                        Hash: {ex.hash_arquivo}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-1 pt-1">
+              <Label className="text-xs text-neutral-700">
+                Para confirmar a exclusão de todos os extratos listados, digite exatamente:
+              </Label>
+              <p className="font-mono bg-neutral-100 p-1.5 rounded select-all font-bold text-center text-rose-700 tracking-wider">
+                EXCLUIR EXTRATOS
+              </p>
+              <Input
+                value={textoConfirmacaoExclusaoBloco}
+                onChange={(e) => setTextoConfirmacaoExclusaoBloco(e.target.value)}
+                placeholder="Digite EXCLUIR EXTRATOS..."
+                className="font-mono text-xs uppercase"
+                disabled={isExcluindoExtratosBloco}
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              disabled={isExcluindoExtratosBloco}
+              onClick={() => {
+                setModalExcluirExtratosBlocoAberto(false)
+                setTextoConfirmacaoExclusaoBloco('')
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={
+                isExcluindoExtratosBloco ||
+                textoConfirmacaoExclusaoBloco.trim() !== 'EXCLUIR EXTRATOS'
+              }
+              onClick={handleConfirmarExclusaoExtratosBloco}
+              className="bg-rose-600 hover:bg-rose-700 text-white font-semibold"
+            >
+              {isExcluindoExtratosBloco ? (
+                <>
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                  Excluindo Lote ({resumoImpactoExtratosBloco.totalExtratos})...
+                </>
+              ) : (
+                `Excluir Definitivamente (${resumoImpactoExtratosBloco.totalExtratos})`
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

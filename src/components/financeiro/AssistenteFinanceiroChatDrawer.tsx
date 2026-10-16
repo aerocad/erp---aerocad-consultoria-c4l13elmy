@@ -11,6 +11,12 @@ import {
   ChevronDown,
   RefreshCw,
   Coins,
+  CheckCircle2,
+  AlertTriangle,
+  RotateCcw,
+  Layers,
+  ArrowRight,
+  Filter,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -22,7 +28,11 @@ import {
   sendAgentMessage,
   listAgentConversations,
   loadConversationMessages,
+  obterPreviaBloco,
+  executarOperacaoBloco,
+  desfazerUltimaOperacaoBloco,
   type AgentConversationItem,
+  type PropostaBlocoData,
 } from '@/services/assistenteIa'
 import type { DisplayMessage, AgentCitation } from '@/lib/skipAi'
 import { toast } from 'sonner'
@@ -31,20 +41,24 @@ export interface AssistenteFinanceiroChatProps {
   secaoAtual: 'extratos' | 'fluxo' | 'demonstracoes' | 'balancos' | 'ativos' | 'relatorios'
   isOpen?: boolean
   onClose?: () => void
+  onAcaoExecutada?: () => void
 }
 
 const SUGESTOES_POR_SECAO: Record<string, string[]> = {
   extratos: [
+    'Reclassificar todos os lançamentos com "tarifa" para despesas operacionais',
+    'Marcar transações bancárias com "aplicacao" como ignoradas para conciliação',
     'Quais transações bancárias ainda estão pendentes de conciliação?',
     'Quanto entrou na conta do Banco Inter este mês?',
-    'Existem lançamentos de tarifas bancárias nos últimos 30 dias?',
   ],
   fluxo: [
-    'Qual o saldo previsto para os próximos 15 dias no fluxo de caixa?',
+    'Reclassificar todos os lançamentos de combustível para a conta 3.1.5',
+    'Atribuir a conta Banco Inter PJ às contas a pagar sem conta bancária',
     'Quais as maiores contas a pagar com vencimento esta semana?',
-    'Quanto temos a receber previsto para este mês?',
+    'Qual o saldo previsto para os próximos 15 dias no fluxo de caixa?',
   ],
   demonstracoes: [
+    'Atualizar o plano de contas de despesas com cartório para 3.1.1',
     'Qual o resultado operacional líquido acumulado do exercício?',
     'Como está a divisão entre receitas de consultoria e despesas?',
     'Resuma os principais indicadores da DRE do período atual.',
@@ -66,10 +80,47 @@ const SUGESTOES_POR_SECAO: Record<string, string[]> = {
   ],
 }
 
+// Interface de estado da proposta no chat
+interface PropostaCardState {
+  proposta: PropostaBlocoData
+  status: 'pendente' | 'aplicando' | 'aplicada' | 'descartada'
+  resultado?: {
+    totalAfetados: number
+    totalFalhas: number
+    auditId?: string
+    mensagem: string
+  }
+}
+
+// Extrai proposta JSON delimitada por ```proposta_bloco ... ``` ou ```json ... ```
+function extrairPropostaBloco(texto: string): {
+  textoLimpo: string
+  proposta: PropostaBlocoData | null
+} {
+  if (!texto) return { textoLimpo: '', proposta: null }
+
+  // Tenta achar ```proposta_bloco
+  const matchBloco = texto.match(/```(?:proposta_bloco|json)?\s*([\s\S]*?)\s*```/)
+  if (matchBloco) {
+    try {
+      const parsed = JSON.parse(matchBloco[1])
+      if (parsed && parsed.tipo_operacao && parsed.colecao_alvo && parsed.alteracoes) {
+        const textoLimpo = texto.replace(matchBloco[0], '').trim()
+        return { textoLimpo, proposta: parsed as PropostaBlocoData }
+      }
+    } catch (_) {
+      // Ignora erro de JSON incompleto enquanto digita no stream
+    }
+  }
+
+  return { textoLimpo: texto, proposta: null }
+}
+
 export function AssistenteFinanceiroChatDrawer({
   secaoAtual,
   isOpen,
   onClose,
+  onAcaoExecutada,
 }: AssistenteFinanceiroChatProps) {
   const { user } = useAuth()
   const { podeVerValores } = useFinanceiroVisibilidade()
@@ -84,6 +135,13 @@ export function AssistenteFinanceiroChatDrawer({
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [conversations, setConversations] = useState<AgentConversationItem[]>([])
   const [activeTool, setActiveTool] = useState<string | null>(null)
+
+  // Controle de propostas de escrita em bloco por ID da mensagem do assistente
+  const [propostasPorMensagem, setPropostasPorMensagem] = useState<
+    Record<string, PropostaCardState>
+  >({})
+  const [ultimaAuditoriaId, setUltimaAuditoriaId] = useState<string | null>(null)
+  const [isDesfazendo, setIsDesfazendo] = useState(false)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
@@ -201,6 +259,18 @@ export function AssistenteFinanceiroChatDrawer({
         signal: abortController.signal,
       })
 
+      // Após término do stream, verifica se a mensagem gerou uma proposta estruturada de bloco
+      const { proposta } = extrairPropostaBloco(acumulado)
+      if (proposta) {
+        setPropostasPorMensagem((prev) => ({
+          ...prev,
+          [assistantMsgId]: {
+            proposta,
+            status: 'pendente',
+          },
+        }))
+      }
+
       if (res.conversationId && res.conversationId !== conversationId) {
         setConversationId(res.conversationId)
         listAgentConversations('assistente-financeiro')
@@ -226,6 +296,76 @@ export function AssistenteFinanceiroChatDrawer({
       setIsLoading(false)
       setActiveTool(null)
       abortControllerRef.current = null
+    }
+  }
+
+  // Execução da proposta de alteração em bloco aprovada pelo usuário
+  async function handleAplicarProposta(msgId: string, proposta: PropostaBlocoData) {
+    setPropostasPorMensagem((prev) => ({
+      ...prev,
+      [msgId]: { ...prev[msgId], status: 'aplicando' },
+    }))
+
+    try {
+      const res = await executarOperacaoBloco(proposta)
+      if (!res.sucesso) {
+        throw new Error(res.mensagem || 'Erro ao processar lote')
+      }
+
+      setPropostasPorMensagem((prev) => ({
+        ...prev,
+        [msgId]: {
+          proposta,
+          status: 'aplicada',
+          resultado: {
+            totalAfetados: res.total_afetados,
+            totalFalhas: res.total_falhas,
+            auditId: res.audit_id,
+            mensagem: res.mensagem,
+          },
+        },
+      }))
+
+      if (res.audit_id) {
+        setUltimaAuditoriaId(res.audit_id)
+      }
+
+      toast.success(res.mensagem || `${res.total_afetados} registros alterados com sucesso!`)
+      onAcaoExecutada?.()
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      toast.error(`Falha ao aplicar alteração em bloco: ${msg}`)
+      setPropostasPorMensagem((prev) => ({
+        ...prev,
+        [msgId]: { ...prev[msgId], status: 'pendente' },
+      }))
+    }
+  }
+
+  function handleDescartarProposta(msgId: string) {
+    setPropostasPorMensagem((prev) => ({
+      ...prev,
+      [msgId]: { ...prev[msgId], status: 'descartada' },
+    }))
+    toast.info('Proposta de alteração em bloco descartada.')
+  }
+
+  async function handleDesfazerUltimaOperacao() {
+    if (isDesfazendo) return
+    setIsDesfazendo(true)
+    try {
+      const res = await desfazerUltimaOperacaoBloco(ultimaAuditoriaId || undefined)
+      if (!res.sucesso) {
+        throw new Error(res.mensagem || 'Falha ao reverter')
+      }
+      toast.success(res.mensagem || 'Operação anterior revertida com sucesso!')
+      setUltimaAuditoriaId(null)
+      onAcaoExecutada?.()
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      toast.error(`Não foi possível desfazer: ${msg}`)
+    } finally {
+      setIsDesfazendo(false)
     }
   }
 
@@ -289,13 +429,32 @@ export function AssistenteFinanceiroChatDrawer({
             </div>
           </div>
 
-          {/* Aviso Onboarding de Modo Leitura */}
-          <div className="bg-amber-50 border-b border-amber-200 px-3.5 py-2 text-[11px] text-amber-900 flex items-center gap-2">
-            <Info className="w-4 h-4 text-amber-600 shrink-0" />
-            <span>
-              <strong>Assistente de Leitura:</strong> consulta contas, extratos e demonstrativos em
-              tempo real sem alterar ou excluir nenhum registro.
-            </span>
+          {/* Aviso com suporte a Propostas em Bloco e Ação de Desfazer */}
+          <div className="bg-amber-50 border-b border-amber-200 px-3.5 py-2 text-[11px] text-amber-900 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Info className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>
+                <strong>Assistente Financeiro Ativo:</strong> consulta dados e{' '}
+                <strong>propõe correções em bloco</strong> com sua confirmação.
+              </span>
+            </div>
+            {ultimaAuditoriaId && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleDesfazerUltimaOperacao}
+                disabled={isDesfazendo}
+                className="h-6 text-[10px] px-2 border-amber-400 bg-amber-100 hover:bg-amber-200 text-amber-900 flex items-center gap-1 shrink-0"
+                title="Desfazer última alteração em bloco aplicada"
+              >
+                {isDesfazendo ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : (
+                  <RotateCcw className="w-3 h-3 text-amber-700" />
+                )}
+                <span>Desfazer</span>
+              </Button>
+            )}
           </div>
 
           {/* Área de Mensagens */}
@@ -338,33 +497,143 @@ export function AssistenteFinanceiroChatDrawer({
               <div className="space-y-3 pb-2">
                 {messages.map((m) => {
                   const isUser = m.role === 'user'
+                  const propostaEstado = propostasPorMensagem[m.id]
+                  const { textoLimpo, proposta: inlineProposta } = !isUser
+                    ? extrairPropostaBloco(m.content)
+                    : { textoLimpo: m.content, proposta: null }
+                  const propostaAtual = propostaEstado?.proposta || inlineProposta
+
                   return (
-                    <div
-                      key={m.id}
-                      className={`flex gap-2.5 ${isUser ? 'justify-end' : 'justify-start'}`}
-                    >
-                      {!isUser && (
-                        <div className="w-7 h-7 rounded-full bg-orange-100 text-[#FF6A13] flex items-center justify-center shrink-0 mt-0.5">
-                          <Bot className="w-4 h-4" />
+                    <div key={m.id} className="space-y-2">
+                      <div className={`flex gap-2.5 ${isUser ? 'justify-end' : 'justify-start'}`}>
+                        {!isUser && (
+                          <div className="w-7 h-7 rounded-full bg-orange-100 text-[#FF6A13] flex items-center justify-center shrink-0 mt-0.5">
+                            <Bot className="w-4 h-4" />
+                          </div>
+                        )}
+                        <div
+                          className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-xs leading-relaxed ${
+                            isUser
+                              ? 'bg-[#FF6A13] text-white rounded-br-none'
+                              : 'bg-neutral-100 text-neutral-900 border border-neutral-200 rounded-bl-none whitespace-pre-wrap'
+                          }`}
+                        >
+                          {textoLimpo || (
+                            <span className="flex items-center gap-1.5 text-neutral-500 italic">
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              Analisando dados do financeiro...
+                            </span>
+                          )}
                         </div>
-                      )}
-                      <div
-                        className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-xs leading-relaxed ${
-                          isUser
-                            ? 'bg-[#FF6A13] text-white rounded-br-none'
-                            : 'bg-neutral-100 text-neutral-900 border border-neutral-200 rounded-bl-none whitespace-pre-wrap'
-                        }`}
-                      >
-                        {m.content || (
-                          <span className="flex items-center gap-1.5 text-neutral-500 italic">
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            Analisando dados do financeiro...
-                          </span>
+                        {isUser && (
+                          <div className="w-7 h-7 rounded-full bg-neutral-200 text-neutral-700 flex items-center justify-center shrink-0 mt-0.5">
+                            <UserIcon className="w-4 h-4" />
+                          </div>
                         )}
                       </div>
-                      {isUser && (
-                        <div className="w-7 h-7 rounded-full bg-neutral-200 text-neutral-700 flex items-center justify-center shrink-0 mt-0.5">
-                          <UserIcon className="w-4 h-4" />
+
+                      {/* CARTÃO DE PROPOSTA DE CORREÇÃO EM BLOCO */}
+                      {!isUser && propostaAtual && (
+                        <div className="ml-9 max-w-[85%] rounded-xl border-2 border-orange-200 bg-orange-50/70 p-3 shadow-sm text-xs space-y-2.5">
+                          <div className="flex items-center justify-between border-b border-orange-200 pb-1.5">
+                            <div className="flex items-center gap-1.5 font-bold text-neutral-800">
+                              <Layers className="w-4 h-4 text-[#FF6A13]" />
+                              <span>Proposta de Correção em Bloco</span>
+                            </div>
+                            <Badge className="bg-[#FF6A13] text-white hover:bg-[#e05b0d] text-[10px] px-2">
+                              Aguardando Confirmação
+                            </Badge>
+                          </div>
+
+                          <p className="text-neutral-700 font-medium">
+                            {propostaAtual.descricao_resumo || 'Alteração estruturada de registros'}
+                          </p>
+
+                          <div className="bg-white rounded-lg p-2.5 border border-neutral-200 space-y-1.5 text-[11px]">
+                            <div className="flex items-center justify-between text-neutral-600">
+                              <span className="flex items-center gap-1 text-neutral-500">
+                                <Filter className="w-3 h-3 text-[#FF6A13]" /> Coleção Alvo:
+                              </span>
+                              <span className="font-semibold text-neutral-800 uppercase">
+                                {propostaAtual.colecao_alvo.replace('_', ' ')}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center justify-between text-neutral-600">
+                              <span className="text-neutral-500">Critério de Filtro:</span>
+                              <span className="font-mono text-[10px] bg-neutral-100 px-1.5 py-0.5 rounded text-neutral-800">
+                                {propostaAtual.filtro.campo} {propostaAtual.filtro.operador} "
+                                {String(propostaAtual.filtro.valor)}"
+                              </span>
+                            </div>
+
+                            <div className="flex items-center justify-between text-neutral-600 pt-1 border-t border-neutral-100">
+                              <span className="text-neutral-500">Alteração Proposta:</span>
+                              <span className="flex items-center gap-1 font-semibold text-[#FF6A13]">
+                                <span>{propostaAtual.alteracoes.campo}</span>
+                                <ArrowRight className="w-3 h-3" />
+                                <span>
+                                  {propostaAtual.alteracoes.valor_novo_label ||
+                                    String(propostaAtual.alteracoes.valor_novo)}
+                                </span>
+                              </span>
+                            </div>
+
+                            {propostaAtual.total_estimado !== undefined &&
+                              propostaAtual.total_estimado > 0 && (
+                                <div className="text-[10px] text-neutral-500 text-right">
+                                  Estimativa: ~{propostaAtual.total_estimado} registro(s) afetado(s)
+                                </div>
+                              )}
+                          </div>
+
+                          {/* Estado e Ações da Proposta */}
+                          {(!propostaEstado || propostaEstado.status === 'pendente') && (
+                            <div className="flex items-center justify-end gap-2 pt-1">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleDescartarProposta(m.id)}
+                                className="h-7 text-xs text-neutral-600 hover:text-neutral-800 hover:bg-neutral-200/50"
+                              >
+                                Descartar
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                onClick={() => handleAplicarProposta(m.id, propostaAtual)}
+                                className="h-7 text-xs bg-[#FF6A13] hover:bg-[#e05b0d] text-white flex items-center gap-1"
+                              >
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                <span>Aplicar em Bloco</span>
+                              </Button>
+                            </div>
+                          )}
+
+                          {propostaEstado?.status === 'aplicando' && (
+                            <div className="flex items-center justify-center gap-2 py-1 text-[#FF6A13] font-medium text-[11px]">
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              <span>Aplicando alterações no banco de dados...</span>
+                            </div>
+                          )}
+
+                          {propostaEstado?.status === 'aplicada' && (
+                            <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg p-2 text-[11px] flex items-center justify-between">
+                              <div className="flex items-center gap-1.5">
+                                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                                <span>
+                                  <strong>Sucesso:</strong> {propostaEstado.resultado?.mensagem}
+                                </span>
+                              </div>
+                            </div>
+                          )}
+
+                          {propostaEstado?.status === 'descartada' && (
+                            <div className="text-[11px] text-neutral-400 italic text-right">
+                              Proposta descartada pelo usuário.
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>

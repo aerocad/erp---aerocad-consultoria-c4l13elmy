@@ -3069,6 +3069,12 @@ export function FinancePage() {
                       ? 'demonstracoes'
                       : 'relatorios'
           }
+          onAcaoExecutada={() => {
+            void contasPagar.reload()
+            void contasReceber.reload()
+            void extratos.reload()
+            void extratosTransacoes.reload()
+          }}
         />
       )}
     </div>

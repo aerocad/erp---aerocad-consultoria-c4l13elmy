@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-16T18:57:31.576Z",
+  "generatedAt": "2026-10-16T19:16:23.432Z",
   "collections": [
     {
       "name": "users",
@@ -3970,6 +3970,113 @@
         "CREATE INDEX idx_credores_nome ON credores (nome_razao_social)",
         "CREATE INDEX idx_credores_categoria ON credores (categoria)",
         "CREATE INDEX idx_credores_status ON credores (status)"
+      ]
+    },
+    {
+      "name": "auditoria_operacoes_bloco",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.role = 'admin' || @request.auth.role = 'financeiro'",
+        "view": "@request.auth.role = 'admin' || @request.auth.role = 'financeiro'",
+        "create": "@request.auth.role = 'admin' || @request.auth.role = 'financeiro'",
+        "update": "@request.auth.role = 'admin'",
+        "delete": "@request.auth.role = 'admin'"
+      },
+      "fields": [
+        {
+          "name": "usuario",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "tipo_operacao",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "colecao_alvo",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "descricao",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "criterio_filtro",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "alteracoes_solicitadas",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "total_registros_afetados",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "total_falhas",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "snapshot_anterior",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "desfeito",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "data_desfeito",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "desfeito_por",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_audit_bloco_created ON auditoria_operacoes_bloco (created DESC)",
+        "CREATE INDEX idx_audit_bloco_usuario ON auditoria_operacoes_bloco (usuario)",
+        "CREATE INDEX idx_audit_bloco_colecao ON auditoria_operacoes_bloco (colecao_alvo)",
+        "CREATE INDEX idx_audit_bloco_desfeito ON auditoria_operacoes_bloco (desfeito)"
       ]
     }
   ]
