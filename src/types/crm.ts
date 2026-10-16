@@ -470,6 +470,7 @@ export type CategoriaAtivoPatrimonial =
   | 'computador_hardware'
   | 'software_licenca'
   | 'veiculo'
+  | 'terreno'
   | 'imovel'
   | 'mobiliario'
   | 'outro_ativo'
@@ -479,6 +480,16 @@ export type StatusAtivoPatrimonial =
   | 'em_manutencao'
   | 'baixado_alienado'
   | 'totalmente_depreciado'
+
+export type TipoDocumentoAtivo = 'comprovante' | 'contrato' | 'laudo' | 'matricula' | 'outro'
+
+export interface AtivoDocumentoMetadado {
+  file: string
+  tipo: TipoDocumentoAtivo
+  nome_original: string
+  tamanho?: number
+  observacao?: string
+}
 
 export interface AtivoPatrimonioRecord extends RecordModel {
   identificador_codigo?: string
@@ -494,12 +505,16 @@ export interface AtivoPatrimonioRecord extends RecordModel {
   numero_nf_registro?: string
   fornecedor?: string
   fornecedor_nome?: string
+  credor?: string
   documento_evidencia?: string
+  anexos?: string[]
+  anexos_metadados?: AtivoDocumentoMetadado[]
   localizacao_responsavel?: string
   observacoes?: string
   criado_por?: string
   expand?: {
     fornecedor?: FornecedorRecord
+    credor?: CredorRecord
     criado_por?: UserRecord
   }
 }
