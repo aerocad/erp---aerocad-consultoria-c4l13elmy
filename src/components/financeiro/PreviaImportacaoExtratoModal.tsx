@@ -35,6 +35,8 @@ export interface PreviaImportacaoExtratoModalProps<T extends TransacaoCandidataI
   analise: AnaliseDeduplicacaoArquivo<T> | null
   formato: 'ofx' | 'csv' | 'xlsx' | 'ret' | 'pdf'
   contaBancaria?: ContaBancariaRecord
+  contasBancariasDisponiveis?: ContaBancariaRecord[]
+  onTrocarContaBancaria?: (novaContaId: string) => void
   isGravando: boolean
   onConfirmarGravacao: () => Promise<void> | void
   avisoLeitura?: string | null
@@ -47,6 +49,8 @@ export function PreviaImportacaoExtratoModal<T extends TransacaoCandidataImporta
   analise,
   formato,
   contaBancaria,
+  contasBancariasDisponiveis = [],
+  onTrocarContaBancaria,
   isGravando,
   onConfirmarGravacao,
   avisoLeitura,
@@ -55,6 +59,36 @@ export function PreviaImportacaoExtratoModal<T extends TransacaoCandidataImporta
   const [abaExibicao, setAbaExibicao] = useState<'novas' | 'duplicadas'>('novas')
 
   if (!analise) return null
+
+  // Detecção preventiva se o arquivo ou conteúdo sugere Caixa Econômica Federal (CAIXA / CEF / código 104)
+  // e a conta selecionada não é a Caixa Econômica Federal
+  const nomeArqUpper = (analise.arquivoNome || '').toUpperCase()
+  const primeirasDescricoes = analise.todasCandidatas
+    .slice(0, 30)
+    .map((c) => (c.descricao || '').toUpperCase())
+    .join(' ')
+  const conteudoSinalizaCaixa =
+    nomeArqUpper.includes('CAIXA') ||
+    nomeArqUpper.includes('CEF') ||
+    nomeArqUpper.includes('104') ||
+    primeirasDescricoes.includes('CARTOES CAIXA') ||
+    primeirasDescricoes.includes('CAIXA ECONOMICA') ||
+    primeirasDescricoes.includes('CEF')
+
+  const contaNaoECaixa =
+    contaBancaria &&
+    contaBancaria.banco_codigo !== '104' &&
+    !contaBancaria.apelido?.toUpperCase().includes('CAIXA') &&
+    !contaBancaria.banco_nome?.toUpperCase().includes('CAIXA')
+
+  const contaCaixaSugerida = contasBancariasDisponiveis.find(
+    (cb) =>
+      cb.banco_codigo === '104' ||
+      cb.apelido?.toUpperCase().includes('CAIXA') ||
+      cb.banco_nome?.toUpperCase().includes('CAIXA'),
+  )
+
+  const alertaCaixaPreventivo = Boolean(conteudoSinalizaCaixa && contaNaoECaixa)
 
   const isTotalmenteDuplicado = analise.arquivoJaImportado || analise.totalNovas === 0
   const temDuplicadasParciais = analise.totalDuplicadas > 0 && analise.totalNovas > 0
@@ -70,6 +104,36 @@ export function PreviaImportacaoExtratoModal<T extends TransacaoCandidataImporta
         </DialogHeader>
 
         <div className="space-y-4 text-xs">
+          {/* Alerta Preventivo de Conta Caixa vs Outra Conta */}
+          {alertaCaixaPreventivo && (
+            <div className="p-3 bg-amber-50 border-2 border-amber-400 rounded-lg text-amber-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+              <div className="flex items-start gap-2.5">
+                <AlertCircle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+                <div className="space-y-0.5">
+                  <strong className="text-xs font-bold text-amber-900 block">
+                    Alerta de Conta Bancária: Arquivo aparenta ser da CAIXA ECONÔMICA FEDERAL
+                  </strong>
+                  <p className="text-[11px] text-amber-800 leading-relaxed">
+                    O nome ou conteúdo do arquivo ({analise.arquivoNome}) sinaliza movimentação da
+                    Caixa (código 104/CEF), mas a conta de destino selecionada atualmente é{' '}
+                    <strong>{contaBancaria?.apelido || 'outra conta'}</strong>.
+                  </p>
+                </div>
+              </div>
+              {contaCaixaSugerida && onTrocarContaBancaria && (
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => onTrocarContaBancaria(contaCaixaSugerida.id)}
+                  disabled={isGravando}
+                  className="bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs shrink-0 self-start sm:self-center"
+                >
+                  Trocar para {contaCaixaSugerida.apelido}
+                </Button>
+              )}
+            </div>
+          )}
+
           {/* Informações do arquivo e conta */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-3 bg-neutral-50 rounded-lg border">
             <div>

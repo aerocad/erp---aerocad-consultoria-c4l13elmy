@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/dialog'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/hooks/use-toast'
+import { toast as toastSonner } from 'sonner'
 import {
   PLANO_CONTAS_AEROCAD,
   ItemPlanoContas,
@@ -208,16 +209,25 @@ export function ContaContabilBadgeInline({
         user,
       })
 
-      toast({
-        title: 'Conta reclassificada — demonstrativos atualizados',
-        description: `${contaEscolhida.codigo} · ${contaEscolhida.nome}`,
-      })
-
-      if (res.balanceteDesatualizadoReferencia) {
+      if (res.balanceteRegenerado && res.balanceteReferenciaFormatada) {
         toast({
-          title: 'Atenção ao Balancete Arquivado',
-          description: `O balancete de ${res.balanceteDesatualizadoReferencia} foi arquivado e necessita ser regenerado na aba de Balancetes.`,
-          variant: 'destructive',
+          title: `Conta reclassificada — balancete de ${res.balanceteReferenciaFormatada} regenerado automaticamente`,
+          description: `${contaEscolhida.codigo} · ${contaEscolhida.nome}`,
+        })
+      } else if (res.balanceteErro || res.balanceteDesatualizadoReferencia) {
+        // Balancete arquivado falhou ao regenerar -> toast warning e fallback
+        toastSonner.warning(
+          `Balancete de ${res.balanceteReferenciaFormatada || res.balanceteDesatualizadoReferencia} arquivado não pôde ser regenerado automaticamente. Abra a aba Balancetes para atualizar.`,
+        )
+        toast({
+          title: 'Conta reclassificada — demonstrativos atualizados',
+          description: `${contaEscolhida.codigo} · ${contaEscolhida.nome}`,
+        })
+      } else {
+        // Não havia balancete arquivado para este período -> toast atual padrão
+        toast({
+          title: 'Conta reclassificada — demonstrativos atualizados',
+          description: `${contaEscolhida.codigo} · ${contaEscolhida.nome}`,
         })
       }
 

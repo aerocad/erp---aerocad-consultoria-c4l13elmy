@@ -50,7 +50,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext'
 import { formatCurrency, formatDate, formatDateBrasilia } from '@/lib/format'
 import pb from '@/lib/pocketbase/client'
-import { createOne, deleteOne, updateOne } from '@/services/api'
+import { createOne, deleteOne, updateOne, invalidateApiCache } from '@/services/api'
 import {
   encontrarSugestoesConciliacao,
   verificarDuplicidadeLancamento,
@@ -457,6 +457,93 @@ export function ExtratosComprovantesTab({
       toast.error(`Falha ao gravar arquivo .ret: ${msg}`)
     } finally {
       setIsGravandoRetorno(false)
+    }
+  }
+
+  // Estado do Modal de Reatribuição de Conta Bancária do Extrato
+  const [extratoParaReatribuir, setExtratoParaReatribuir] = useState<ExtratoRecord | null>(null)
+  const [novaContaReatribuicaoId, setNovaContaReatribuicaoId] = useState<string>('')
+  const [isReatribuindoConta, setIsReatribuindoConta] = useState(false)
+
+  // Executa reatribuição da conta bancária de um extrato existente
+  async function handleConfirmarReatribuicaoConta() {
+    if (!extratoParaReatribuir || !novaContaReatribuicaoId) return
+    const contaNova = contasBancarias.find((c) => c.id === novaContaReatribuicaoId)
+    if (!contaNova) return
+
+    const contaAnteriorId = extratoParaReatribuir.conta_bancaria || null
+    const extratoId = extratoParaReatribuir.id
+
+    try {
+      setIsReatribuindoConta(true)
+
+      // 1. Atualizar registro do extrato
+      await pb.collection('extratos').update(extratoId, {
+        conta_bancaria: contaNova.id,
+        banco: `${contaNova.banco_nome} (${contaNova.apelido})`,
+        conta: contaNova.numero_conta || '',
+      })
+
+      // 2. Registrar auditoria tipo_operacao='reatribuicao_conta_extrato'
+      try {
+        await pb.collection('auditoria_operacoes_bloco').create({
+          usuario: user?.id || null,
+          tipo_operacao: 'reatribuicao_conta_extrato',
+          colecao_alvo: 'extratos',
+          descricao: `Reatribuição da conta bancária do extrato "${extratoParaReatribuir.nome_arquivo}" para ${contaNova.apelido}`,
+          criterio_filtro: { extrato_id: extratoId },
+          alteracoes_solicitadas: {
+            detalhes_json: {
+              extrato_id: extratoId,
+              nome_arquivo: extratoParaReatribuir.nome_arquivo,
+              total_transacoes: extratoParaReatribuir.total_transacoes || 0,
+              conta_anterior_id: contaAnteriorId,
+              conta_nova_id: contaNova.id,
+              conta_nova_apelido: contaNova.apelido,
+            },
+          },
+          total_registros_afetados: 1,
+          total_falhas: 0,
+          desfeito: false,
+        })
+      } catch (errAudit) {
+        console.warn(
+          'Aviso: Falha ao registrar log de auditoria da reatribuição de conta:',
+          errAudit,
+        )
+      }
+
+      // 3. Invalidar caches de extratos, transações e balancetes
+      invalidateApiCache('extratos')
+      invalidateApiCache('extratos_transacoes')
+      invalidateApiCache('balancetes_mensais')
+
+      toast.success(
+        `Extrato "${extratoParaReatribuir.nome_arquivo}" reatribuído com sucesso para ${contaNova.apelido}!`,
+      )
+
+      setExtratoParaReatribuir(null)
+
+      // 4. Recarregar demonstrativos uma única vez ao final
+      await Promise.all([
+        onReloadExtratos(),
+        onReloadTransacoes(),
+        onReloadParcelas(),
+        onReloadContasPagar(),
+        onReloadContasReceber(),
+      ])
+
+      // Notifica balancetes e demonstrativos contábeis
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('aerocad:balancete_regenerado', { detail: { extratoId } }),
+        )
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      toast.error(`Falha ao reatribuir conta do extrato: ${msg}`)
+    } finally {
+      setIsReatribuindoConta(false)
     }
   }
 
@@ -2652,6 +2739,13 @@ export function ExtratosComprovantesTab({
           analise={modalPreviaExtrato?.analise || null}
           formato={modalPreviaExtrato?.formato || 'ofx'}
           contaBancaria={contasBancarias.find((c) => c.id === modalPreviaExtrato?.contaBancariaId)}
+          contasBancariasDisponiveis={contasBancarias}
+          onTrocarContaBancaria={(novaContaId) => {
+            setModalPreviaExtrato((prev) =>
+              prev ? { ...prev, contaBancariaId: novaContaId } : null,
+            )
+            setContaBancariaSelecionadaUpload(novaContaId)
+          }}
           isGravando={isGravandoExtrato}
           onConfirmarGravacao={handleConfirmarGravacaoPreviaExtrato}
           avisoLeitura={modalPreviaExtrato?.avisoLeitura}
