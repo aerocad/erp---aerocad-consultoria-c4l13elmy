@@ -45,11 +45,13 @@ import { formatCurrency, formatDate, formatDateLong } from '@/lib/format'
 import pb from '@/lib/pocketbase/client'
 import { exportarTabelaParaXlsx } from '@/services/aerocadXlsxExporter'
 import { AerocadRelatorioA4 } from '@/components/financeiro/AerocadRelatorioA4'
+import { imprimirElementoA4 } from '@/services/relatorioImpressaoService'
 import type {
   BalanceteConsolidadoDados,
   BalanceteMensalRecord,
   ContaPagarRecord,
   ContaReceberRecord,
+  ExtratoTransacaoRecord,
   ParcelaRecord,
   ProjetoRecord,
 } from '@/types/crm'
@@ -59,6 +61,7 @@ interface BalancetesTabProps {
   contasPagar: ContaPagarRecord[]
   contasReceber: ContaReceberRecord[]
   projetos: ProjetoRecord[]
+  extratosTransacoes?: ExtratoTransacaoRecord[]
 }
 
 const MESES_NOMES = [
@@ -81,6 +84,7 @@ export function BalancetesTab({
   contasPagar,
   contasReceber,
   projetos,
+  extratosTransacoes = [],
 }: BalancetesTabProps) {
   const { user } = useAuth()
   const { ocultarValores } = useFinanceiroVisibilidade()
@@ -88,12 +92,29 @@ export function BalancetesTab({
 
   const {
     data: balancetes,
-    loading,
+    loading: crmLoading,
+    error: crmError,
     reload,
   } = useCrmData<BalanceteMensalRecord>('balancetes_mensais', {
     sort: '-referencia',
     expand: 'criado_por',
   })
+
+  // Loading defensivo: nunca fica preso indefinidamente
+  const [loadingTimeoutExceeded, setLoadingTimeoutExceeded] = useState(false)
+  const loading = crmLoading && !loadingTimeoutExceeded
+
+  // Efeito para soltar o loading após 3.5 segundos caso a conexão do backend fique pendente
+  useMemo(() => {
+    if (crmLoading) {
+      const timer = setTimeout(() => {
+        setLoadingTimeoutExceeded(true)
+      }, 3500)
+      return () => clearTimeout(timer)
+    } else {
+      setLoadingTimeoutExceeded(false)
+    }
+  }, [crmLoading])
 
   const hoje = new Date()
   const [anoSelecionado, setAnoSelecionado] = useState<number>(hoje.getFullYear())
@@ -105,19 +126,34 @@ export function BalancetesTab({
   // Extrai lista de anos disponíveis com base nas transações e balancetes
   const anosDisponiveis = useMemo(() => {
     const anos = new Set<number>()
+    anos.add(hoje.getFullYear())
+    anos.add(hoje.getFullYear() - 1)
     anos.add(2026)
     anos.add(2025)
     anos.add(2024)
     parcelas.forEach((p) => {
-      const d = p.data_pagamento || p.vencimento
-      if (d) anos.add(new Date(d).getFullYear())
+      const d = p.data_pagamento || p.data_faturamento || p.vencimento
+      if (d) {
+        const y = Number(d.slice(0, 4))
+        if (!isNaN(y) && y > 2000) anos.add(y)
+      }
     })
     contasPagar.forEach((c) => {
       const d = c.data_pagamento || c.data_vencimento
-      if (d) anos.add(new Date(d).getFullYear())
+      if (d) {
+        const y = Number(d.slice(0, 4))
+        if (!isNaN(y) && y > 2000) anos.add(y)
+      }
+    })
+    extratosTransacoes.forEach((tx) => {
+      const d = tx.data
+      if (d) {
+        const y = Number(d.slice(0, 4))
+        if (!isNaN(y) && y > 2000) anos.add(y)
+      }
     })
     return Array.from(anos).sort().reverse()
-  }, [parcelas, contasPagar])
+  }, [parcelas, contasPagar, extratosTransacoes, hoje])
 
   /**
    * Consolida as receitas e despesas para um ano e mês específicos
@@ -149,6 +185,30 @@ export function BalancetesTab({
       return dataPag.startsWith(ref)
     })
 
+    // 3. Extratos bancários avulsos do mês (transações não vinculadas a contas_pagar ou parcelas já contabilizadas)
+    const contasPagarIdsVinculadas = new Set(
+      extratosTransacoes
+        .filter((tx) => tx.vinculo_tipo === 'conta_pagar' && tx.vinculo_id)
+        .map((tx) => tx.vinculo_id),
+    )
+    const parcelasIdsVinculadas = new Set(
+      extratosTransacoes
+        .filter((tx) => tx.vinculo_tipo === 'parcela' && tx.vinculo_id)
+        .map((tx) => tx.vinculo_id),
+    )
+
+    const extratosDoMes = extratosTransacoes.filter((tx) => {
+      if (!tx.data || !tx.data.startsWith(ref)) return false
+      // Se já vinculado a registro existente de contas a pagar ou parcela, não duplicar
+      if (tx.vinculo_tipo === 'conta_pagar' && contasPagar.some((c) => c.id === tx.vinculo_id)) {
+        return false
+      }
+      if (tx.vinculo_tipo === 'parcela' && parcelas.some((p) => p.id === tx.vinculo_id)) {
+        return false
+      }
+      return true
+    })
+
     // Totalizações de Receita
     let receitaTotalMes = 0
     const recPorCategoria: Record<string, number> = {}
@@ -157,7 +217,7 @@ export function BalancetesTab({
     const itensReceita: BalanceteConsolidadoDados['receitas']['itens'] = []
 
     for (const p of parcelasDoMes) {
-      const val = p.valor_recebido || p.valor
+      const val = p.valor_recebido || p.valor || 0
       receitaTotalMes += val
 
       const cat = p.nf_numero ? 'Projetos (Faturado NFS-e)' : 'Projetos (Parcelas Contratuais)'
@@ -182,7 +242,7 @@ export function BalancetesTab({
     }
 
     for (const c of avulsasDoMes) {
-      const val = c.valor_recebido || c.valor
+      const val = c.valor_recebido || c.valor || 0
       receitaTotalMes += val
 
       const cat = 'Receitas Avulsas / Outros'
@@ -205,6 +265,32 @@ export function BalancetesTab({
       })
     }
 
+    // Extratos com entrada de crédito avulsa
+    for (const tx of extratosDoMes) {
+      if (tx.tipo === 'entrada') {
+        const val = Math.abs(tx.valor || 0)
+        receitaTotalMes += val
+        const cat = 'Movimentação Bancária (Entrada Extrato)'
+        recPorCategoria[cat] = (recPorCategoria[cat] || 0) + val
+
+        const contraparte = 'Entrada Bancária PJ'
+        const cliAtual = recPorClienteMap.get(contraparte) || { total: 0, qtd: 0 }
+        cliAtual.total += val
+        cliAtual.qtd += 1
+        recPorClienteMap.set(contraparte, cliAtual)
+
+        itensReceita.push({
+          id: `tx-${tx.id}`,
+          data: (tx.data || '').slice(0, 10),
+          descricao: tx.descricao || 'Entrada em conta corrente PJ',
+          clienteNome: contraparte,
+          valor: val,
+          origem: 'receita_avulsa',
+          nfNumero: tx.documento_ref,
+        })
+      }
+    }
+
     // Totalizações de Despesa
     let despesaTotalMes = 0
     const despPorCategoria: Record<string, number> = {}
@@ -212,7 +298,7 @@ export function BalancetesTab({
     const itensDespesa: BalanceteConsolidadoDados['despesas']['itens'] = []
 
     for (const c of despesasDoMes) {
-      const val = c.valor
+      const val = c.valor || 0
       despesaTotalMes += val
 
       const catNome = c.categoria || 'outros'
@@ -235,7 +321,34 @@ export function BalancetesTab({
       })
     }
 
-    // 3. Acumulado do Ano (de janeiro até o mês selecionado)
+    // Extratos com débito/saída avulsa
+    for (const tx of extratosDoMes) {
+      if (tx.tipo === 'saida') {
+        const val = Math.abs(tx.valor || 0)
+        despesaTotalMes += val
+
+        const catNome = 'despesas_operacionais'
+        despPorCategoria[catNome] = (despPorCategoria[catNome] || 0) + val
+
+        const fornNome = tx.descricao ? tx.descricao.slice(0, 45) : 'Débito Bancário PJ'
+        const fornAtual = despPorFornecedorMap.get(fornNome) || { total: 0, qtd: 0 }
+        fornAtual.total += val
+        fornAtual.qtd += 1
+        despPorFornecedorMap.set(fornNome, fornAtual)
+
+        itensDespesa.push({
+          id: `tx-${tx.id}`,
+          data: (tx.data || '').slice(0, 10),
+          descricao: tx.descricao || 'Débito em conta PJ',
+          fornecedor: fornNome,
+          categoria: catNome,
+          valor: val,
+          numeroDocumento: tx.documento_ref,
+        })
+      }
+    }
+
+    // 4. Acumulado do Ano (de janeiro até o mês selecionado)
     let totalRecAno = 0
     let totalDespAno = 0
     const mesesAcumulado: BalanceteConsolidadoDados['acumuladoAno']['meses'] = []
@@ -248,19 +361,30 @@ export function BalancetesTab({
       parcelas.forEach((p) => {
         if (p.status !== 'paga') return
         const d = p.data_pagamento || p.data_faturamento || p.vencimento
-        if (d && d.startsWith(refM)) recM += p.valor_recebido || p.valor
+        if (d && d.startsWith(refM)) recM += p.valor_recebido || p.valor || 0
       })
       contasReceber.forEach((c) => {
         if (c.status !== 'recebido') return
         const d = c.data_recebimento || c.data_vencimento
-        if (d && d.startsWith(refM)) recM += c.valor_recebido || c.valor
+        if (d && d.startsWith(refM)) recM += c.valor_recebido || c.valor || 0
       })
 
       let despM = 0
       contasPagar.forEach((c) => {
         if (c.status !== 'pago') return
         const d = c.data_pagamento || c.data_vencimento
-        if (d && d.startsWith(refM)) despM += c.valor
+        if (d && d.startsWith(refM)) despM += c.valor || 0
+      })
+
+      // Extratos bancários no acumulado
+      extratosTransacoes.forEach((tx) => {
+        if (!tx.data || !tx.data.startsWith(refM)) return
+        if (tx.vinculo_tipo === 'conta_pagar' && contasPagar.some((c) => c.id === tx.vinculo_id))
+          return
+        if (tx.vinculo_tipo === 'parcela' && parcelas.some((p) => p.id === tx.vinculo_id)) return
+
+        if (tx.tipo === 'entrada') recM += Math.abs(tx.valor || 0)
+        else if (tx.tipo === 'saida') despM += Math.abs(tx.valor || 0)
       })
 
       totalRecAno += recM
@@ -536,21 +660,64 @@ export function BalancetesTab({
           </span>
         </div>
 
+        {crmError && (
+          <div className="p-4 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-800 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
+              <span>
+                Não foi possível carregar a lista remota de balancetes mensais. Você ainda pode
+                gerar ou recalcular o período atual.
+              </span>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void reload()}
+              className="h-7 text-xs border-amber-300 text-amber-800 hover:bg-amber-100"
+            >
+              <RefreshCw className="mr-1 h-3 w-3" /> Tentar novamente
+            </Button>
+          </div>
+        )}
+
         {loading ? (
-          <div className="p-8 text-center text-xs text-neutral-500">Carregando balancetes...</div>
+          <div className="p-8 text-center text-xs text-neutral-500 flex flex-col items-center justify-center gap-2">
+            <RefreshCw className="h-5 w-5 animate-spin text-[#FF6A13]" />
+            <span>Consultando balancetes mensais oficiais...</span>
+          </div>
         ) : balancetes.length === 0 ? (
-          <div className="p-8 sm:p-10 text-center rounded-xl border border-dashed border-[#FF6A13]/30 bg-gradient-to-b from-white to-[#FFFBF8] space-y-3">
+          <div className="p-8 sm:p-10 text-center rounded-xl border border-dashed border-[#FF6A13]/30 bg-gradient-to-b from-white to-[#FFFBF8] space-y-4">
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-orange-100 text-[#FF6A13]">
               <FileText className="h-6 w-6 stroke-[2]" />
             </div>
-            <div className="space-y-1">
+            <div className="space-y-1 max-w-md mx-auto">
               <p className="text-sm font-bold text-neutral-800">
-                Nenhum balancete mensal emitido para o período selecionado.
+                Nenhum balancete mensal oficial gerado ainda
               </p>
-              <p className="text-xs text-neutral-500 max-w-lg mx-auto">
-                Utilize o botão acima para consolidar receitas, despesas e apurar o saldo oficial.
+              <p className="text-xs text-neutral-500">
+                A base contábil de balancetes consolidados está vazia. O CRM AEROCAD pode consolidar
+                automaticamente todas as receitas de parcelas faturadas, consultorias avulsas e
+                contas a pagar do mês de{' '}
+                <strong className="text-neutral-700">
+                  {MESES_NOMES[mesSelecionado - 1]}/{anoSelecionado}
+                </strong>
+                .
               </p>
             </div>
+            {canWrite && (
+              <div className="pt-1">
+                <Button
+                  onClick={() => handleGerarBalancete(anoSelecionado, mesSelecionado)}
+                  disabled={gerando}
+                  className="bg-[#FF6A13] hover:bg-[#E85B06] text-white font-bold text-xs h-9 px-4 shadow-sm"
+                >
+                  <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${gerando ? 'animate-spin' : ''}`} />
+                  {gerando
+                    ? 'Consolidando movimento...'
+                    : `Gerar primeiro balancete oficial de ${MESES_NOMES[mesSelecionado - 1]}/${anoSelecionado}`}
+                </Button>
+              </div>
+            )}
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -656,7 +823,13 @@ export function BalancetesTab({
               )}
               <Button
                 size="sm"
-                onClick={() => window.print()}
+                onClick={() => {
+                  imprimirElementoA4({
+                    elementId: 'print-document',
+                    titulo: balanceteAtivo?.titulo || 'Balancete Mensal AEROCAD',
+                    orientacao: 'portrait',
+                  })
+                }}
                 className="bg-[#FF6A13] hover:bg-[#E85B06] text-white font-bold text-xs h-8"
               >
                 <Printer className="mr-1.5 h-3.5 w-3.5" />

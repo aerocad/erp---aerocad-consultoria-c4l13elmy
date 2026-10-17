@@ -1670,6 +1670,7 @@ export function FinancePage() {
             contasPagar={contasPagar.data}
             contasReceber={contasReceber.data}
             projetos={projects.data}
+            extratosTransacoes={extratosTransacoes.data}
           />
         </div>
       ) : activeTab === 'ativos_patrimonio' ? (

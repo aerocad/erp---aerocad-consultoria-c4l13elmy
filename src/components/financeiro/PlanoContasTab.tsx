@@ -29,7 +29,11 @@ import {
   Calendar,
   X,
   CreditCard,
+  Printer,
+  Download,
+  FileText,
 } from 'lucide-react'
+import { toast } from 'sonner'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -48,6 +52,8 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog'
+import { useAuth } from '@/contexts/AuthContext'
+import { useFinanceiroVisibilidade } from '@/contexts/FinanceiroVisibilidadeContext'
 import {
   PLANO_CONTAS_AEROCAD,
   ItemPlanoContas,
@@ -68,6 +74,9 @@ import {
   AtivoPatrimonioRecord,
 } from '@/types/crm'
 import { formatCurrency, formatDate } from '@/lib/format'
+import { exportarTabelaParaXlsx } from '@/services/aerocadXlsxExporter'
+import { imprimirElementoA4 } from '@/services/relatorioImpressaoService'
+import { AerocadRelatorioA4 } from '@/components/financeiro/AerocadRelatorioA4'
 
 export interface PlanoContasTabProps {
   contasPagar?: ContaPagarRecord[]
@@ -145,9 +154,14 @@ export function PlanoContasTab({
   ativosPatrimonio = [],
   onNavegarParaLancamentos,
 }: PlanoContasTabProps) {
+  const { user } = useAuth()
+  const { ocultarValores } = useFinanceiroVisibilidade()
+  const canExportAndPrint = user?.role === 'admin' || user?.role === 'financeiro'
+
   const [busca, setBusca] = useState('')
   const [filtroNatureza, setFiltroNatureza] = useState<string>('todos')
   const [apenasComLancamentos, setApenasComLancamentos] = useState(false)
+  const [visualizandoImpressaoModal, setVisualizandoImpressaoModal] = useState(false)
   const [contaSelecionadaModal, setContaSelecionadaModal] = useState<{
     conta: ItemPlanoContas
     lancamentos: LancamentoMapeado[]
@@ -502,6 +516,254 @@ export function PlanoContasTab({
     return todosLancamentosMapeados.reduce((acc, item) => acc + (item.valor || 0), 0)
   }, [todosLancamentosMapeados])
 
+  // Lista plana de contas filtradas para exportação XLSX / CSV e Impressão A4
+  const contasFiltradasPlanas = useMemo(() => {
+    const lista: (ItemPlanoContas & {
+      qtdLancamentos: number
+      totalValor: number
+      volumeDebito: number
+      volumeCredito: number
+      naturezaSaldo: 'Devedor' | 'Credor'
+      lancamentos: LancamentoMapeado[]
+    })[] = []
+
+    for (const grupo of arvoreEstruturada) {
+      for (const sub of grupo.subgrupos) {
+        for (const c of sub.contas) {
+          let deb = 0
+          let cred = 0
+          for (const l of c.lancamentos) {
+            if (l.tipoMovimento === 'debito') deb += l.valor || 0
+            else if (l.tipoMovimento === 'credito') cred += l.valor || 0
+          }
+
+          // Se a conta tem natureza ativo ou despesa, é devedora (D); passivo ou receita é credora (C)
+          const ehDevedora = c.natureza === 'ativo' || c.natureza === 'despesa'
+          const saldoCalculado = ehDevedora ? deb - cred : cred - deb
+          const natSaldo: 'Devedor' | 'Credor' =
+            c.qtdLancamentos === 0
+              ? ehDevedora
+                ? 'Devedor'
+                : 'Credor'
+              : saldoCalculado >= 0
+                ? ehDevedora
+                  ? 'Devedor'
+                  : 'Credor'
+                : ehDevedora
+                  ? 'Credor'
+                  : 'Devedor'
+
+          lista.push({
+            ...c,
+            qtdLancamentos: c.qtdLancamentos,
+            totalValor: c.totalValor,
+            volumeDebito: deb,
+            volumeCredito: cred,
+            naturezaSaldo: natSaldo,
+            lancamentos: c.lancamentos,
+          })
+        }
+      }
+    }
+
+    return lista.sort((a, b) => a.codigo.localeCompare(b.codigo, undefined, { numeric: true }))
+  }, [arvoreEstruturada])
+
+  // Totalizadores consolidados por natureza para cabeçalho A4 e relatórios
+  const totaisPorNatureza = useMemo(() => {
+    const resultado = {
+      ativo: { qtd: 0, volume: 0 },
+      passivo: { qtd: 0, volume: 0 },
+      despesa: { qtd: 0, volume: 0 },
+      receita: { qtd: 0, volume: 0 },
+    }
+
+    for (const c of contasFiltradasPlanas) {
+      if (c.natureza === 'ativo') {
+        resultado.ativo.qtd += c.qtdLancamentos
+        resultado.ativo.volume += c.totalValor
+      } else if (c.natureza === 'passivo' || c.natureza === 'patrimonio_liquido') {
+        resultado.passivo.qtd += c.qtdLancamentos
+        resultado.passivo.volume += c.totalValor
+      } else if (c.natureza === 'despesa') {
+        resultado.despesa.qtd += c.qtdLancamentos
+        resultado.despesa.volume += c.totalValor
+      } else if (c.natureza === 'receita') {
+        resultado.receita.qtd += c.qtdLancamentos
+        resultado.receita.volume += c.totalValor
+      }
+    }
+
+    return resultado
+  }, [contasFiltradasPlanas])
+
+  // Exportação XLSX
+  async function handleExportarXlsx() {
+    if (!canExportAndPrint) {
+      toast.error(
+        'Apenas usuários com perfil Administrador ou Financeiro podem exportar o Plano de Contas.',
+      )
+      return
+    }
+
+    try {
+      const hojeStr = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+      const linhas = contasFiltradasPlanas.map((c) => {
+        const natFormatada =
+          c.natureza === 'ativo'
+            ? '1 - Ativo'
+            : c.natureza === 'passivo'
+              ? '2 - Passivo'
+              : c.natureza === 'patrimonio_liquido'
+                ? '2.2 - Patrimônio Líquido'
+                : c.natureza === 'despesa'
+                  ? '3 - Despesas e Custos'
+                  : '4 - Receitas'
+
+        const classif =
+          c.fixoOuVariavel === 'fixo'
+            ? 'Custo Fixo'
+            : c.fixoOuVariavel === 'variavel'
+              ? 'Custo Variável'
+              : 'Geral'
+        const ehDevedora = c.natureza === 'ativo' || c.natureza === 'despesa'
+        const saldo = ehDevedora
+          ? c.volumeDebito - c.volumeCredito
+          : c.volumeCredito - c.volumeDebito
+
+        return {
+          codigo: c.codigo,
+          nome: c.nome,
+          natureza: natFormatada,
+          classificacao: classif,
+          qtdLancamentos: c.qtdLancamentos,
+          volumeDebito: c.volumeDebito,
+          volumeCredito: c.volumeCredito,
+          saldo,
+        }
+      })
+
+      const totais = {
+        qtdLancamentos: linhas.reduce((a, b) => a + b.qtdLancamentos, 0),
+        volumeDebito: linhas.reduce((a, b) => a + b.volumeDebito, 0),
+        volumeCredito: linhas.reduce((a, b) => a + b.volumeCredito, 0),
+        saldo: linhas.reduce((a, b) => a + b.saldo, 0),
+      }
+
+      await exportarTabelaParaXlsx({
+        nomeArquivo: `plano_contas_aerocad_${hojeStr}`,
+        tituloRelatorio: 'PLANO DE CONTAS GERENCIAL E CONTÁBIL',
+        subtitulo: `Filtros: Natureza [${filtroNatureza.toUpperCase()}] · ${apenasComLancamentos ? 'Apenas com lançamentos' : 'Todas as contas'} · Total: ${contasFiltradasPlanas.length} contas`,
+        usuarioNome: user?.name || user?.email || 'Equipe AEROCAD',
+        userRole: user?.role,
+        colunas: [
+          { header: 'Código', key: 'codigo', width: 14, tipo: 'texto' },
+          { header: 'Nome da Conta', key: 'nome', width: 38, tipo: 'texto' },
+          { header: 'Natureza', key: 'natureza', width: 22, tipo: 'texto' },
+          { header: 'Classificação', key: 'classificacao', width: 16, tipo: 'texto' },
+          { header: 'Qtd. Lançamentos', key: 'qtdLancamentos', width: 18, tipo: 'numero' },
+          { header: 'Volume Débito (R$)', key: 'volumeDebito', width: 22, tipo: 'moeda' },
+          { header: 'Volume Crédito (R$)', key: 'volumeCredito', width: 22, tipo: 'moeda' },
+          { header: 'Saldo (R$)', key: 'saldo', width: 22, tipo: 'moeda' },
+        ],
+        linhas,
+        totais,
+      })
+
+      toast.success('Plano de contas exportado em XLSX com sucesso!')
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      toast.error('Erro ao exportar XLSX: ' + msg)
+    }
+  }
+
+  // Exportação CSV (Padrão de importação de softwares contábeis brasileiros: sep=";", BOM UTF-8 \uFEFF)
+  function handleExportarCsv() {
+    if (!canExportAndPrint) {
+      toast.error(
+        'Apenas usuários com perfil Administrador ou Financeiro podem exportar o Plano de Contas.',
+      )
+      return
+    }
+
+    try {
+      const hojeStr = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+      const cabecalhos = [
+        'Código',
+        'Nome da Conta',
+        'Natureza',
+        'Classificação',
+        'Qtd. Lançamentos',
+        'Volume Débito (R$)',
+        'Volume Crédito (R$)',
+        'Saldo (R$)',
+      ]
+
+      const linhasCsv: string[] = []
+      // Header com separador ;
+      linhasCsv.push(cabecalhos.join(';'))
+
+      for (const c of contasFiltradasPlanas) {
+        const natFormatada =
+          c.natureza === 'ativo'
+            ? '1 - Ativo'
+            : c.natureza === 'passivo'
+              ? '2 - Passivo'
+              : c.natureza === 'patrimonio_liquido'
+                ? '2.2 - Patrimônio Líquido'
+                : c.natureza === 'despesa'
+                  ? '3 - Despesas e Custos'
+                  : '4 - Receitas'
+
+        const classif =
+          c.fixoOuVariavel === 'fixo'
+            ? 'Custo Fixo'
+            : c.fixoOuVariavel === 'variavel'
+              ? 'Custo Variável'
+              : 'Geral'
+        const ehDevedora = c.natureza === 'ativo' || c.natureza === 'despesa'
+        const saldo = ehDevedora
+          ? c.volumeDebito - c.volumeCredito
+          : c.volumeCredito - c.volumeDebito
+
+        const formatarNumeroCsv = (num: number) => {
+          if (ocultarValores) return '***'
+          return num.toFixed(2).replace('.', ',')
+        }
+
+        const linha = [
+          `"${c.codigo}"`,
+          `"${c.nome.replace(/"/g, '""')}"`,
+          `"${natFormatada}"`,
+          `"${classif}"`,
+          c.qtdLancamentos,
+          `"${formatarNumeroCsv(c.volumeDebito)}"`,
+          `"${formatarNumeroCsv(c.volumeCredito)}"`,
+          `"${formatarNumeroCsv(saldo)}"`,
+        ]
+
+        linhasCsv.push(linha.join(';'))
+      }
+
+      // BOM UTF-8 para garantir abertura correta no Excel brasileiro
+      const conteudoCsv = '\uFEFF' + linhasCsv.join('\r\n')
+      const blob = new Blob([conteudoCsv], { type: 'text/csv;charset=utf-8;' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.setAttribute('href', url)
+      link.setAttribute('download', `plano_contas_aerocad_${hojeStr}.csv`)
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+
+      toast.success('Plano de contas exportado em CSV (padrão contábil) com sucesso!')
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      toast.error('Erro ao exportar CSV: ' + msg)
+    }
+  }
+
   function alternarGrupo(id: string) {
     setGruposAbertos((prev) => ({
       ...prev,
@@ -554,14 +816,48 @@ export function PlanoContasTab({
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {canExportAndPrint && (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setVisualizandoImpressaoModal(true)}
+                className="text-xs text-neutral-700 hover:text-[#FF6A13] hover:border-[#FF6A13] h-8"
+                title="Visualizar documento oficial A4 e imprimir"
+              >
+                <Printer className="mr-1.5 h-3.5 w-3.5" />
+                Imprimir A4
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExportarXlsx}
+                className="text-xs text-emerald-700 border-emerald-300 hover:bg-emerald-50 h-8"
+                title="Exportar planilha Excel (.XLSX)"
+              >
+                <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5" />
+                Exportar XLSX
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExportarCsv}
+                className="text-xs text-blue-700 border-blue-300 hover:bg-blue-50 h-8"
+                title="Exportar arquivo CSV com separador ; para softwares contábeis"
+              >
+                <Download className="mr-1.5 h-3.5 w-3.5" />
+                Exportar CSV
+              </Button>
+            </>
+          )}
           <Button
             variant="outline"
             size="sm"
             onClick={expandirTodos}
             className="text-xs text-neutral-700 h-8"
           >
-            Expandir Todos
+            Expandir
           </Button>
           <Button
             variant="outline"
@@ -569,7 +865,7 @@ export function PlanoContasTab({
             onClick={recolherTodos}
             className="text-xs text-neutral-700 h-8"
           >
-            Recolher Todos
+            Recolher
           </Button>
         </div>
       </div>
@@ -928,7 +1224,217 @@ export function PlanoContasTab({
         )}
       </div>
 
-      {/* 5. Modal de Lançamentos Analíticos da Conta */}
+      {/* 5. Modal do Documento Oficial A4 para Impressão do Plano de Contas */}
+      <Dialog open={visualizandoImpressaoModal} onOpenChange={setVisualizandoImpressaoModal}>
+        <DialogContent className="max-w-4xl max-h-[92vh] overflow-y-auto p-0">
+          <div className="sticky top-0 z-20 bg-neutral-900 text-white px-5 py-3 flex items-center justify-between shadow-md print:hidden">
+            <div>
+              <p className="text-[10px] uppercase font-bold text-[#FF6A13] tracking-widest">
+                PREVIEW A4 · DOCUMENTO OFICIAL
+              </p>
+              <h3 className="text-sm font-bold text-white truncate">
+                Plano de Contas Oficial AEROCAD
+              </h3>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleExportarXlsx}
+                className="bg-transparent border-white/20 text-white hover:bg-white/10 text-xs h-8"
+              >
+                <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5 text-emerald-400" />
+                Exportar XLSX
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => {
+                  imprimirElementoA4({
+                    elementId: 'print-document',
+                    titulo: 'Plano de Contas Oficial AEROCAD',
+                    orientacao: 'portrait',
+                  })
+                }}
+                className="bg-[#FF6A13] hover:bg-[#E85B06] text-white font-bold text-xs h-8"
+              >
+                <Printer className="mr-1.5 h-3.5 w-3.5" />
+                Imprimir / Salvar PDF (A4)
+              </Button>
+            </div>
+          </div>
+
+          <div className="p-4 sm:p-6 bg-neutral-100 flex justify-center">
+            <div className="bg-white shadow-lg border border-neutral-300 w-full max-w-[210mm]">
+              <AerocadRelatorioA4
+                titulo="PLANO DE CONTAS OFICIAL & ESTRUTURA CONTÁBIL"
+                subtitulo={`Árvore Hierárquica · ${
+                  filtroNatureza === 'todos'
+                    ? 'Todas as naturezas (1 Ativo, 2 Passivo, 3 Despesas, 4 Receitas)'
+                    : `Filtro ativo: ${filtroNatureza.toUpperCase()}`
+                } · ${apenasComLancamentos ? 'Apenas contas com lançamentos' : 'Todas as contas'}`}
+                referenciaPeriodo="Exercício 2026 · Padrão AEROCAD"
+                responsavelNome={user?.name || user?.email || 'Equipe AEROCAD'}
+                resumoKpis={[
+                  {
+                    rotulo: '1. Ativo Total',
+                    valorFormatado: formatCurrency(totaisPorNatureza.ativo.volume),
+                    cor: 'laranja',
+                  },
+                  {
+                    rotulo: '2. Passivo / Obrigações',
+                    valorFormatado: formatCurrency(totaisPorNatureza.passivo.volume),
+                    cor: 'vermelho',
+                  },
+                  {
+                    rotulo: '3. Despesas & Custos',
+                    valorFormatado: formatCurrency(totaisPorNatureza.despesa.volume),
+                    cor: 'vermelho',
+                  },
+                  {
+                    rotulo: '4. Receitas Operacionais',
+                    valorFormatado: formatCurrency(totaisPorNatureza.receita.volume),
+                    cor: 'verde',
+                    destaque: true,
+                  },
+                ]}
+                secoes={[
+                  {
+                    titulo: '1. RESUMO CONSOLIDADO POR NATUREZA CONTÁBIL',
+                    subtitulo:
+                      'Totalização de lançamentos e volume financeiro movimentado por macro-grupo',
+                    tabela: {
+                      colunas: [
+                        { cabecalho: 'Grupo / Natureza', largura: '45%' },
+                        { cabecalho: 'Classificação', alinhamento: 'center', largura: '20%' },
+                        { cabecalho: 'Lançamentos', alinhamento: 'center', largura: '15%' },
+                        { cabecalho: 'Volume em R$', alinhamento: 'right', largura: '20%' },
+                      ],
+                      linhas: [
+                        [
+                          {
+                            conteudo: '1. Ativo (Disponibilidades, Direitos e Imobilizado)',
+                            destaque: true,
+                          },
+                          { conteudo: 'Devedora (D)', alinhamento: 'center' },
+                          {
+                            conteudo: `${totaisPorNatureza.ativo.qtd} reg.`,
+                            alinhamento: 'center',
+                          },
+                          {
+                            conteudo: formatCurrency(totaisPorNatureza.ativo.volume),
+                            alinhamento: 'right',
+                          },
+                        ],
+                        [
+                          {
+                            conteudo: '2. Passivo (Obrigações e Patrimônio Líquido)',
+                            destaque: true,
+                          },
+                          { conteudo: 'Credora (C)', alinhamento: 'center' },
+                          {
+                            conteudo: `${totaisPorNatureza.passivo.qtd} reg.`,
+                            alinhamento: 'center',
+                          },
+                          {
+                            conteudo: formatCurrency(totaisPorNatureza.passivo.volume),
+                            alinhamento: 'right',
+                          },
+                        ],
+                        [
+                          { conteudo: '3. Despesas e Custos Operacionais', destaque: true },
+                          { conteudo: 'Devedora (D)', alinhamento: 'center' },
+                          {
+                            conteudo: `${totaisPorNatureza.despesa.qtd} reg.`,
+                            alinhamento: 'center',
+                          },
+                          {
+                            conteudo: formatCurrency(totaisPorNatureza.despesa.volume),
+                            alinhamento: 'right',
+                          },
+                        ],
+                        [
+                          { conteudo: '4. Receitas Operacionais e Faturamento', destaque: true },
+                          { conteudo: 'Credora (C)', alinhamento: 'center' },
+                          {
+                            conteudo: `${totaisPorNatureza.receita.qtd} reg.`,
+                            alinhamento: 'center',
+                          },
+                          {
+                            conteudo: formatCurrency(totaisPorNatureza.receita.volume),
+                            alinhamento: 'right',
+                          },
+                        ],
+                      ],
+                      linhaTotal: [
+                        { conteudo: 'TOTAL CONSOLIDADO' },
+                        { conteudo: 'Geral', alinhamento: 'center' },
+                        {
+                          conteudo: `${
+                            totaisPorNatureza.ativo.qtd +
+                            totaisPorNatureza.passivo.qtd +
+                            totaisPorNatureza.despesa.qtd +
+                            totaisPorNatureza.receita.qtd
+                          } reg.`,
+                          alinhamento: 'center',
+                        },
+                        { conteudo: formatCurrency(volumeTotalMapeado), alinhamento: 'right' },
+                      ],
+                    },
+                  },
+                  {
+                    titulo: '2. ÁRVORE HIERÁRQUICA DETALHADA DAS CONTAS',
+                    subtitulo: `Relação analítica das ${contasFiltradasPlanas.length} contas contábeis respeitando filtros ativos`,
+                    tabela: {
+                      colunas: [
+                        { cabecalho: 'Código', largura: '12%' },
+                        { cabecalho: 'Nome da Conta', largura: '40%' },
+                        { cabecalho: 'Lanç.', alinhamento: 'center', largura: '12%' },
+                        { cabecalho: 'Volume (R$)', alinhamento: 'right', largura: '20%' },
+                        { cabecalho: 'Natureza Saldo', alinhamento: 'center', largura: '16%' },
+                      ],
+                      linhas: contasFiltradasPlanas.map((c) => [
+                        { conteudo: c.codigo, destaque: c.codigo.length <= 3 },
+                        { conteudo: c.nome, destaque: c.codigo.length <= 3 },
+                        {
+                          conteudo: c.qtdLancamentos > 0 ? `${c.qtdLancamentos}` : '—',
+                          alinhamento: 'center',
+                        },
+                        {
+                          conteudo: c.totalValor > 0 ? formatCurrency(c.totalValor) : '—',
+                          alinhamento: 'right',
+                        },
+                        {
+                          conteudo: c.naturezaSaldo,
+                          alinhamento: 'center',
+                          destaque: c.qtdLancamentos > 0,
+                        },
+                      ]),
+                      linhaTotal: [
+                        { conteudo: 'TOTAIS' },
+                        { conteudo: `${contasFiltradasPlanas.length} contas listadas` },
+                        {
+                          conteudo: `${contasFiltradasPlanas.reduce((a, b) => a + b.qtdLancamentos, 0)}`,
+                          alinhamento: 'center',
+                        },
+                        {
+                          conteudo: formatCurrency(
+                            contasFiltradasPlanas.reduce((a, b) => a + b.totalValor, 0),
+                          ),
+                          alinhamento: 'right',
+                        },
+                        { conteudo: 'Equilibrado', alinhamento: 'center' },
+                      ],
+                    },
+                  },
+                ]}
+                observacoesFinais="Plano de Contas Oficial emitido pelo CRM AEROCAD Consultoria. Estrutura padronizada conforme as Normas Brasileiras de Contabilidade (NBC TG) e compatível com as regras de importação de softwares contábeis e fiscais."
+              />
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 6. Modal de Lançamentos Analíticos da Conta */}
       <Dialog
         open={!!contaSelecionadaModal}
         onOpenChange={(open) => {
