@@ -1613,10 +1613,10 @@ ${emailObj.bodyText}
               </div>
               <div className="text-right">
                 <p className="text-[10px] font-bold uppercase tracking-[.18em] text-[#FF6A13]">
-                  CONSULTORIA & AEROPORTOS
+                  {INSTITUTIONAL_DATA.nomeComercial}
                 </p>
                 <p className="mt-1 font-mono text-[11px] font-semibold text-[#444]">
-                  {project?.numero || 'AEROCAD ENGENHARIA'}
+                  {project?.numero || INSTITUTIONAL_DATA.nomeComercial}
                 </p>
               </div>
             </header>
@@ -1635,15 +1635,17 @@ ${emailObj.bodyText}
             <footer className="mt-14 border-t border-[#D9D9D9] pt-3 text-[9px] text-[#777]">
               <div className="flex justify-between items-center">
                 <span className="font-semibold text-[#555]">
-                  {INSTITUTIONAL_DATA.razaoSocial} · CNPJ {INSTITUTIONAL_DATA.cnpj}
+                  {INSTITUTIONAL_DATA.nomeComercial} · {INSTITUTIONAL_DATA.razaoSocial} · CNPJ{' '}
+                  {INSTITUTIONAL_DATA.cnpj}
                 </span>
                 <span className="font-mono text-[#888]">
                   Brasília – DF · Emissão: {formatDate(new Date())}
                 </span>
               </div>
-              <p className="mt-1">
-                {INSTITUTIONAL_DATA.endereco} · Tel: {INSTITUTIONAL_DATA.telefone} ·{' '}
-                {INSTITUTIONAL_DATA.email} · {INSTITUTIONAL_DATA.website}
+              <p className="mt-1">{INSTITUTIONAL_DATA.endereco}</p>
+              <p className="mt-0.5">
+                Tel: {INSTITUTIONAL_DATA.telefone} · {INSTITUTIONAL_DATA.email} · CHAVE PIX (CNPJ):{' '}
+                {INSTITUTIONAL_DATA.chavePix}
               </p>
             </footer>
           </article>

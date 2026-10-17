@@ -7,6 +7,7 @@
 
 import React from 'react'
 import { AerocadLogo } from '@/components/common/AerocadLogo'
+import { INSTITUTIONAL_DATA } from '@/lib/documentCatalogo'
 import { isValoresOcultos, VALOR_MASCARADO } from '@/lib/format'
 
 export interface RelatorioA4Props {
@@ -86,11 +87,14 @@ export function AerocadRelatorioA4({
               </div>
               <div className="min-w-0">
                 <p className="text-[10px] font-bold tracking-[0.2em] text-[#FF6A13] uppercase">
-                  Engenharia & Consultoria Aeroportuária
+                  {INSTITUTIONAL_DATA.nomeComercial}
                 </p>
                 <h1 className="text-base sm:text-lg font-black text-[#2D2D2D] tracking-tight uppercase leading-tight">
                   {titulo}
                 </h1>
+                <p className="text-[9px] text-neutral-500 font-mono mt-0.5">
+                  {INSTITUTIONAL_DATA.razaoSocial} · CNPJ {INSTITUTIONAL_DATA.cnpj}
+                </p>
               </div>
             </div>
 
@@ -245,8 +249,14 @@ export function AerocadRelatorioA4({
       {/* Rodapé Oficial da Prancheta AEROCAD */}
       <footer className="border-t border-neutral-300 pt-4 mt-8">
         <div className="flex items-center justify-between text-[9px] text-neutral-500 font-mono">
-          <div>AEROCAD ENGENHARIA & CONSULTORIA AEROPORTUÁRIA · CNPJ 19.822.868/0001-38</div>
+          <div>
+            {INSTITUTIONAL_DATA.nomeComercial} · {INSTITUTIONAL_DATA.razaoSocial} · CNPJ{' '}
+            {INSTITUTIONAL_DATA.cnpj} · CHAVE PIX: {INSTITUTIONAL_DATA.chavePix}
+          </div>
           <div>Documento Oficial emitido pelo CRM AEROCAD · Folha 1/1</div>
+        </div>
+        <div className="text-[8px] text-neutral-400 font-mono mt-1">
+          {INSTITUTIONAL_DATA.endereco}
         </div>
       </footer>
     </div>

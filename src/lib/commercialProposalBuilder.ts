@@ -167,7 +167,7 @@ ${buildHeaderStyle()}
   <tr><th>Agência</th><td>${INSTITUTIONAL_DATA.agencia}</td></tr>
   <tr><th>Conta Corrente</th><td>${INSTITUTIONAL_DATA.contaCorrente}</td></tr>
   <tr><th>Favorecida</th><td>${INSTITUTIONAL_DATA.favorecida}</td></tr>
-  <tr><th>CNPJ / Chave PIX</th><td>${INSTITUTIONAL_DATA.chavePix}</td></tr>
+  <tr><th>CHAVE PIX (CNPJ)</th><td><strong>${INSTITUTIONAL_DATA.chavePix}</strong> (CNPJ ${INSTITUTIONAL_DATA.cnpj})</td></tr>
 </table>
 
 <div class="section-title">6. CONDIÇÕES COMERCIAIS</div>
@@ -189,7 +189,7 @@ ${buildHeaderStyle()}
   <p style="font-size: 11px; color: #444;">${cidadeData}</p>
   <div class="signature-line-inner">
     <strong>${INSTITUTIONAL_DATA.representantes.signataria.nome}</strong><br/>
-    ${INSTITUTIONAL_DATA.representantes.signataria.cargo} — AEROCAD® CONSULTORIA & AEROPORTOS<br/>
+    ${INSTITUTIONAL_DATA.representantes.signataria.cargo} — ${INSTITUTIONAL_DATA.nomeComercial}<br/>
     CNPJ ${INSTITUTIONAL_DATA.cnpj}
   </div>
 </div>
@@ -249,7 +249,7 @@ ${buildHeaderStyle()}
   <tr><th>Agência</th><td>${INSTITUTIONAL_DATA.agencia}</td></tr>
   <tr><th>Conta Corrente</th><td>${INSTITUTIONAL_DATA.contaCorrente}</td></tr>
   <tr><th>Favorecida</th><td>${INSTITUTIONAL_DATA.favorecida}</td></tr>
-  <tr><th>CNPJ / Chave PIX</th><td>${INSTITUTIONAL_DATA.chavePix}</td></tr>
+  <tr><th>CHAVE PIX (CNPJ)</th><td><strong>${INSTITUTIONAL_DATA.chavePix}</strong> (CNPJ ${INSTITUTIONAL_DATA.cnpj})</td></tr>
 </table>
 
 <div class="section-title">4. CONDIÇÕES GERAIS</div>
@@ -259,7 +259,7 @@ ${buildHeaderStyle()}
   <p style="font-size: 11px; color: #444;">${cidadeData}</p>
   <div class="signature-line-inner">
     <strong>${INSTITUTIONAL_DATA.representantes.signataria.nome}</strong><br/>
-    ${INSTITUTIONAL_DATA.representantes.signataria.cargo} — AEROCAD® CONSULTORIA & AEROPORTOS<br/>
+    ${INSTITUTIONAL_DATA.representantes.signataria.cargo} — ${INSTITUTIONAL_DATA.nomeComercial}<br/>
     CNPJ ${INSTITUTIONAL_DATA.cnpj}
   </div>
 </div>
@@ -509,7 +509,7 @@ ${Object.entries(gruposMarcos)
   <tr><th>Agência</th><td>${INSTITUTIONAL_DATA.agencia}</td></tr>
   <tr><th>Conta Corrente</th><td>${INSTITUTIONAL_DATA.contaCorrente}</td></tr>
   <tr><th>Favorecida</th><td>${INSTITUTIONAL_DATA.favorecida}</td></tr>
-  <tr><th>CNPJ / Chave PIX</th><td>${INSTITUTIONAL_DATA.chavePix}</td></tr>
+  <tr><th>CHAVE PIX (CNPJ)</th><td><strong>${INSTITUTIONAL_DATA.chavePix}</strong> (CNPJ ${INSTITUTIONAL_DATA.cnpj})</td></tr>
 </table>
 
 <div class="section-title">6. CONDIÇÕES COMERCIAIS</div>
@@ -532,7 +532,7 @@ ${Object.entries(gruposMarcos)
 
 <div class="section-title">8. DOCUMENTOS CADASTRAIS BÁSICOS ANEXOS</div>
 <ul style="font-size: 11px; line-height: 1.5; margin: 6px 0; padding-left: 20px;">
-  <li>Contrato Social consolidado da AEROCAD Terraplanagem e Construção LTDA;</li>
+  <li>Contrato Social consolidado da ${INSTITUTIONAL_DATA.razaoSocial};</li>
   <li>Documento do representante legal — ${INSTITUTIONAL_DATA.representantes.signataria.nome} (CPF ${INSTITUTIONAL_DATA.representantes.signataria.cpf});</li>
   <li>Comprovante de CNPJ (${INSTITUTIONAL_DATA.cnpj}) e Inscrição Estadual (${INSTITUTIONAL_DATA.inscricaoEstadual});</li>
   <li>Dados bancários (§5 desta PC);</li>
@@ -548,7 +548,7 @@ ${Object.entries(gruposMarcos)
   <p style="font-size: 11px; color: #444;">${cidadeData}</p>
   <div class="signature-line-inner">
     <strong>${INSTITUTIONAL_DATA.representantes.signataria.nome}</strong><br/>
-    ${INSTITUTIONAL_DATA.representantes.signataria.cargo} — AEROCAD® CONSULTORIA & AEROPORTOS<br/>
+    ${INSTITUTIONAL_DATA.representantes.signataria.cargo} — ${INSTITUTIONAL_DATA.nomeComercial}<br/>
     CNPJ ${INSTITUTIONAL_DATA.cnpj}
   </div>
 </div>

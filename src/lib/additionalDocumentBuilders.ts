@@ -59,7 +59,7 @@ export function buildContractHTML(data: ContractDocumentData): string {
   ${data.condicoesPagamento}
 </p>
 <p class="ct-p">
-  Os pagamentos serão efetuados mediante transferência bancária ou PIX em favor da CONTRATADA no <strong>Banco INTER (077)</strong>, Agência 0001, Conta Corrente 7637194-8, CNPJ/PIX: 28.036.597/0001-43. A Nota Fiscal de Serviços eletrônica (NFS-e) será emitida em até 5 (cinco) dias úteis após o cumprimento de cada marco comprobatório, com prazo de vencimento de 30 (trinta) dias.
+  Os pagamentos serão efetuados mediante transferência bancária ou PIX em favor da CONTRATADA no <strong>Banco INTER (077)</strong>, Agência 0001, Conta Corrente 7637194-8, Favorecida: ${INSTITUTIONAL_DATA.favorecida}, CHAVE PIX (CNPJ): ${INSTITUTIONAL_DATA.chavePix}. A Nota Fiscal de Serviços eletrônica (NFS-e) será emitida em até 5 (cinco) dias úteis após o cumprimento de cada marco comprobatório, com prazo de vencimento de 30 (trinta) dias.
 </p>
 
 <div class="ct-clause">CLÁUSULA 6ª — DO PRAZO DE EXECUÇÃO</div>
@@ -195,7 +195,7 @@ export function buildInternalServiceOrderHTML(
 
 <div class="os-container">
   <div class="os-title">ORDEM DE SERVIÇO INTERNA</div>
-  <div class="os-subtitle">OS Nº ${data.numeroOS} · AEROCAD ENGENHARIA & CONSULTORIA</div>
+  <div class="os-subtitle">OS Nº ${data.numeroOS} · ${INSTITUTIONAL_DATA.nomeComercial}</div>
 
   <div class="os-sec">1. IDENTIFICAÇÃO DO PROJETO & CLIENTE</div>
   <table class="os-table">
@@ -232,7 +232,7 @@ export function buildInternalServiceOrderHTML(
   <div class="os-sec">${observacoes ? '5' : '4'}. CLÁUSULAS OBRIGATÓRIAS E CONDIÇÕES CONTRATUAIS</div>
   <div class="os-clause-box">
     <div class="os-clause-item">
-      <strong>Cláusula 1ª (Quitação e Nota Fiscal):</strong> "O prestador será pago mediante a apresentação da nota fiscal emitida em favor do tomador (Aerocad Terraplanagem e Construção LTDA)."
+      <strong>Cláusula 1ª (Quitação e Nota Fiscal):</strong> "O prestador será pago mediante a apresentação da nota fiscal emitida em favor do tomador (${INSTITUTIONAL_DATA.razaoSocial})."
     </div>
     <div class="os-clause-item">
       <strong>Cláusula 2ª (Inexistência de Vínculo Empregatício):</strong> "Os serviços serão ou são prestados de maneira eventual, mediante demanda, e a execução deles por tempo determinado não caracteriza, sob nenhuma hipótese, vínculo empregatício com a AEROCAD."
@@ -368,7 +368,7 @@ export function buildInvoiceHTML(data: {
   <tr><th>Agência</th><td>${INSTITUTIONAL_DATA.agencia}</td></tr>
   <tr><th>Conta Corrente</th><td>${INSTITUTIONAL_DATA.contaCorrente}</td></tr>
   <tr><th>Favorecida</th><td>${INSTITUTIONAL_DATA.favorecida}</td></tr>
-  <tr><th>CNPJ / Chave PIX</th><td>${INSTITUTIONAL_DATA.chavePix}</td></tr>
+  <tr><th>CHAVE PIX (CNPJ)</th><td><strong>${INSTITUTIONAL_DATA.chavePix}</strong> (${INSTITUTIONAL_DATA.cnpj})</td></tr>
 </table>
 
 <p style="font-size: 10px; color: #666; font-style: italic; margin-top: 8px;">
@@ -417,7 +417,7 @@ export function buildReceiptHTML(data: {
 <table class="rb-table">
   <tr><th>Projeto Referência</th><td>${data.projetoNumero} — ${data.projetoNome}</td></tr>
   <tr><th>Valor Quitado</th><td><strong style="color: #FF6A13; font-size: 13px;">${formatCurrency(data.valor)}</strong></td></tr>
-  <tr><th>Forma de Liquidação</th><td>Transferência Bancária / PIX — Banco Inter (077)</td></tr>
+  <tr><th>Forma de Liquidação</th><td>Transferência Bancária / PIX — Banco INTER (077) · CHAVE PIX (CNPJ): ${INSTITUTIONAL_DATA.chavePix}</td></tr>
   <tr><th>Data da Quitação</th><td>${cidadeData}</td></tr>
 </table>
 

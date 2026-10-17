@@ -33,11 +33,12 @@ export async function obterDadosEmpresa(
     // Se a coleção estiver vazia (ex: réplica inicial), cria o registro padrão
     const novo = await pb.collection('empresa').create<EmpresaRecord>({
       chave,
-      razao_social: 'AEROCAD Terraplanagem e Construção Ltda.',
-      nome_fantasia: 'AEROCAD® CONSULTORIA & AEROPORTOS',
+      razao_social: 'AEROCAD TERRAPLANAGEM E CONSTRUÇÃO LTDA',
+      nome_fantasia: 'AEROCAD CONSULTORIA & AEROPORTOS',
       cnpj: '28.036.597/0001-43',
       inscricao_estadual: '07.815.970/001-59',
-      endereco: 'SBS Quadra 2, Sala 206, Ed. Prime Business, Asa Sul, CEP 70.070-120, Brasília-DF',
+      endereco:
+        'SBS QUADRA 2 SALA 206 SOBRELOJA, ED. PRIME BUSINESS, ASA SUL, CEP.: 70.070-120, BRASÍLIA/DF.',
       cidade_uf: 'Brasília / DF',
       cep: '70.070-120',
       telefone: '+55 61 9 8462-8800',
@@ -46,7 +47,7 @@ export async function obterDadosEmpresa(
       banco_nome: 'INTER (077)',
       banco_agencia: '0001',
       banco_conta: '7637194-8',
-      chave_pix: '28.036.597/0001-43',
+      chave_pix: '28036597000143',
       capital_social: 100000,
       data_constituicao: '2017-06-26',
       cnae_principal: '71.12-0-00 - Serviços de engenharia aeroportuária e consultoria técnica',

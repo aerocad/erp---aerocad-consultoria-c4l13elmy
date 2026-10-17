@@ -1857,9 +1857,12 @@ export default function ProjectDetailPage() {
                       <div className="grid grid-cols-2 gap-8">
                         <div className="border-t border-neutral-400 pt-2 text-center text-[10px]">
                           <strong className="block text-neutral-900">
-                            AEROCAD TERRAPLANAGEM E CONSTRUÇÃO LTDA
+                            {INSTITUTIONAL_DATA.razaoSocial}
                           </strong>
                           <span className="text-neutral-500">Tomador dos Serviços</span>
+                          <div className="text-[9px] text-neutral-400 font-mono">
+                            CNPJ: {INSTITUTIONAL_DATA.cnpj}
+                          </div>
                         </div>
                         <div className="border-t border-neutral-400 pt-2 text-center text-[10px]">
                           <strong className="block text-neutral-900">
@@ -1879,9 +1882,14 @@ export default function ProjectDetailPage() {
                   <footer className="border-t border-neutral-300 pt-3 mt-8">
                     <div className="flex items-center justify-between text-[9px] text-neutral-500 font-mono">
                       <div>
-                        AEROCAD ENGENHARIA & CONSULTORIA AEROPORTUÁRIA · CNPJ 19.822.868/0001-38
+                        {INSTITUTIONAL_DATA.nomeComercial} · {INSTITUTIONAL_DATA.razaoSocial} · CNPJ{' '}
+                        {INSTITUTIONAL_DATA.cnpj}
                       </div>
                       <div>Ordem de Serviço Emitida via CRM AEROCAD</div>
+                    </div>
+                    <div className="text-[8px] text-neutral-400 font-mono mt-0.5">
+                      {INSTITUTIONAL_DATA.endereco} · CHAVE PIX (CNPJ):{' '}
+                      {INSTITUTIONAL_DATA.chavePix}
                     </div>
                   </footer>
                 </div>

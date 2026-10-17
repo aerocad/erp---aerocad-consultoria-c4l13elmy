@@ -176,11 +176,16 @@ export const PALETA_AEROCAD_2026 = {
 }
 
 export const INSTITUTIONAL_DATA = {
-  razaoSocial: 'AEROCAD Terraplanagem e Construção Ltda.',
-  nomeFantasia: 'AEROCAD® CONSULTORIA & AEROPORTOS',
+  nomeComercial: 'AEROCAD CONSULTORIA & AEROPORTOS',
+  nomeFantasia: 'AEROCAD CONSULTORIA & AEROPORTOS',
+  razaoSocial: 'AEROCAD TERRAPLANAGEM E CONSTRUÇÃO LTDA',
   cnpj: '28.036.597/0001-43',
+  cnpjFormatado: '28.036.597/0001-43',
   inscricaoEstadual: '07.815.970/001-59',
-  endereco: 'SBS Quadra 2, Sala 206, Ed. Prime Business, Asa Sul, CEP 70.070-120, Brasília-DF',
+  endereco:
+    'SBS QUADRA 2 SALA 206 SOBRELOJA, ED. PRIME BUSINESS, ASA SUL, CEP.: 70.070-120, BRASÍLIA/DF.',
+  cidadeUf: 'Brasília/DF',
+  cep: '70.070-120',
   telefone: '+55 61 9 8462-8800',
   email: 'contato@aerocad.com.br',
   website: 'www.aerocad.com.br',
@@ -188,7 +193,8 @@ export const INSTITUTIONAL_DATA = {
   agencia: '0001',
   contaCorrente: '7637194-8',
   favorecida: 'AEROCAD TERRAPLANAGEM E CONSTRUÇÃO LTDA',
-  chavePix: '28.036.597/0001-43',
+  chavePix: '28036597000143',
+  chavePixFormatada: '28.036.597/0001-43',
   representantes: {
     signataria: {
       nome: 'Jaqueline Mota de Freitas Saraiva',

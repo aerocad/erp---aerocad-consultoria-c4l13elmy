@@ -173,7 +173,7 @@ export const TIPOS_SERVICO_ORDEM_SERVICO_PADRAO: string[] = [
 ]
 
 export const CLAUSULAS_OBRIGATORIAS_ORDEM_SERVICO = [
-  'O prestador será pago mediante a apresentação da nota fiscal emitida em favor do tomador (Aerocad Terraplanagem e Construção LTDA).',
+  'O prestador será pago mediante a apresentação da nota fiscal emitida em favor do tomador (AEROCAD TERRAPLANAGEM E CONSTRUÇÃO LTDA).',
   'Os serviços serão ou são prestados de maneira eventual, mediante demanda, e a execução deles por tempo determinado não caracteriza, sob nenhuma hipótese, vínculo empregatício com a AEROCAD.',
 ]
 

@@ -729,7 +729,7 @@ ${baseDocStyle()}
   <p style="font-size: 11px; color: #444;">${cidadeData}</p>
   <div style="display: inline-block; width: 340px; border-top: 1px solid #555; padding-top: 8px; margin-top: 18px; font-size: 11px;">
     <strong>${INSTITUTIONAL_DATA.representantes.responsavelTecnico.nome}</strong><br/>
-    ${INSTITUTIONAL_DATA.representantes.responsavelTecnico.cargo} — AEROCAD® CONSULTORIA & AEROPORTOS<br/>
+    ${INSTITUTIONAL_DATA.representantes.responsavelTecnico.cargo} — ${INSTITUTIONAL_DATA.nomeComercial}<br/>
     ${INSTITUTIONAL_DATA.representantes.responsavelTecnico.crea}
   </div>
 </div>

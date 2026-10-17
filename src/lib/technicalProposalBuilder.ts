@@ -527,7 +527,7 @@ export function buildTechnicalProposalHTML(data: TechnicalProposalData): string 
   <p style="font-size: 11px; color: #444;">${cidadeData}</p>
   <div style="display: inline-block; width: 340px; border-top: 1px solid #555; padding-top: 8px; margin-top: 24px; font-size: 11px;">
     <strong>${INSTITUTIONAL_DATA.representantes.signataria.nome}</strong><br/>
-    ${INSTITUTIONAL_DATA.representantes.signataria.cargo} — AEROCAD® CONSULTORIA & AEROPORTOS<br/>
+    ${INSTITUTIONAL_DATA.representantes.signataria.cargo} — ${INSTITUTIONAL_DATA.nomeComercial}<br/>
     CNPJ ${INSTITUTIONAL_DATA.cnpj}
   </div>
 </div>

@@ -447,18 +447,17 @@ export function buildPCVinculadaRFSHTML(data: PCVinculadaRFSData): string {
   <tr><th style="background:#F8F9FA;">Agência</th><td>${INSTITUTIONAL_DATA.agencia}</td></tr>
   <tr><th style="background:#F8F9FA;">Conta Corrente</th><td>${INSTITUTIONAL_DATA.contaCorrente}</td></tr>
   <tr><th style="background:#F8F9FA;">Favorecida</th><td>${INSTITUTIONAL_DATA.favorecida}</td></tr>
-  <tr><th style="background:#F8F9FA;">CNPJ / Chave PIX</th><td>${INSTITUTIONAL_DATA.chavePix}</td></tr>
+  <tr><th style="background:#F8F9FA;">CHAVE PIX (CNPJ)</th><td><strong>${INSTITUTIONAL_DATA.chavePix}</strong> (CNPJ ${INSTITUTIONAL_DATA.cnpj})</td></tr>
 </table>
 
 <div style="margin-top: 30px; text-align: center; page-break-inside: avoid;">
   <p style="font-size: 11px; color: #444;">${cidadeData}</p>
-  <div style="display: inline-block; width: 340px; border-top: 1px solid #555; padding-top: 8px; margin-top: 20px; font-size: 11px;">
+  <div style="display: inline-block; width: 340px; border-top: 1px solid #444; padding-top: 6px; margin-top: 24px; font-size: 11px;">
     <strong>${INSTITUTIONAL_DATA.representantes.signataria.nome}</strong><br/>
-    ${INSTITUTIONAL_DATA.representantes.signataria.cargo} — AEROCAD® CONSULTORIA & AEROPORTOS<br/>
+    ${INSTITUTIONAL_DATA.representantes.signataria.cargo} — ${INSTITUTIONAL_DATA.nomeComercial}<br/>
     CNPJ ${INSTITUTIONAL_DATA.cnpj}
   </div>
-</div>
-`
+</div>`
 }
 
 // ==========================================
@@ -685,18 +684,17 @@ ${blocos
   <tr><th style="background:#F8F9FA;">Agência</th><td>${INSTITUTIONAL_DATA.agencia}</td></tr>
   <tr><th style="background:#F8F9FA;">Conta Corrente</th><td>${INSTITUTIONAL_DATA.contaCorrente}</td></tr>
   <tr><th style="background:#F8F9FA;">Favorecida</th><td>${INSTITUTIONAL_DATA.favorecida}</td></tr>
-  <tr><th style="background:#F8F9FA;">CNPJ / Chave PIX</th><td>${INSTITUTIONAL_DATA.chavePix}</td></tr>
+  <tr><th style="background:#F8F9FA;">CHAVE PIX (CNPJ)</th><td><strong>${INSTITUTIONAL_DATA.chavePix}</strong> (CNPJ ${INSTITUTIONAL_DATA.cnpj})</td></tr>
 </table>
 
-<div style="margin-top: 24px; text-align: center; page-break-inside: avoid;">
+<div style="margin-top: 30px; text-align: center; page-break-inside: avoid;">
   <p style="font-size: 11px; color: #444;">${cidadeData}</p>
-  <div style="display: inline-block; width: 340px; border-top: 1px solid #555; padding-top: 8px; margin-top: 18px; font-size: 11px;">
+  <div style="display: inline-block; width: 340px; border-top: 1px solid #444; padding-top: 6px; margin-top: 24px; font-size: 11px;">
     <strong>${INSTITUTIONAL_DATA.representantes.signataria.nome}</strong><br/>
-    ${INSTITUTIONAL_DATA.representantes.signataria.cargo} — AEROCAD® CONSULTORIA & AEROPORTOS<br/>
+    ${INSTITUTIONAL_DATA.representantes.signataria.cargo} — ${INSTITUTIONAL_DATA.nomeComercial}<br/>
     CNPJ ${INSTITUTIONAL_DATA.cnpj}
   </div>
-</div>
-`
+</div>`
 }
 
 // ==========================================
@@ -811,18 +809,17 @@ export function buildPC2OpcoesContratacaoHTML(data: PC2OpcoesContratacaoData): s
   <tr><th style="background:#F8F9FA;">Agência</th><td>${INSTITUTIONAL_DATA.agencia}</td></tr>
   <tr><th style="background:#F8F9FA;">Conta Corrente</th><td>${INSTITUTIONAL_DATA.contaCorrente}</td></tr>
   <tr><th style="background:#F8F9FA;">Favorecida</th><td>${INSTITUTIONAL_DATA.favorecida}</td></tr>
-  <tr><th style="background:#F8F9FA;">CNPJ / Chave PIX</th><td>${INSTITUTIONAL_DATA.chavePix}</td></tr>
+  <tr><th style="background:#F8F9FA;">CHAVE PIX (CNPJ)</th><td><strong>${INSTITUTIONAL_DATA.chavePix}</strong> (CNPJ ${INSTITUTIONAL_DATA.cnpj})</td></tr>
 </table>
 
-<div style="margin-top: 24px; text-align: center; page-break-inside: avoid;">
+<div style="margin-top: 30px; text-align: center; page-break-inside: avoid;">
   <p style="font-size: 11px; color: #444;">${cidadeData}</p>
-  <div style="display: inline-block; width: 340px; border-top: 1px solid #555; padding-top: 8px; margin-top: 18px; font-size: 11px;">
+  <div style="display: inline-block; width: 340px; border-top: 1px solid #444; padding-top: 6px; margin-top: 24px; font-size: 11px;">
     <strong>${INSTITUTIONAL_DATA.representantes.signataria.nome}</strong><br/>
-    ${INSTITUTIONAL_DATA.representantes.signataria.cargo} — AEROCAD® CONSULTORIA & AEROPORTOS<br/>
+    ${INSTITUTIONAL_DATA.representantes.signataria.cargo} — ${INSTITUTIONAL_DATA.nomeComercial}<br/>
     CNPJ ${INSTITUTIONAL_DATA.cnpj}
   </div>
-</div>
-`
+</div>`
 }
 
 // ==========================================
@@ -997,16 +994,15 @@ export function buildPCMedicaoItemAItemHTML(data: PCMedicaoItemAItemData): strin
   <tr><th style="background:#F8F9FA;">Agência</th><td>${INSTITUTIONAL_DATA.agencia}</td></tr>
   <tr><th style="background:#F8F9FA;">Conta Corrente</th><td>${INSTITUTIONAL_DATA.contaCorrente}</td></tr>
   <tr><th style="background:#F8F9FA;">Favorecida</th><td>${INSTITUTIONAL_DATA.favorecida}</td></tr>
-  <tr><th style="background:#F8F9FA;">CNPJ / Chave PIX</th><td>${INSTITUTIONAL_DATA.chavePix}</td></tr>
+  <tr><th style="background:#F8F9FA;">CHAVE PIX (CNPJ)</th><td><strong>${INSTITUTIONAL_DATA.chavePix}</strong> (CNPJ ${INSTITUTIONAL_DATA.cnpj})</td></tr>
 </table>
 
-<div style="margin-top: 24px; text-align: center; page-break-inside: avoid;">
+<div style="margin-top: 30px; text-align: center; page-break-inside: avoid;">
   <p style="font-size: 11px; color: #444;">${cidadeData}</p>
-  <div style="display: inline-block; width: 340px; border-top: 1px solid #555; padding-top: 8px; margin-top: 18px; font-size: 11px;">
+  <div style="display: inline-block; width: 340px; border-top: 1px solid #444; padding-top: 6px; margin-top: 24px; font-size: 11px;">
     <strong>${INSTITUTIONAL_DATA.representantes.signataria.nome}</strong><br/>
-    ${INSTITUTIONAL_DATA.representantes.signataria.cargo} — AEROCAD® CONSULTORIA & AEROPORTOS<br/>
+    ${INSTITUTIONAL_DATA.representantes.signataria.cargo} — ${INSTITUTIONAL_DATA.nomeComercial}<br/>
     CNPJ ${INSTITUTIONAL_DATA.cnpj}
   </div>
-</div>
-`
+</div>`
 }
