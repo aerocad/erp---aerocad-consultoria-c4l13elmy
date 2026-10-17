@@ -949,8 +949,85 @@ export function BalancetesTab({
     }
   }
 
+  // Regeneração de todas as referências desatualizadas
+  const handleRegenerarDesatualizados = async () => {
+    if (!canWrite) return
+    const refs = [...referenciasDesatualizadas]
+    for (const ref of refs) {
+      const [anoStr, mesStr] = ref.split('-')
+      const ano = Number(anoStr)
+      const mes = Number(mesStr)
+      if (!isNaN(ano) && !isNaN(mes)) {
+        await handleGerarBalancete(ano, mes)
+      }
+    }
+    setReferenciasDesatualizadas([])
+  }
+
+  // Formata lista de referências (YYYY-MM -> MM/AAAA)
+  const formatarReferenciasTexto = (refs: string[]) => {
+    return refs
+      .map((r) => {
+        const parts = r.split('-')
+        if (parts.length === 2) {
+          return `${parts[1]}/${parts[0]}`
+        }
+        return r
+      })
+      .join(', ')
+  }
+
   return (
     <div className="space-y-6">
+      {/* Banner de Balancetes Desatualizados pós-reclassificação */}
+      {referenciasDesatualizadas.length > 0 && (
+        <div className="rounded-xl border border-[#FF6A13]/40 bg-gradient-to-r from-[#FFF6EC] via-white to-[#FFF6EC] p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in duration-300">
+          <div className="flex items-start sm:items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#FF6A13] text-white shadow-xs">
+              <AlertCircle className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[#FF6A13] bg-orange-100 px-2 py-0.5 rounded-full">
+                  Aviso Contábil AEROCAD
+                </span>
+                <span className="text-xs font-bold text-neutral-900">
+                  Balancetes Oficiais Desatualizados
+                </span>
+              </div>
+              <p className="text-xs text-neutral-600 mt-0.5">
+                Há balancetes oficiais desatualizados após reclassificação contábil — competências:{' '}
+                <strong className="font-mono text-[#D65100]">
+                  {formatarReferenciasTexto(referenciasDesatualizadas)}
+                </strong>
+                .
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {canWrite && (
+              <Button
+                onClick={handleRegenerarDesatualizados}
+                disabled={gerando}
+                className="bg-[#FF6A13] hover:bg-[#E85B06] text-white font-bold text-xs h-8 px-3 shadow-xs"
+              >
+                <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${gerando ? 'animate-spin' : ''}`} />
+                {gerando ? 'Regenerando...' : 'Regenerar agora'}
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setReferenciasDesatualizadas([])}
+              className="h-8 px-2 text-xs text-neutral-500 hover:text-neutral-800"
+              title="Ignorar aviso temporariamente"
+            >
+              Ignorar
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* 1. Header do Balancete */}
       <div className="crm-card border-[#FF6A13]/25 bg-gradient-to-br from-white via-[#FFFBF8] to-[#FFF5ED] p-5 shadow-xs">
         <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
@@ -1773,16 +1850,16 @@ export function BalancetesTab({
                   </tr>
                 ) : (
                   contaSelecionadaModal?.lancamentos.map((lanc) => {
-                    const idParaReclassificar =
+                    const targetId =
                       lanc.registroIdOriginal || lanc.id.replace(/^(parc|cp|cr|tx)-/, '')
-                    const tipoRegistro =
-                      lanc.origem === 'conta_pagar'
-                        ? 'conta_pagar'
-                        : lanc.origem === 'extrato'
-                          ? 'extrato_transacao'
-                          : lanc.origem === 'receita_avulsa'
-                            ? 'conta_receber'
-                            : 'parcela'
+                    const targetColecao =
+                      lanc.origem === 'extrato'
+                        ? 'extratos_transacoes'
+                        : lanc.origem === 'conta_pagar'
+                          ? 'contas_pagar'
+                          : lanc.origem === 'parcela'
+                            ? 'parcelas'
+                            : 'contas_receber'
 
                     return (
                       <tr key={lanc.id} className="hover:bg-neutral-50">
@@ -1815,22 +1892,28 @@ export function BalancetesTab({
                           {formatCurrency(lanc.valor)}
                         </td>
                         <td className="px-3 py-2">
-                          <ContaContabilBadgeInline
-                            tipoRegistro={tipoRegistro}
-                            registroId={idParaReclassificar}
-                            codigoAtual={lanc.codigoConta}
-                            nomeAtual={lanc.nomeConta}
-                            classificacaoManual={lanc.classificacaoManual}
-                            dataRegistro={lanc.data}
-                            descricaoRegistro={lanc.descricao}
-                            compacto={false}
-                            onReclassificado={(novoCod, novoNome) => {
-                              lanc.codigoConta = novoCod
-                              lanc.nomeConta = novoNome
-                              lanc.classificacaoManual = true
-                              handleReclassificacaoSucesso()
-                            }}
-                          />
+                          {targetColecao && targetId ? (
+                            <ContaContabilBadgeInline
+                              colecao={targetColecao}
+                              id={targetId}
+                              codigoAtual={lanc.codigoConta}
+                              nomeAtual={lanc.nomeConta}
+                              classificacaoManual={lanc.classificacaoManual}
+                              dataRegistro={lanc.data}
+                              descricaoRegistro={lanc.descricao}
+                              compacto={false}
+                              onReclassificado={(novoCod, novoNome) => {
+                                lanc.codigoConta = novoCod
+                                lanc.nomeConta = novoNome
+                                lanc.classificacaoManual = true
+                                handleReclassificacaoSucesso()
+                              }}
+                            />
+                          ) : (
+                            <span className="font-mono text-xs text-neutral-600">
+                              {lanc.codigoConta || 'Sem conta'}
+                            </span>
+                          )}
                         </td>
                       </tr>
                     )

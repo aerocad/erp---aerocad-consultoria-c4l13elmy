@@ -28,6 +28,7 @@ import { PLANO_CONTAS_AEROCAD, sugerirPlanoContasPorCategoria } from '@/lib/plan
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Building2 } from 'lucide-react'
+import { ContaContabilBadgeInline } from './ContaContabilBadgeInline'
 import {
   AnexosMultiplosContasPagar,
   type ArquivoPendenteSegregado,
@@ -811,17 +812,33 @@ export function ContasPagarTab({
                       </td>
 
                       <td className="px-4 py-3">
-                        <div className="space-y-0.5 max-w-[200px]">
-                          <CrmBadge tone="gray">
-                            {CATEGORIA_PAGAR_LABELS[conta.categoria] || conta.categoria}
-                          </CrmBadge>
-                          {conta.plano_contas_codigo && (
-                            <p
-                              className="text-[10px] text-neutral-500 font-mono truncate"
-                              title={conta.plano_contas_nome || ''}
-                            >
-                              {conta.plano_contas_codigo} · {conta.plano_contas_nome || ''}
-                            </p>
+                        <div className="space-y-1 max-w-[220px]">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <CrmBadge tone="gray">
+                              {CATEGORIA_PAGAR_LABELS[conta.categoria] || conta.categoria}
+                            </CrmBadge>
+                          </div>
+                          {conta.id && (
+                            <ContaContabilBadgeInline
+                              colecao="contas_pagar"
+                              id={conta.id}
+                              codigoAtual={conta.plano_contas_codigo}
+                              nomeAtual={conta.plano_contas_nome}
+                              classificacaoManual={Boolean(conta.classificacao_manual)}
+                              dataRegistro={conta.data_vencimento || conta.data_pagamento}
+                              descricaoRegistro={conta.descricao}
+                              compacto={true}
+                              onReclassificado={async (novoCod, novoNom) => {
+                                conta.plano_contas_codigo = novoCod
+                                conta.plano_contas_nome = novoNom
+                                conta.classificacao_manual = true
+                                try {
+                                  await onReload()
+                                } catch (_) {
+                                  // Fallback seguro se reload falhar
+                                }
+                              }}
+                            />
                           )}
                         </div>
                       </td>

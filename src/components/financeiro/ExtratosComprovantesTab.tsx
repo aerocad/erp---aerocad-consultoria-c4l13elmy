@@ -74,6 +74,7 @@ import {
   type TransacaoCandidataImportacao,
 } from '@/services/extratoDeduplicador'
 import { PreviaImportacaoExtratoModal } from './PreviaImportacaoExtratoModal'
+import { ContaContabilBadgeInline } from './ContaContabilBadgeInline'
 import type {
   ContaPagarRecord,
   ContaReceberRecord,
@@ -1516,6 +1517,7 @@ export function ExtratosComprovantesTab({
                   {canWrite && <th className="px-3 py-3 w-8 text-center">Sel.</th>}
                   <th className="px-4 py-3">Data</th>
                   <th className="px-4 py-3">Descrição da Movimentação</th>
+                  <th className="px-4 py-3">Conta Contábil</th>
                   <th className="px-4 py-3">Documento Ref.</th>
                   <th className="px-4 py-3">Valor</th>
                   <th className="px-4 py-3">Status</th>
@@ -1561,16 +1563,43 @@ export function ExtratosComprovantesTab({
                       <td className="px-4 py-3">
                         <div className="space-y-0.5 max-w-[340px]">
                           <p className="font-semibold text-neutral-900 line-clamp-1">
-                            {tx.descricao}
+                            {tx?.descricao || '—'}
                           </p>
-                          {tx.observacoes && (
+                          {tx?.observacoes && (
                             <p className="text-[11px] text-emerald-700 italic">{tx.observacoes}</p>
                           )}
                         </div>
                       </td>
 
+                      <td className="px-4 py-3">
+                        {tx?.id ? (
+                          <ContaContabilBadgeInline
+                            colecao="extratos_transacoes"
+                            id={tx.id}
+                            codigoAtual={tx.plano_contas_codigo}
+                            nomeAtual={tx.plano_contas_nome}
+                            classificacaoManual={Boolean(tx.classificacao_manual)}
+                            dataRegistro={tx.data}
+                            descricaoRegistro={tx.descricao}
+                            compacto={true}
+                            onReclassificado={async (novoCod, novoNom) => {
+                              tx.plano_contas_codigo = novoCod
+                              tx.plano_contas_nome = novoNom
+                              tx.classificacao_manual = true
+                              try {
+                                await onReloadTransacoes()
+                              } catch (_) {
+                                // Fallback seguro se reload falhar
+                              }
+                            }}
+                          />
+                        ) : (
+                          <span className="text-neutral-400 italic text-[11px]">Sem conta</span>
+                        )}
+                      </td>
+
                       <td className="px-4 py-3 whitespace-nowrap text-neutral-500 font-mono text-[11px]">
-                        {tx.documento_ref || '—'}
+                        {tx?.documento_ref || '—'}
                       </td>
 
                       <td className="px-4 py-3 whitespace-nowrap">
