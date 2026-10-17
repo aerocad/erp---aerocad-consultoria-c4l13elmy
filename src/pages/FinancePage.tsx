@@ -1718,7 +1718,19 @@ export function FinancePage() {
             contasPagar={contasPagar.data}
             parcelas={installments.data}
             contasReceber={contasReceber.data}
+            extratosTransacoes={extratosTransacoes.data}
+            contasBancarias={contasBancarias.data}
+            ativosPatrimonio={ativosPatrimonio.data}
             canWrite={canWrite}
+            onNavegarParaLancamentos={(tipo, filtro) => {
+              if (tipo === 'pagar') {
+                setActiveTab('contas_pagar')
+              } else if (tipo === 'receber') {
+                setActiveTab('contas_receber')
+              } else if (tipo === 'extratos') {
+                setActiveTab('extratos')
+              }
+            }}
           />
         </div>
       ) : activeTab === 'relatorios' ? (
