@@ -156,7 +156,7 @@ export function PlanoContasTab({
 }: PlanoContasTabProps) {
   const { user } = useAuth()
   const { ocultarValores } = useFinanceiroVisibilidade()
-  const canExportAndPrint = user?.role === 'admin' || user?.role === 'financeiro'
+  const canExportAndPrint = Boolean(user?.role === 'admin' || user?.role === 'financeiro')
 
   const anoAtualCorrente = new Date().getFullYear()
   const [filtroAno, setFiltroAno] = useState<string>(String(anoAtualCorrente))
@@ -176,56 +176,77 @@ export function PlanoContasTab({
     '4': true,
   })
 
-  // 0. Extração dinâmica de anos disponíveis nos dados financeiros
+  // Extrai o ano de uma string de data (ISO 'YYYY-MM-DD...', BR 'DD/MM/YYYY' ou timestamp) de forma defensiva
+  const extrairAnoDeData = (dataStr?: string | null): number | null => {
+    if (!dataStr || typeof dataStr !== 'string') return null
+    const limpo = dataStr.trim()
+    if (!limpo) return null
+
+    // Formato ISO: '2026-03-15...'
+    if (/^\d{4}/.test(limpo)) {
+      const y = Number(limpo.slice(0, 4))
+      if (!isNaN(y) && y >= 2000 && y <= 2050) return y
+    }
+
+    // Formato brasileiro: '15/03/2026' ou '15-03-2026'
+    const matchBr = limpo.match(/\d{2}[/-]\d{2}[/-](\d{4})/)
+    if (matchBr && matchBr[1]) {
+      const y = Number(matchBr[1])
+      if (!isNaN(y) && y >= 2000 && y <= 2050) return y
+    }
+
+    // Fallback defensivo com Date.parse
+    try {
+      const parsed = new Date(limpo)
+      if (!isNaN(parsed.getTime())) {
+        const y = parsed.getFullYear()
+        if (y >= 2000 && y <= 2050) return y
+      }
+    } catch {
+      // Ignora silenciosamente para não quebrar a aplicação
+    }
+
+    return null
+  }
+
+  // 0. Extração dinâmica de anos disponíveis nos dados financeiros reais
   const anosDisponiveis = useMemo(() => {
     const anos = new Set<number>()
+    // Garante no mínimo o ano corrente
     anos.add(anoAtualCorrente)
-    anos.add(anoAtualCorrente - 1)
-    anos.add(2026)
-    anos.add(2025)
-    anos.add(2024)
+
+    const coletarAno = (dataStr?: string | null) => {
+      const y = extrairAnoDeData(dataStr)
+      if (y) anos.add(y)
+    }
 
     parcelas.forEach((p) => {
-      const d = p.data_pagamento || p.data_faturamento || p.vencimento || p.created
-      if (d) {
-        const y = Number(d.slice(0, 4))
-        if (!isNaN(y) && y >= 2015 && y <= 2035) anos.add(y)
-      }
+      coletarAno(p.data_pagamento)
+      coletarAno(p.data_faturamento)
+      coletarAno(p.vencimento)
+      coletarAno(p.created)
     })
     contasPagar.forEach((c) => {
-      const d = c.data_pagamento || c.data_vencimento || c.created
-      if (d) {
-        const y = Number(d.slice(0, 4))
-        if (!isNaN(y) && y >= 2015 && y <= 2035) anos.add(y)
-      }
+      coletarAno(c.data_pagamento)
+      coletarAno(c.data_vencimento)
+      coletarAno(c.created)
     })
     contasReceber.forEach((c) => {
-      const d = c.data_recebimento || c.data_vencimento || c.created
-      if (d) {
-        const y = Number(d.slice(0, 4))
-        if (!isNaN(y) && y >= 2015 && y <= 2035) anos.add(y)
-      }
+      coletarAno(c.data_recebimento)
+      coletarAno(c.data_vencimento)
+      coletarAno(c.created)
     })
     extratosTransacoes.forEach((tx) => {
-      const d = tx.data || tx.created
-      if (d) {
-        const y = Number(d.slice(0, 4))
-        if (!isNaN(y) && y >= 2015 && y <= 2035) anos.add(y)
-      }
+      coletarAno(tx.data)
+      coletarAno(tx.created)
     })
     ativosPatrimonio.forEach((at) => {
-      const d = at.data_aquisicao || at.created
-      if (d) {
-        const y = Number(d.slice(0, 4))
-        if (!isNaN(y) && y >= 2015 && y <= 2035) anos.add(y)
-      }
+      coletarAno(at.data_aquisicao)
+      coletarAno(at.created)
     })
     contasBancarias.forEach((cb) => {
-      const d = cb.data_saldo_inicial || cb.created
-      if (d) {
-        const y = Number(d.slice(0, 4))
-        if (!isNaN(y) && y >= 2015 && y <= 2035) anos.add(y)
-      }
+      coletarAno(cb.data_saldo_inicial)
+      coletarAno(cb.created)
     })
 
     return Array.from(anos).sort((a, b) => b - a)
@@ -239,11 +260,14 @@ export function PlanoContasTab({
     contasBancarias,
   ])
 
-  // Helper defensivo para testar se uma data pertence ao ano filtrado
+  // Helper defensivo para testar se uma data pertence ao ano filtrado.
+  // Se filtroAno for 'todos', aceita qualquer registro (mesmo sem data ou com data nula/inválida).
+  // Se houver um ano específico selecionado, extrai defensivamente o ano do registro.
   const correspondeAoAno = (dataStr?: string | null): boolean => {
     if (!filtroAno || filtroAno === 'todos') return true
     if (!dataStr) return false
-    return dataStr.startsWith(filtroAno)
+    const y = extrairAnoDeData(dataStr)
+    return y !== null && String(y) === String(filtroAno)
   }
 
   // 1. Mapear lançamentos da AEROCAD respeitando o filtro de ANO selecionado
@@ -253,22 +277,25 @@ export function PlanoContasTab({
     // 1.1 Disponibilidades (Contas Bancárias PJ no Ativo 1.1.1)
     for (const cb of contasBancarias) {
       const dataCb = cb.data_saldo_inicial || cb.created?.slice(0, 10) || ''
-      if (correspondeAoAno(dataCb) && cb.saldo_atual && Math.abs(cb.saldo_atual) > 0) {
-        lista.push({
-          id: `cb-${cb.id}`,
-          origem: 'conta_bancaria',
-          origemLabel: 'Conta Bancária PJ',
-          codigoConta: '1.1.1',
-          nomeConta: 'Disponibilidades (Bancos Conta Movimento PJ)',
-          natureza: 'ativo',
-          descricao: `Saldo em Conta Corrente PJ (${cb.banco_nome || 'Banco'} · Ag: ${cb.agencia || '-'} CC: ${cb.conta_corrente || '-'})`,
-          entidade: cb.banco_nome || 'Banco PJ',
-          data: dataCb || `${filtroAno !== 'todos' ? filtroAno : anoAtualCorrente}-01-01`,
-          valor: Math.abs(cb.saldo_atual),
-          tipoMovimento: 'debito',
-          status: cb.status === 'ativa' ? 'Ativa' : 'Inativa',
-          documentoRef: cb.tipo_chave_pix ? `PIX: ${cb.chave_pix}` : undefined,
-        })
+      if (correspondeAoAno(dataCb)) {
+        const saldo = Number(cb.saldo_atual) || 0
+        if (Math.abs(saldo) > 0) {
+          lista.push({
+            id: `cb-${cb.id}`,
+            origem: 'conta_bancaria',
+            origemLabel: 'Conta Bancária PJ',
+            codigoConta: '1.1.1',
+            nomeConta: 'Disponibilidades (Bancos Conta Movimento PJ)',
+            natureza: 'ativo',
+            descricao: `Saldo em Conta Corrente PJ (${cb.banco_nome || 'Banco'} · Ag: ${cb.agencia || '-'} CC: ${cb.conta_corrente || '-'})`,
+            entidade: cb.banco_nome || 'Banco PJ',
+            data: dataCb || `${filtroAno !== 'todos' ? filtroAno : anoAtualCorrente}-01-01`,
+            valor: Math.abs(saldo),
+            tipoMovimento: saldo >= 0 ? 'debito' : 'credito',
+            status: cb.status === 'ativa' ? 'Ativa' : 'Inativa',
+            documentoRef: cb.tipo_chave_pix ? `PIX: ${cb.chave_pix}` : undefined,
+          })
+        }
       }
     }
 
@@ -277,6 +304,7 @@ export function PlanoContasTab({
       const dataAt = at.data_aquisicao || at.created?.slice(0, 10) || ''
       if (correspondeAoAno(dataAt)) {
         const contaAlvo = classificarAtivoPatrimonio(at)
+        const valorAtivo = Number(at.valor_contabil_atual) || Number(at.valor_aquisicao) || 0
         lista.push({
           id: `at-${at.id}`,
           origem: 'ativo',
@@ -284,10 +312,10 @@ export function PlanoContasTab({
           codigoConta: contaAlvo.codigo,
           nomeConta: contaAlvo.nome,
           natureza: 'ativo',
-          descricao: `${at.descricao || at.categoria} (${at.identificador_codigo || 'Sem código'})`,
+          descricao: `${at.descricao || at.categoria || 'Ativo Patrimonial'} (${at.identificador_codigo || 'Sem código'})`,
           entidade: at.fornecedor_nome || at.expand?.credor?.nome_razao_social || 'AEROCAD',
           data: dataAt,
-          valor: at.valor_contabil_atual || at.valor_aquisicao || 0,
+          valor: Math.abs(valorAtivo),
           tipoMovimento: 'debito',
           status: at.status || 'ativo',
           documentoRef: at.numero_nf_registro ? `NF ${at.numero_nf_registro}` : undefined,
@@ -300,7 +328,7 @@ export function PlanoContasTab({
       const dataCr = cr.data_recebimento || cr.data_vencimento || cr.created?.slice(0, 10) || ''
       if (correspondeAoAno(dataCr)) {
         const contaReceita = classificarContaReceber(cr)
-        const val = cr.valor || cr.valor_recebido || 0
+        const val = Number(cr.valor) || Number(cr.valor_recebido) || 0
         lista.push({
           id: `cr-${cr.id}`,
           origem: 'conta_receber',
@@ -311,7 +339,7 @@ export function PlanoContasTab({
           descricao: cr.descricao || 'Receita Técnica Operacional',
           entidade: cr.cliente_nome || cr.expand?.cliente?.razao_social || 'Cliente AEROCAD',
           data: dataCr,
-          valor: val,
+          valor: Math.abs(val),
           tipoMovimento: 'credito',
           status: cr.status || 'pendente',
           documentoRef: cr.numero_documento,
@@ -326,7 +354,7 @@ export function PlanoContasTab({
         p.data_pagamento || p.vencimento || p.data_faturamento || p.created?.slice(0, 10) || ''
       if (correspondeAoAno(dataP)) {
         const contaReceita = classificarParcela(p)
-        const val = p.valor_recebido || p.valor || 0
+        const val = Number(p.valor_recebido) || Number(p.valor) || 0
         lista.push({
           id: `parc-${p.id}`,
           origem: 'parcela',
@@ -338,7 +366,7 @@ export function PlanoContasTab({
           entidade:
             p.expand?.cliente?.razao_social || p.expand?.projeto?.nome || 'Cliente do Projeto',
           data: dataP,
-          valor: val,
+          valor: Math.abs(val),
           tipoMovimento: 'credito',
           status: p.status || 'pendente',
           documentoRef: p.nf_numero ? `NFS-e ${p.nf_numero}` : undefined,
@@ -347,6 +375,7 @@ export function PlanoContasTab({
 
         // Se a parcela está pendente de recebimento, ela também representa direito a receber no Ativo Circulante (1.1.2)
         if (p.status === 'pendente' || p.status === 'vencida') {
+          const valAtivo = Number(p.valor) || 0
           lista.push({
             id: `parc-ativo-${p.id}`,
             origem: 'parcela',
@@ -357,7 +386,7 @@ export function PlanoContasTab({
             descricao: `Faturamento a Receber: ${p.expand?.projeto?.numero || ''} ${p.descricao || ''}`,
             entidade: p.expand?.cliente?.razao_social || 'Cliente do Projeto',
             data: p.vencimento || dataP,
-            valor: p.valor || 0,
+            valor: Math.abs(valAtivo),
             tipoMovimento: 'debito',
             status: p.status,
             documentoRef: p.nf_numero ? `NFS-e ${p.nf_numero}` : undefined,
@@ -371,7 +400,7 @@ export function PlanoContasTab({
       const dataCp = cp.data_pagamento || cp.data_vencimento || cp.created?.slice(0, 10) || ''
       if (correspondeAoAno(dataCp)) {
         const contaDespesa = classificarContaPagar(cp)
-        const val = cp.valor || 0
+        const val = Number(cp.valor) || 0
 
         lista.push({
           id: `cp-${cp.id}`,
@@ -383,7 +412,7 @@ export function PlanoContasTab({
           descricao: cp.descricao || 'Despesa Administrativa/Operacional',
           entidade: cp.fornecedor || cp.expand?.credor?.nome_razao_social || 'Fornecedor/Credor',
           data: dataCp,
-          valor: val,
+          valor: Math.abs(val),
           tipoMovimento: 'debito',
           status: cp.status || 'pendente',
           documentoRef: cp.numero_documento,
@@ -408,10 +437,10 @@ export function PlanoContasTab({
               codigoConta: itemPassivo.codigo,
               nomeConta: itemPassivo.nome,
               natureza: 'passivo',
-              descricao: `Obrigação a Pagar: ${cp.descricao || cp.fornecedor}`,
+              descricao: `Obrigação a Pagar: ${cp.descricao || cp.fornecedor || 'Despesa'}`,
               entidade: cp.fornecedor || cp.expand?.credor?.nome_razao_social || 'Credor',
               data: cp.data_vencimento || dataCp,
-              valor: val,
+              valor: Math.abs(val),
               tipoMovimento: 'credito',
               status: cp.status,
               documentoRef: cp.numero_documento,
@@ -433,6 +462,7 @@ export function PlanoContasTab({
 
       if (!temVinculoDiretoComRegistroExistente) {
         const contaAlvo = classificarTransacaoExtrato(tx)
+        const valorTx = Number(tx.valor) || 0
         lista.push({
           id: `tx-${tx.id}`,
           origem: 'extrato',
@@ -442,7 +472,7 @@ export function PlanoContasTab({
           natureza: contaAlvo.natureza,
           descricao: tx.descricao || 'Movimentação em Conta PJ',
           data: dataTx,
-          valor: Math.abs(tx.valor || 0),
+          valor: Math.abs(valorTx),
           tipoMovimento: tx.tipo === 'entrada' ? 'credito' : 'debito',
           status: tx.status_conciliacao || 'conciliado',
           documentoRef: tx.documento_ref,
@@ -992,8 +1022,15 @@ export function PlanoContasTab({
               {todosLancamentosMapeados.length}
             </div>
             <p className="text-[11px] text-neutral-500 mt-0.5">
-              Extratos ({extratosTransacoes.length}) · Pagar ({contasPagar.length}) ·
-              Receber/Projetos ({contasReceber.length + parcelas.length})
+              {filtroAno !== 'todos' ? `Exercício ${filtroAno}` : 'Todos os exercícios'} ·{' '}
+              {todosLancamentosMapeados.filter((l) => l.origem === 'extrato').length} extratos ·{' '}
+              {todosLancamentosMapeados.filter((l) => l.origem === 'conta_pagar').length} pagar ·{' '}
+              {
+                todosLancamentosMapeados.filter(
+                  (l) => l.origem === 'parcela' || l.origem === 'conta_receber',
+                ).length
+              }{' '}
+              receber
             </p>
           </CardContent>
         </Card>
@@ -1028,11 +1065,14 @@ export function PlanoContasTab({
 
         <div className="flex flex-wrap items-center gap-2">
           {/* Seletor de Ano */}
-          <div className="w-[130px]">
+          <div className="w-[155px]">
             <Select value={filtroAno} onValueChange={setFiltroAno}>
-              <SelectTrigger className="h-9 text-xs font-semibold border-[#FF6A13]/40 bg-orange-50/40 text-neutral-800">
+              <SelectTrigger
+                aria-label="Selecionar exercício ou ano"
+                className="h-9 text-xs font-semibold border-[#FF6A13]/40 bg-orange-50/40 text-neutral-800"
+              >
                 <Calendar className="mr-1.5 h-3.5 w-3.5 text-[#FF6A13] shrink-0" />
-                <SelectValue placeholder="Ano" />
+                <SelectValue placeholder="Exercício / Ano" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="todos">Todos os anos</SelectItem>
