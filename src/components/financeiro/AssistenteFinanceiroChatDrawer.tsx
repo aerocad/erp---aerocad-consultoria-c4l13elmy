@@ -182,11 +182,25 @@ export function AssistenteFinanceiroChatDrawer({
   }
 
   function handleFechar() {
+    // Ao fechar o drawer, cancela qualquer stream em andamento imediatamente
+    // garantindo que não continue consumindo recursos nem trave o estado
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort('Drawer fechado pelo usuário')
+      abortControllerRef.current = null
+    }
+    setIsLoading(false)
+    setActiveTool(null)
     setAberto(false)
     onClose?.()
   }
 
   function handleLimparConversa() {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort('Conversa limpa pelo usuário')
+      abortControllerRef.current = null
+    }
+    setIsLoading(false)
+    setActiveTool(null)
     setConversationId(null)
     setMessages([])
     toast.info('Nova conversa iniciada com o Assistente Financeiro.')
@@ -218,6 +232,11 @@ export function AssistenteFinanceiroChatDrawer({
     setMessages((prev) => [...prev, userMsg, assistantMsgPlaceholder])
     setIsLoading(true)
 
+    // Se já havia uma requisição anterior em andamento, aborta imediatamente
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort('Nova mensagem enviada pelo usuário')
+    }
+
     const abortController = new AbortController()
     abortControllerRef.current = abortController
 
@@ -228,6 +247,7 @@ export function AssistenteFinanceiroChatDrawer({
         message: msgToSend,
         conversationId,
         agentSlug: 'assistente-financeiro',
+        timeoutMs: 45000, // Timeout de 45 segundos para resposta do assistente financeiro
         contextRecord: {
           tipo: 'secao_financeira',
           id: secaoAtual,
@@ -278,16 +298,41 @@ export function AssistenteFinanceiroChatDrawer({
           .catch(() => {})
       }
     } catch (err: unknown) {
-      if (err instanceof Error && err.name === 'AbortError') return
+      const isAbort =
+        err instanceof Error && (err.name === 'AbortError' || err.message.includes('aborted'))
+      const isTimeout =
+        err instanceof Error &&
+        (err.message.includes('Tempo limite') || err.message.includes('timeout'))
+
+      if (isAbort && !isTimeout) {
+        // Usuário cancelou ou fechou deliberadamente
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantMsgId && !m.content
+              ? { ...m, content: 'Operação interrompida pelo usuário.' }
+              : m,
+          ),
+        )
+        return
+      }
+
       const msgErr = err instanceof Error ? err.message : String(err)
-      toast.error(`Falha no Assistente Financeiro: ${msgErr}`)
+      const mensagemAmigavel = isTimeout
+        ? 'Não foi possível processar. O assistente atingiu o tempo limite ao pesquisar os lançamentos. Tente reformular o pedido com critérios mais específicos (ex.: especificar data ou valor aproximado).'
+        : 'Não foi possível processar a solicitação no momento. Tente reformular o pedido.'
+
+      toast.error(
+        isTimeout
+          ? 'Tempo limite atingido no Assistente Financeiro'
+          : `Falha no Assistente: ${msgErr}`,
+      )
+
       setMessages((prev) =>
         prev.map((m) =>
           m.id === assistantMsgId
             ? {
                 ...m,
-                content:
-                  'Ocorreu uma instabilidade momentânea ao consultar os dados financeiros. Por favor, tente novamente.',
+                content: m.content ? `${m.content}\n\n⚠️ ${mensagemAmigavel}` : mensagemAmigavel,
               }
             : m,
         ),
@@ -673,17 +718,34 @@ export function AssistenteFinanceiroChatDrawer({
                 className="min-h-[64px] max-h-28 text-xs resize-none bg-white focus-visible:ring-[#FF6A13]"
                 disabled={isLoading}
               />
-              <Button
-                type="submit"
-                disabled={isLoading || !inputMessage.trim()}
-                className="h-11 px-3.5 bg-[#FF6A13] hover:bg-[#e05b0d] text-white shrink-0"
-              >
-                {isLoading ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
+              {isLoading ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    if (abortControllerRef.current) {
+                      abortControllerRef.current.abort('Cancelado pelo usuário')
+                      abortControllerRef.current = null
+                    }
+                    setIsLoading(false)
+                    setActiveTool(null)
+                    toast.info('Processamento cancelado.')
+                  }}
+                  className="h-11 px-3 border-orange-300 text-orange-700 hover:bg-orange-100 shrink-0 text-xs flex items-center gap-1.5"
+                  title="Interromper processamento atual"
+                >
+                  <X className="w-4 h-4 text-orange-600" />
+                  <span>Parar</span>
+                </Button>
+              ) : (
+                <Button
+                  type="submit"
+                  disabled={!inputMessage.trim()}
+                  className="h-11 px-3.5 bg-[#FF6A13] hover:bg-[#e05b0d] text-white shrink-0"
+                >
                   <Send className="w-4 h-4" />
-                )}
-              </Button>
+                </Button>
+              )}
             </form>
             <div className="mt-1.5 flex items-center justify-between text-[10px] text-neutral-400">
               <span>Enter envia • Shift+Enter quebra linha</span>

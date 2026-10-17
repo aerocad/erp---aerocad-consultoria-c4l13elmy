@@ -30,6 +30,7 @@ export interface SendAgentMessageOptions {
   conversationId?: string | null
   agentSlug?: CrmAgentSlug
   contextRecord?: AgentContextRecord | null
+  timeoutMs?: number
   onChunk?: (delta: string, accumulated: string) => void
   onToolCallStart?: (info: { id: string; name: string }) => void
   onToolCallDone?: (info: { id: string; ok: boolean }) => void
@@ -67,6 +68,7 @@ export async function sendAgentMessage(options: SendAgentMessageOptions) {
     conversationId,
     agentSlug = 'assistente-aerocad',
     contextRecord,
+    timeoutMs = 60000, // Timeout padrão de 60 segundos para evitar travamento infinito
     onChunk,
     onToolCallStart,
     onToolCallDone,
@@ -77,39 +79,69 @@ export async function sendAgentMessage(options: SendAgentMessageOptions) {
   const enriched = buildEnrichedMessage(message, contextRecord)
   const baseUrl = import.meta.env.VITE_POCKETBASE_URL
 
-  const res = await fetch(`${baseUrl}/backend/v1/assistente/chat`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: pb.authStore.token,
-    },
-    body: JSON.stringify({
-      message: enriched,
-      conversation_id: conversationId || null,
-      agent_slug: agentSlug,
-      title: contextRecord
-        ? `${contextRecord.tipo.toUpperCase()}: ${contextRecord.titulo.slice(0, 32)}`
-        : message.slice(0, 48),
-    }),
-    signal,
-  })
+  // Combina o signal recebido com um timer de timeout robusto
+  const timeoutController = new AbortController()
+  let timerId: ReturnType<typeof setTimeout> | null = null
 
-  const result = await streamAgentChat(res, {
-    onChunk,
-    onToolCallStart,
-    onToolCallDone,
-    onCitations,
-    signal,
-  })
+  if (timeoutMs > 0) {
+    timerId = setTimeout(() => {
+      timeoutController.abort(
+        new Error(
+          'Tempo limite de resposta excedido (timeout de 60s). Não foi possível concluir o processamento.',
+        ),
+      )
+    }, timeoutMs)
+  }
 
-  const finalConversationId = res.headers.get('X-Conversation-Id') || result.conversation_id
+  // Encaminha cancelamento do sinal original se houver
+  const handleParentAbort = () => {
+    timeoutController.abort(signal?.reason)
+  }
 
-  return {
-    conversationId: finalConversationId,
-    messageId: result.message_id,
-    content: result.content,
-    citations: result.citations,
-    toolCalls: result.toolCalls,
+  if (signal?.aborted) {
+    timeoutController.abort(signal.reason)
+  } else if (signal) {
+    signal.addEventListener('abort', handleParentAbort)
+  }
+
+  try {
+    const res = await fetch(`${baseUrl}/backend/v1/assistente/chat`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: pb.authStore.token,
+      },
+      body: JSON.stringify({
+        message: enriched,
+        conversation_id: conversationId || null,
+        agent_slug: agentSlug,
+        title: contextRecord
+          ? `${contextRecord.tipo.toUpperCase()}: ${contextRecord.titulo.slice(0, 32)}`
+          : message.slice(0, 48),
+      }),
+      signal: timeoutController.signal,
+    })
+
+    const result = await streamAgentChat(res, {
+      onChunk,
+      onToolCallStart,
+      onToolCallDone,
+      onCitations,
+      signal: timeoutController.signal,
+    })
+
+    const finalConversationId = res.headers.get('X-Conversation-Id') || result.conversation_id
+
+    return {
+      conversationId: finalConversationId,
+      messageId: result.message_id,
+      content: result.content,
+      citations: result.citations,
+      toolCalls: result.toolCalls,
+    }
+  } finally {
+    if (timerId) clearTimeout(timerId)
+    if (signal) signal.removeEventListener('abort', handleParentAbort)
   }
 }
 

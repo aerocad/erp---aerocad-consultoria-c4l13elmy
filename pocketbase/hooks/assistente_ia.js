@@ -89,31 +89,34 @@ routerAdd(
 
       e.response.header().set('Content-Type', 'text/event-stream')
       e.response.header().set('Cache-Control', 'no-cache')
+      e.response.header().set('Connection', 'keep-alive')
       e.response.header().set('X-Conversation-Id', conv.id)
 
       $response.stream(e, iter)
     } catch (err) {
+      console.log('Erro no endpoint de chat do assistente:', err.message || err)
       if (err instanceof SkipAiConfigError) {
         return e.json(503, { error: 'Serviço de IA temporariamente indisponível (configuração)' })
       }
       if (err instanceof SkipAiAgentsError) {
         const status = err.status || 500
         return e.json(status, {
-          error: status >= 500 ? 'Falha ao processar solicitação com o agente' : err.message,
+          error: status >= 500 ? 'Falha ao processar solicitação com o assistente' : err.message,
         })
       }
       if (err instanceof SkipAiError) {
         const status = err.status || 502
         return e.json(status, {
-          error: status >= 500 ? 'IA temporariamente indisponível' : err.message,
+          error: status >= 500 ? 'Assistente IA temporariamente indisponível' : err.message,
         })
       }
-      throw err
+      return e.json(500, {
+        error: 'Não foi possível concluir o processamento da mensagem pelo assistente.',
+      })
     }
   },
   $apis.requireAuth(),
 )
-
 // 2. Endpoint de Chat Síncrono (Fallback ou chamadas diretas)
 routerAdd(
   'POST',
