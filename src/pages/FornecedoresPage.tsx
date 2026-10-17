@@ -55,8 +55,11 @@ export const CATEGORIA_FORNECEDOR_LABELS: Record<CategoriaFornecedor, string> = 
 }
 
 interface FornecedorFormData {
+  tipo_pessoa: 'pj' | 'pf'
   razao_social: string
   nome_fantasia: string
+  nome_completo: string
+  cpf: string
   cnpj_cpf: string
   categoria: CategoriaFornecedor
   contato_nome: string
@@ -71,8 +74,11 @@ interface FornecedorFormData {
 }
 
 const emptyForm: FornecedorFormData = {
+  tipo_pessoa: 'pj',
   razao_social: '',
   nome_fantasia: '',
+  nome_completo: '',
+  cpf: '',
   cnpj_cpf: '',
   categoria: 'terceirizados',
   contato_nome: '',
@@ -101,6 +107,7 @@ export default function FornecedoresPage() {
   })
 
   const [busca, setBusca] = useState('')
+  const [tipoPessoaFiltro, setTipoPessoaFiltro] = useState<string>('todos')
   const [categoriaFiltro, setCategoriaFiltro] = useState<string>('todas')
   const [statusFiltro, setStatusFiltro] = useState<string>('todos')
 
@@ -118,18 +125,23 @@ export default function FornecedoresPage() {
   const fornecedoresFiltrados = useMemo(() => {
     return fornecedores.filter((f) => {
       const matchBusca =
-        f.razao_social.toLowerCase().includes(busca.toLowerCase()) ||
+        (f.razao_social || '').toLowerCase().includes(busca.toLowerCase()) ||
+        (f.nome_completo || '').toLowerCase().includes(busca.toLowerCase()) ||
         (f.nome_fantasia && f.nome_fantasia.toLowerCase().includes(busca.toLowerCase())) ||
-        f.cnpj_cpf.toLowerCase().includes(busca.toLowerCase()) ||
+        (f.cnpj_cpf || '').toLowerCase().includes(busca.toLowerCase()) ||
+        (f.cpf && f.cpf.toLowerCase().includes(busca.toLowerCase())) ||
         (f.contato_nome && f.contato_nome.toLowerCase().includes(busca.toLowerCase())) ||
         (f.email && f.email.toLowerCase().includes(busca.toLowerCase()))
 
+      const fTipo =
+        f.tipo_pessoa || (f.cnpj_cpf && f.cnpj_cpf.replace(/\D/g, '').length === 11 ? 'pf' : 'pj')
+      const matchTipo = tipoPessoaFiltro === 'todos' || fTipo === tipoPessoaFiltro
       const matchCat = categoriaFiltro === 'todas' || f.categoria === categoriaFiltro
       const matchStatus = statusFiltro === 'todos' || f.status === statusFiltro
 
-      return matchBusca && matchCat && matchStatus
+      return matchBusca && matchTipo && matchCat && matchStatus
     })
-  }, [fornecedores, busca, categoriaFiltro, statusFiltro])
+  }, [fornecedores, busca, tipoPessoaFiltro, categoriaFiltro, statusFiltro])
 
   function handleOpenCreate() {
     setEditingItem(null)
@@ -139,10 +151,16 @@ export default function FornecedoresPage() {
 
   function handleOpenEdit(item: FornecedorRecord) {
     setEditingItem(item)
+    const docLimpo = (item.cnpj_cpf || item.cpf || '').replace(/\D/g, '')
+    const tipo = item.tipo_pessoa || (docLimpo.length === 11 ? 'pf' : 'pj')
+
     setFormData({
-      razao_social: item.razao_social || '',
+      tipo_pessoa: tipo,
+      razao_social: item.razao_social || item.nome_completo || '',
       nome_fantasia: item.nome_fantasia || '',
-      cnpj_cpf: item.cnpj_cpf || '',
+      nome_completo: item.nome_completo || (tipo === 'pf' ? item.razao_social : '') || '',
+      cpf: item.cpf || (tipo === 'pf' ? item.cnpj_cpf : '') || '',
+      cnpj_cpf: item.cnpj_cpf || item.cpf || '',
       categoria: item.categoria || 'terceirizados',
       contato_nome: item.contato_nome || '',
       email: item.email || '',
@@ -159,19 +177,44 @@ export default function FornecedoresPage() {
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
-    if (!formData.razao_social.trim() || !formData.cnpj_cpf.trim()) {
-      toast.error('Preencha a Razão Social e o CNPJ/CPF do fornecedor.')
+    const isPF = formData.tipo_pessoa === 'pf'
+    const nomePrincipal = isPF
+      ? (formData.nome_completo || formData.razao_social).trim()
+      : formData.razao_social.trim()
+    const docPrincipal = isPF
+      ? (formData.cpf || formData.cnpj_cpf).trim()
+      : formData.cnpj_cpf.trim()
+
+    if (!nomePrincipal) {
+      toast.error(
+        isPF ? 'Informe o Nome Completo da pessoa física.' : 'Informe a Razão Social da empresa.',
+      )
       return
+    }
+
+    if (!docPrincipal) {
+      toast.error(isPF ? 'Informe o CPF do fornecedor PF.' : 'Informe o CNPJ do fornecedor PJ.')
+      return
+    }
+
+    const docLimpo = docPrincipal.replace(/\D/g, '')
+    if (isPF && docLimpo.length !== 11) {
+      toast.warning('O CPF informado possui quantidade de dígitos diferente de 11. Verifique.')
+    } else if (!isPF && docLimpo.length !== 14) {
+      toast.warning('O CNPJ informado possui quantidade de dígitos diferente de 14. Verifique.')
     }
 
     setSaving(true)
     try {
       const payload: Record<string, unknown> = {
-        razao_social: formData.razao_social.trim(),
-        nome_fantasia: formData.nome_fantasia.trim(),
-        cnpj_cpf: formData.cnpj_cpf.trim(),
+        tipo_pessoa: formData.tipo_pessoa,
+        razao_social: nomePrincipal,
+        nome_completo: isPF ? nomePrincipal : formData.nome_completo.trim() || undefined,
+        nome_fantasia: isPF ? '' : formData.nome_fantasia.trim(),
+        cnpj_cpf: docPrincipal,
+        cpf: isPF ? docPrincipal : formData.cpf.trim() || undefined,
         categoria: formData.categoria,
-        contato_nome: formData.contato_nome.trim(),
+        contato_nome: isPF ? nomePrincipal : formData.contato_nome.trim(),
         email: formData.email.trim(),
         telefone: formData.telefone.trim(),
         chave_pix: formData.chave_pix.trim(),
@@ -302,6 +345,17 @@ export default function FornecedoresPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <Select value={tipoPessoaFiltro} onValueChange={setTipoPessoaFiltro}>
+            <SelectTrigger className="w-[140px] h-9 text-xs">
+              <SelectValue placeholder="Tipo (PF/PJ)" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todos (PF/PJ)</SelectItem>
+              <SelectItem value="pj">Pessoa Jurídica (PJ)</SelectItem>
+              <SelectItem value="pf">Pessoa Física (PF)</SelectItem>
+            </SelectContent>
+          </Select>
+
           <Select value={categoriaFiltro} onValueChange={setCategoriaFiltro}>
             <SelectTrigger className="w-[190px] h-9 text-xs">
               <Filter className="mr-1.5 h-3.5 w-3.5 text-neutral-400" />
@@ -349,8 +403,9 @@ export default function FornecedoresPage() {
             <table className="w-full text-left text-xs">
               <thead className="bg-neutral-50 text-neutral-500 font-semibold border-b border-neutral-200">
                 <tr>
-                  <th className="px-4 py-3">Fornecedor / Razão Social</th>
-                  <th className="px-4 py-3">CNPJ / CPF</th>
+                  <th className="px-4 py-3">Tipo</th>
+                  <th className="px-4 py-3">Fornecedor / Nome</th>
+                  <th className="px-4 py-3">Documento (CNPJ/CPF)</th>
                   <th className="px-4 py-3">Categoria</th>
                   <th className="px-4 py-3">Contato & Telefone</th>
                   <th className="px-4 py-3">PIX / Dados Bancários</th>
@@ -359,95 +414,115 @@ export default function FornecedoresPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-200 bg-white">
-                {fornecedoresFiltrados.map((item) => (
-                  <tr key={item.id} className="hover:bg-[#FFF6EC]/30 transition-colors">
-                    <td className="px-4 py-3">
-                      <div className="font-bold text-neutral-900">{item.razao_social}</div>
-                      {item.nome_fantasia && (
-                        <span className="text-[11px] text-neutral-500 font-normal">
-                          {item.nome_fantasia}
+                {fornecedoresFiltrados.map((item) => {
+                  const isPF =
+                    item.tipo_pessoa === 'pf' ||
+                    (item.cnpj_cpf && item.cnpj_cpf.replace(/\D/g, '').length === 11)
+                  return (
+                    <tr key={item.id} className="hover:bg-[#FFF6EC]/30 transition-colors">
+                      <td className="px-4 py-3">
+                        <span
+                          className={`inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold ${
+                            isPF
+                              ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                              : 'bg-orange-50 text-[#D65100] border border-orange-200'
+                          }`}
+                        >
+                          {isPF ? 'PF' : 'PJ'}
                         </span>
-                      )}
-                      {item.municipio_uf && (
-                        <div className="flex items-center gap-1 text-[11px] text-neutral-400 mt-0.5">
-                          <MapPin className="h-3 w-3" />
-                          {item.municipio_uf}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="font-bold text-neutral-900">
+                          {item.nome_completo || item.razao_social}
                         </div>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 font-mono text-neutral-700">{item.cnpj_cpf}</td>
-                    <td className="px-4 py-3">
-                      <span className="inline-flex rounded-full bg-neutral-100 text-neutral-800 text-[10px] font-semibold px-2 py-0.5 border border-neutral-200">
-                        {CATEGORIA_FORNECEDOR_LABELS[item.categoria] || item.categoria}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      {item.contato_nome && (
-                        <div className="font-medium text-neutral-800">{item.contato_nome}</div>
-                      )}
-                      {item.telefone && (
-                        <div className="flex items-center gap-1 text-[11px] text-neutral-500">
-                          <Phone className="h-3 w-3 text-neutral-400" />
-                          {item.telefone}
-                        </div>
-                      )}
-                      {item.email && (
-                        <div className="flex items-center gap-1 text-[11px] text-neutral-500">
-                          <Mail className="h-3 w-3 text-neutral-400" />
-                          {item.email}
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      {item.chave_pix ? (
-                        <div className="font-mono text-[11px] text-[#D65100] font-semibold">
-                          PIX: {item.chave_pix}
-                        </div>
-                      ) : (
-                        <span className="text-neutral-400 italic">Não informado</span>
-                      )}
-                      {item.dados_bancarios && (
-                        <div className="text-[11px] text-neutral-500 truncate max-w-[200px]">
-                          {item.dados_bancarios}
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <CrmBadge tone={item.status === 'ativo' ? 'green' : 'gray'}>
-                        {item.status.toUpperCase()}
-                      </CrmBadge>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        {canEdit && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleOpenEdit(item)}
-                            className="h-8 w-8 text-neutral-500 hover:text-[#FF6A13]"
-                            title="Editar fornecedor"
-                          >
-                            <Edit2 className="h-3.5 w-3.5" />
-                          </Button>
+                        {!isPF && item.nome_fantasia && (
+                          <span className="text-[11px] text-neutral-500 font-normal">
+                            {item.nome_fantasia}
+                          </span>
                         )}
-                        {canDelete && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => {
-                              setItemToDelete(item)
-                              setDeleteModalOpen(true)
-                            }}
-                            className="h-8 w-8 text-neutral-400 hover:text-rose-600"
-                            title="Excluir fornecedor (Apenas Admin)"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
+                        {item.municipio_uf && (
+                          <div className="flex items-center gap-1 text-[11px] text-neutral-400 mt-0.5">
+                            <MapPin className="h-3 w-3" />
+                            {item.municipio_uf}
+                          </div>
                         )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="px-4 py-3 font-mono text-neutral-700">
+                        {item.cnpj_cpf || item.cpf}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="inline-flex rounded-full bg-neutral-100 text-neutral-800 text-[10px] font-semibold px-2 py-0.5 border border-neutral-200">
+                          {CATEGORIA_FORNECEDOR_LABELS[item.categoria] || item.categoria}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        {item.contato_nome && (
+                          <div className="font-medium text-neutral-800">{item.contato_nome}</div>
+                        )}
+                        {item.telefone && (
+                          <div className="flex items-center gap-1 text-[11px] text-neutral-500">
+                            <Phone className="h-3 w-3 text-neutral-400" />
+                            {item.telefone}
+                          </div>
+                        )}
+                        {item.email && (
+                          <div className="flex items-center gap-1 text-[11px] text-neutral-500">
+                            <Mail className="h-3 w-3 text-neutral-400" />
+                            {item.email}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {item.chave_pix ? (
+                          <div className="font-mono text-[11px] text-[#D65100] font-semibold">
+                            PIX: {item.chave_pix}
+                          </div>
+                        ) : (
+                          <span className="text-neutral-400 italic">Não informado</span>
+                        )}
+                        {item.dados_bancarios && (
+                          <div className="text-[11px] text-neutral-500 truncate max-w-[200px]">
+                            {item.dados_bancarios}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <CrmBadge tone={item.status === 'ativo' ? 'green' : 'gray'}>
+                          {item.status.toUpperCase()}
+                        </CrmBadge>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          {canEdit && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleOpenEdit(item)}
+                              className="h-8 w-8 text-neutral-500 hover:text-[#FF6A13]"
+                              title="Editar fornecedor"
+                            >
+                              <Edit2 className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                          {canDelete && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => {
+                                setItemToDelete(item)
+                                setDeleteModalOpen(true)
+                              }}
+                              className="h-8 w-8 text-neutral-400 hover:text-rose-600"
+                              title="Excluir fornecedor (Apenas Admin)"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
@@ -468,37 +543,120 @@ export default function FornecedoresPage() {
             </DialogHeader>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-4 text-xs">
-              <div className="sm:col-span-2 space-y-1">
-                <Label className="text-xs font-semibold">Razão Social / Nome Oficial *</Label>
-                <Input
-                  required
-                  value={formData.razao_social}
-                  onChange={(e) => setFormData({ ...formData, razao_social: e.target.value })}
-                  placeholder="Ex: Topografia & Geodésia Engenharia Ltda"
-                  className="h-9 text-xs"
-                />
+              {/* Seleção do Tipo de Pessoa: PJ ou PF */}
+              <div className="sm:col-span-2 space-y-1.5 p-3 rounded-lg border border-orange-200 bg-orange-50/40">
+                <Label className="text-xs font-bold text-neutral-800">Tipo de Fornecedor *</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, tipo_pessoa: 'pj' })}
+                    className={`flex items-center justify-center gap-2 rounded-lg border p-2.5 text-xs font-semibold transition ${
+                      formData.tipo_pessoa === 'pj'
+                        ? 'border-[#FF6A13] bg-[#FF6A13] text-white shadow-xs'
+                        : 'border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50'
+                    }`}
+                  >
+                    <Building2 className="h-4 w-4" />
+                    Pessoa Jurídica (PJ)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, tipo_pessoa: 'pf' })}
+                    className={`flex items-center justify-center gap-2 rounded-lg border p-2.5 text-xs font-semibold transition ${
+                      formData.tipo_pessoa === 'pf'
+                        ? 'border-[#FF6A13] bg-[#FF6A13] text-white shadow-xs'
+                        : 'border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50'
+                    }`}
+                  >
+                    <UserCheck className="h-4 w-4" />
+                    Pessoa Física (PF)
+                  </button>
+                </div>
               </div>
 
-              <div className="space-y-1">
-                <Label className="text-xs">Nome Fantasia (Opcional)</Label>
-                <Input
-                  value={formData.nome_fantasia}
-                  onChange={(e) => setFormData({ ...formData, nome_fantasia: e.target.value })}
-                  placeholder="Ex: TopoGeo"
-                  className="h-9 text-xs"
-                />
-              </div>
+              {formData.tipo_pessoa === 'pj' ? (
+                <>
+                  <div className="sm:col-span-2 space-y-1">
+                    <Label className="text-xs font-semibold">
+                      Razão Social / Nome Oficial (PJ) *
+                    </Label>
+                    <Input
+                      required
+                      value={formData.razao_social}
+                      onChange={(e) => setFormData({ ...formData, razao_social: e.target.value })}
+                      placeholder="Ex: Topografia & Geodésia Engenharia Ltda"
+                      className="h-9 text-xs"
+                    />
+                  </div>
 
-              <div className="space-y-1">
-                <Label className="text-xs font-semibold">CNPJ ou CPF *</Label>
-                <Input
-                  required
-                  value={formData.cnpj_cpf}
-                  onChange={(e) => setFormData({ ...formData, cnpj_cpf: e.target.value })}
-                  placeholder="00.000.000/0000-00"
-                  className="h-9 text-xs font-mono"
-                />
-              </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Nome Fantasia (Opcional)</Label>
+                    <Input
+                      value={formData.nome_fantasia}
+                      onChange={(e) => setFormData({ ...formData, nome_fantasia: e.target.value })}
+                      placeholder="Ex: TopoGeo"
+                      className="h-9 text-xs"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold">CNPJ *</Label>
+                    <Input
+                      required
+                      value={formData.cnpj_cpf}
+                      onChange={(e) => setFormData({ ...formData, cnpj_cpf: e.target.value })}
+                      placeholder="00.000.000/0000-00"
+                      className="h-9 text-xs font-mono"
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="sm:col-span-2 space-y-1">
+                    <Label className="text-xs font-semibold">Nome Completo (Pessoa Física) *</Label>
+                    <Input
+                      required
+                      value={formData.nome_completo || formData.razao_social}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          nome_completo: e.target.value,
+                          razao_social: e.target.value,
+                        })
+                      }
+                      placeholder="Ex: João Valmir Bigattão"
+                      className="h-9 text-xs"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold">CPF *</Label>
+                    <Input
+                      required
+                      value={formData.cpf || formData.cnpj_cpf}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          cpf: e.target.value,
+                          cnpj_cpf: e.target.value,
+                        })
+                      }
+                      placeholder="000.000.000-00"
+                      className="h-9 text-xs font-mono"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-xs">Contato / Apelido</Label>
+                    <Input
+                      value={formData.contato_nome}
+                      onChange={(e) => setFormData({ ...formData, contato_nome: e.target.value })}
+                      placeholder="Ex: Bigattão"
+                      className="h-9 text-xs"
+                    />
+                  </div>
+                </>
+              )}
 
               <div className="space-y-1">
                 <Label className="text-xs font-semibold">Categoria de Despesa *</Label>

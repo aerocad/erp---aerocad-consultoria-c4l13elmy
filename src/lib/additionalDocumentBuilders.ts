@@ -122,89 +122,137 @@ export function buildContractHTML(data: ContractDocumentData): string {
 `
 }
 
-export function buildInternalServiceOrderHTML(data: {
+export interface InternalServiceOrderData {
   numeroOS: string
   projetoNumero: string
   projetoNome: string
-  clienteRazaoSocial: string
-  clienteCnpj: string
-  escopo: string
-  responsavelTecnico: string
-  prazo: string
-}): string {
+  clienteRazaoSocial?: string
+  clienteCnpj?: string
+  prestadorNome: string
+  prestadorDocumento?: string
+  prestadorTipoLabel?: string // 'Colaborador' | 'Fornecedor (PF)' | 'Fornecedor (PJ)'
+  tipoServico: string
+  valor?: number
+  formaPagamento?: string
+  prazoExecucao?: string
+  observacoes?: string
+  status?: string
+}
+
+export function buildInternalServiceOrderHTML(
+  data:
+    | InternalServiceOrderData
+    | {
+        numeroOS: string
+        projetoNumero: string
+        projetoNome: string
+        clienteRazaoSocial?: string
+        clienteCnpj?: string
+        escopo?: string
+        responsavelTecnico?: string
+        prazo?: string
+        prestadorNome?: string
+        tipoServico?: string
+      },
+): string {
   const cidadeData = dataHojeExtenso('Brasília – DF')
+
+  // Normalização para suportar chamada legado e nova estrutura
+  const prestadorNome =
+    ('prestadorNome' in data && data.prestadorNome) ||
+    ('responsavelTecnico' in data && data.responsavelTecnico) ||
+    'Não informado'
+  const prestadorDocumento = ('prestadorDocumento' in data && data.prestadorDocumento) || ''
+  const prestadorTipoLabel =
+    ('prestadorTipoLabel' in data && data.prestadorTipoLabel) || 'Prestador Designado'
+  const tipoServico =
+    ('tipoServico' in data && data.tipoServico) ||
+    ('escopo' in data && data.escopo) ||
+    'Serviços Técnicos Especializados'
+  const valor = 'valor' in data && typeof data.valor === 'number' ? data.valor : 0
+  const formaPagamento =
+    ('formaPagamento' in data && data.formaPagamento) || 'Conforme Nota Fiscal emitida'
+  const prazo =
+    ('prazoExecucao' in data && data.prazoExecucao) ||
+    ('prazo' in data && data.prazo) ||
+    'A combinar'
+  const observacoes = ('observacoes' in data && data.observacoes) || ''
+  const status = ('status' in data && data.status) || 'ABERTA'
 
   return `
 <style>
-  .os-title { color: #FF6A13; font-size: 16px; font-weight: bold; text-align: center; margin-bottom: 4px; text-transform: uppercase; }
-  .os-subtitle { font-size: 13px; font-weight: bold; text-align: center; color: #333; margin-bottom: 24px; }
-  .os-sec { color: #FF6A13; font-size: 12px; font-weight: bold; margin-top: 18px; margin-bottom: 6px; border-bottom: 1.5px solid #FF6A13; padding-bottom: 2px; text-transform: uppercase; page-break-after: avoid; }
-  .os-table { width: 100%; border-collapse: collapse; font-size: 11px; margin: 8px 0; page-break-inside: avoid; }
-  .os-table thead { display: table-header-group; }
+  .os-container { font-family: Arial, Helvetica, sans-serif; color: #2D2D2D; font-size: 11px; line-height: 1.5; }
+  .os-title { color: #FF6A13; font-size: 16px; font-weight: bold; text-align: center; margin-bottom: 2px; text-transform: uppercase; }
+  .os-subtitle { font-size: 12px; font-weight: bold; text-align: center; color: #555; margin-bottom: 20px; }
+  .os-sec { color: #FF6A13; font-size: 11px; font-weight: bold; margin-top: 14px; margin-bottom: 6px; border-bottom: 1.5px solid #FF6A13; padding-bottom: 2px; text-transform: uppercase; page-break-after: avoid; }
+  .os-table { width: 100%; border-collapse: collapse; font-size: 11px; margin: 6px 0; page-break-inside: avoid; }
   .os-table th, .os-table td { border: 1px solid #D9D9D9; padding: 6px 8px; text-align: left; }
-  .os-table th { background: #F8F9FA; font-weight: bold; width: 25%; }
+  .os-table th { background: #F8F9FA; font-weight: bold; width: 28%; color: #333; }
+  .os-clause-box { background: #FFF8F2; border: 1px solid #FFD3B4; border-left: 4px solid #FF6A13; border-radius: 4px; padding: 10px 12px; margin: 12px 0; font-size: 10.5px; line-height: 1.6; }
+  .os-clause-item { margin-bottom: 6px; }
+  .os-clause-item:last-child { margin-bottom: 0; }
 </style>
 
-<div class="os-title">ORDEM DE SERVIÇO INTERNA</div>
-<div class="os-subtitle">OS Nº ${data.numeroOS} — Abertura e Alocação de Projeto</div>
+<div class="os-container">
+  <div class="os-title">ORDEM DE SERVIÇO INTERNA</div>
+  <div class="os-subtitle">OS Nº ${data.numeroOS} · AEROCAD ENGENHARIA & CONSULTORIA</div>
 
-<div class="os-sec">1. DADOS DE CONTROLE DO PROJETO</div>
-<table class="os-table">
-  <tr><th>Projeto Nº</th><td><strong>${data.projetoNumero}</strong></td></tr>
-  <tr><th>Empreendimento</th><td>${data.projetoNome}</td></tr>
-  <tr><th>Cliente / Contratante</th><td>${data.clienteRazaoSocial} (${data.clienteCnpj})</td></tr>
-  <tr><th>Prazo Técnico Alocado</th><td>${data.prazo}</td></tr>
-  <tr><th>Responsável Técnico</th><td>${data.responsavelTecnico}</td></tr>
-  <tr><th>Data de Emissão</th><td>${cidadeData}</td></tr>
-</table>
+  <div class="os-sec">1. IDENTIFICAÇÃO DO PROJETO & CLIENTE</div>
+  <table class="os-table">
+    <tr><th>Projeto AEROCAD</th><td><strong style="color: #FF6A13; font-size: 12px;">${data.projetoNumero}</strong> — ${data.projetoNome}</td></tr>
+    ${data.clienteRazaoSocial ? `<tr><th>Cliente / Tomador</th><td>${data.clienteRazaoSocial} ${data.clienteCnpj ? `(${data.clienteCnpj})` : ''}</td></tr>` : ''}
+    <tr><th>Status da OS</th><td><span style="display:inline-block; padding: 2px 8px; background: #FFF4EC; border: 1px solid #FF6A13; color: #D65100; font-weight: bold; border-radius: 4px; font-size: 10px; text-transform: uppercase;">${status}</span></td></tr>
+    <tr><th>Data de Emissão</th><td>${cidadeData}</td></tr>
+  </table>
 
-<div class="os-sec">2. ESCOPO DOS TRABALHOS</div>
-<p style="font-size: 11px; line-height: 1.6; text-align: justify; margin: 6px 0;">
-  ${data.escopo}
-</p>
+  <div class="os-sec">2. PRESTADOR DESIGNADO & DADOS CONTRATUAIS</div>
+  <table class="os-table">
+    <tr><th>Prestador do Serviço</th><td><strong>${prestadorNome}</strong></td></tr>
+    ${prestadorDocumento ? `<tr><th>CPF / CNPJ do Prestador</th><td style="font-family: monospace;">${prestadorDocumento}</td></tr>` : ''}
+    <tr><th>Vínculo / Categoria</th><td>${prestadorTipoLabel}</td></tr>
+    <tr><th>Valor do Serviço</th><td><strong style="color: #FF6A13; font-size: 12px;">${valor > 0 ? formatCurrency(valor) : 'A definir / Não aplicável'}</strong></td></tr>
+    <tr><th>Forma de Pagamento</th><td>${formaPagamento}</td></tr>
+    <tr><th>Prazo de Execução</th><td><strong>${prazo}</strong></td></tr>
+  </table>
 
-<div class="os-sec">3. EQUIPE DESIGNADA E RESPONSABILIDADES</div>
-<table class="os-table">
-  <thead>
-    <tr style="background: #FF6A13; color: white;">
-      <th style="color: white;">Função</th>
-      <th style="color: white;">Profissional</th>
-      <th style="color: white;">Atribuição Principal</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td><strong>Responsável Técnico (RT)</strong></td>
-      <td>${INSTITUTIONAL_DATA.representantes.responsavelTecnico.nome} (${INSTITUTIONAL_DATA.representantes.responsavelTecnico.crea})</td>
-      <td>Coordenação geral técnica e emissão de Anotação de Responsabilidade Técnica (ART).</td>
-    </tr>
-    <tr>
-      <td><strong>Coordenação de Projetos</strong></td>
-      <td>${INSTITUTIONAL_DATA.representantes.coordenador.nome}</td>
-      <td>Compatibilização de entregas, conformidade de arquivos e cronograma.</td>
-    </tr>
-    <tr>
-      <td><strong>Especialista Técnico</strong></td>
-      <td>${data.responsavelTecnico}</td>
-      <td>Modelagem das superfícies limitadoras (OLS), memórias de cálculo e dossiês de instrução.</td>
-    </tr>
-  </tbody>
-</table>
+  <div class="os-sec">3. TIPO DE SERVIÇO & ESCOPO DA ATRIBUIÇÃO</div>
+  <table class="os-table">
+    <tr><th>Tipo do Serviço</th><td><strong>${tipoServico}</strong></td></tr>
+  </table>
 
-<div class="os-sec">4. ENTREGÁVEIS OBRIGATÓRIOS</div>
-<ul style="font-size: 11px; line-height: 1.6; margin: 6px 0; padding-left: 20px;">
-  <li>Relatório de consolidação dos dados de entrada SIRGAS 2000;</li>
-  <li>Plantas das superfícies limitadoras em formato editável (DWG) e pranchas em PDF;</li>
-  <li>Memorial Descritivo circunstanciado fundamentado na ICA 11-408 / ICA 63-19;</li>
-  <li>Dossiê formal para protocolo junto ao órgão regulador competente;</li>
-  <li>Anotação de Responsabilidade Técnica (ART/CREA).</li>
-</ul>
+  ${
+    observacoes
+      ? `
+  <div class="os-sec">4. OBSERVAÇÕES & INFORMAÇÕES COMPLEMENTARES</div>
+  <div style="background: #FAFAFA; border: 1px solid #E5E5E5; padding: 8px 10px; border-radius: 4px; font-size: 11px; white-space: pre-wrap; line-height: 1.6;">${observacoes}</div>
+  `
+      : ''
+  }
 
-<div style="margin-top: 40px; text-align: center; page-break-inside: avoid;">
-  <p style="font-size: 11px; color: #444;">${cidadeData}</p>
-  <div style="display: inline-block; width: 320px; border-top: 1px solid #444; padding-top: 6px; margin-top: 24px; font-size: 11px;">
-    <strong>${INSTITUTIONAL_DATA.representantes.coordenador.nome}</strong><br/>
-    ${INSTITUTIONAL_DATA.representantes.coordenador.cargo} · AEROCAD
+  <div class="os-sec">${observacoes ? '5' : '4'}. CLÁUSULAS OBRIGATÓRIAS E CONDIÇÕES CONTRATUAIS</div>
+  <div class="os-clause-box">
+    <div class="os-clause-item">
+      <strong>Cláusula 1ª (Quitação e Nota Fiscal):</strong> "O prestador será pago mediante a apresentação da nota fiscal emitida em favor do tomador (Aerocad Terraplanagem e Construção LTDA)."
+    </div>
+    <div class="os-clause-item">
+      <strong>Cláusula 2ª (Inexistência de Vínculo Empregatício):</strong> "Os serviços serão ou são prestados de maneira eventual, mediante demanda, e a execução deles por tempo determinado não caracteriza, sob nenhuma hipótese, vínculo empregatício com a AEROCAD."
+    </div>
+  </div>
+
+  <div style="margin-top: 36px; page-break-inside: avoid;">
+    <p style="text-align: center; font-size: 10px; color: #666; margin-bottom: 24px;">Brasília – DF, ${new Date().toLocaleDateString('pt-BR')}</p>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 40px;">
+      <div style="border-top: 1px solid #444; padding-top: 6px; text-align: center; font-size: 10.5px;">
+        <strong>TOMADOR (AEROCAD)</strong><br/>
+        ${INSTITUTIONAL_DATA.razaoSocial}<br/>
+        CNPJ ${INSTITUTIONAL_DATA.cnpj}
+      </div>
+      <div style="border-top: 1px solid #444; padding-top: 6px; text-align: center; font-size: 10.5px;">
+        <strong>PRESTADOR DESIGNADO</strong><br/>
+        ${prestadorNome}<br/>
+        ${prestadorDocumento ? `Doc: ${prestadorDocumento}` : ''}
+      </div>
+    </div>
   </div>
 </div>
 `

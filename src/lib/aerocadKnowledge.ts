@@ -164,6 +164,19 @@ export const SERVICOS_SKILL_AEROCAD: ServicoSkillAerocad[] = [
 export const TEXTO_APRESENTACAO_AEROCAD =
   'A AEROCAD® CONSULTORIA & AEROPORTOS foi fundada em 2017 com a missão de prestar serviços de engenharia consultiva e assessoria regulatória especializada para o setor de infraestrutura aeroportuária nacional. Com sede em Brasília/DF e atuação em todo o território brasileiro, assessoramos operadores públicos, privados e concessionários em todas as fases do ciclo regulatório e de engenharia junto à ANAC, ao COMAER e ao DECEA.'
 
+export const TIPOS_SERVICO_ORDEM_SERVICO_PADRAO: string[] = [
+  'Serviços Técnicos de Apoio na Elaboração de Planos e Estudos Relacionados a Segurança e Controle do Espaço Aéreo (Ex.: PBZPA/PZPANA/PDIR/Estudo Aeronáutico)',
+  'Visita Técnica',
+  'Serviços Técnicos de Apoio no Acompanhamento de Processos no âmbito do DECEA e da ANAC, no que couber',
+  'Serviços Técnicos de Apoio na Elaboração de Projetos de Engenharia, Memoriais e Documentos correlatos',
+  'Emissão de Anotação de Responsabilidade Técnica (ART) ou Relatório de Responsabilidade Técnica (RRT), conforme o caso',
+]
+
+export const CLAUSULAS_OBRIGATORIAS_ORDEM_SERVICO = [
+  'O prestador será pago mediante a apresentação da nota fiscal emitida em favor do tomador (Aerocad Terraplanagem e Construção LTDA).',
+  'Os serviços serão ou são prestados de maneira eventual, mediante demanda, e a execução deles por tempo determinado não caracteriza, sob nenhuma hipótese, vínculo empregatício com a AEROCAD.',
+]
+
 export const CLAUSULAS_PADRAO_AEROCAD = [
   {
     titulo: 'Confidencialidade',

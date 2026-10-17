@@ -19,20 +19,33 @@ export type OrdemServicoStatus =
   | 'rascunho'
   | 'emitida'
 
+export type PrestadorTipoOS = 'colaborador' | 'fornecedor' | 'terceiro_usuario' | 'outro'
+
 export interface OrdemServicoRecord extends RecordModel {
   projeto: string
   prestador_usuario?: string
   prestador?: string
+  prestador_tipo?: PrestadorTipoOS
+  colaborador?: string
+  fornecedor?: string
+  tipo_servico?: string
+  tipo_servico_outro?: string
+  forma_pagamento?: string
+  prazo_execucao?: string
+  valor?: number
   titulo?: string
   descricao: string
   prazo?: string
   data_conclusao?: string
   valor_interno?: number
   observacoes?: string
+  anexos?: string[] | string
   status: OrdemServicoStatus
   expand?: {
     projeto?: ProjetoRecord
     prestador_usuario?: UserRecord
+    colaborador?: ColaboradorRecord
+    fornecedor?: FornecedorRecord
   }
 }
 
@@ -647,8 +660,11 @@ export type CategoriaFornecedor =
   | 'outros'
 
 export interface FornecedorRecord extends RecordModel {
+  tipo_pessoa?: 'pj' | 'pf'
   razao_social: string
   nome_fantasia?: string
+  nome_completo?: string
+  cpf?: string
   cnpj_cpf: string
   categoria: CategoriaFornecedor
   contato_nome?: string

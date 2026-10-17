@@ -1448,7 +1448,7 @@ export default function PessoalPage() {
                         <SelectItem value="none">Nenhum (usar nome acima)</SelectItem>
                         {fornecedores.map((f) => (
                           <SelectItem key={f.id} value={f.id}>
-                            {f.razao_social} ({f.cnpj_cpf})
+                            {f.nome_completo || f.razao_social} ({f.cnpj_cpf || f.cpf})
                           </SelectItem>
                         ))}
                       </SelectContent>

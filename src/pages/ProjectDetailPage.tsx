@@ -67,7 +67,19 @@ import {
   trailPhases,
 } from '@/lib/crm'
 import { formatCurrency, formatDate } from '@/lib/format'
-import { createOne, getOne, listAll, updateOne } from '@/services/api'
+import { createOne, deleteOne, getOne, listAll, updateOne } from '@/services/api'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { AerocadLogo } from '@/components/common/AerocadLogo'
+import { INSTITUTIONAL_DATA } from '@/lib/documentCatalogo'
+import { imprimirElementoA4 } from '@/services/relatorioImpressaoService'
+import { Printer } from 'lucide-react'
 import {
   calcularResumoFinanceiroProjeto,
   getStatusFinanceiroBadgeConfig,
@@ -77,6 +89,7 @@ import type {
   AtividadeRecord,
   DocumentoRecord,
   OrdemServicoRecord,
+  OrdemServicoStatus,
   ParcelaRecord,
   ProcessoRecord,
   ProjetoRecord,
@@ -100,6 +113,11 @@ export default function ProjectDetailPage() {
   const [anexoOpen, setAnexoOpen] = useState(false)
   const [osOpen, setOsOpen] = useState(false)
   const [editingOs, setEditingOs] = useState<OrdemServicoRecord | null>(null)
+  const [osParaVisualizar, setOsParaVisualizar] = useState<OrdemServicoRecord | null>(null)
+  const [visualizarOsModalOpen, setVisualizarOsModalOpen] = useState(false)
+  const [excluirOsModalOpen, setExcluirOsModalOpen] = useState(false)
+  const [osParaExcluir, setOsParaExcluir] = useState<OrdemServicoRecord | null>(null)
+  const [excluindoOs, setExcluindoOs] = useState(false)
   const [vincularNfseOpen, setVincularNfseOpen] = useState(false)
   const [excluirNotaOpen, setExcluirNotaOpen] = useState(false)
   const [notasParaExcluir, setNotasParaExcluir] = useState<NotaExclusaoAlvo[]>([])
@@ -159,7 +177,7 @@ export default function ProjectDetailPage() {
         }),
         listAll<OrdemServicoRecord>('ordens_servico', {
           filter: `projeto = '${id}'`,
-          expand: 'prestador_usuario',
+          expand: 'prestador_usuario,colaborador,fornecedor',
           sort: '-created',
         }).catch(() => []),
       ])
@@ -205,6 +223,45 @@ export default function ProjectDetailPage() {
       toast.error('Não foi possível atualizar o status')
     }
   }
+  async function handleExcluirOS() {
+    if (!osParaExcluir) return
+    setExcluindoOs(true)
+    try {
+      await deleteOne('ordens_servico', osParaExcluir.id)
+      try {
+        await createOne('atividades', {
+          usuario: user?.id,
+          tipo: 'exclusao_os',
+          texto: `Excluiu a Ordem de Serviço ${osParaExcluir.titulo || osParaExcluir.id}`,
+          projeto: id,
+        })
+      } catch {
+        /* ignore */
+      }
+      toast.success('Ordem de Serviço excluída com sucesso!')
+      setExcluirOsModalOpen(false)
+      setOsParaExcluir(null)
+      void load()
+    } catch {
+      toast.error('Não foi possível excluir a Ordem de Serviço.')
+    } finally {
+      setExcluindoOs(false)
+    }
+  }
+
+  async function handleAlterarStatusOS(osItem: OrdemServicoRecord, novoStatus: OrdemServicoStatus) {
+    try {
+      await updateOne<OrdemServicoRecord>('ordens_servico', osItem.id, {
+        status: novoStatus,
+        data_conclusao: novoStatus === 'concluida' ? new Date().toISOString() : undefined,
+      })
+      toast.success(`Status da OS alterado para ${osStatusLabels[novoStatus] || novoStatus}`)
+      void load()
+    } catch {
+      toast.error('Erro ao atualizar status da OS.')
+    }
+  }
+
   async function addNote() {
     if (!note.trim() || !user || !project) return
     try {
@@ -729,14 +786,18 @@ export default function ProjectDetailPage() {
             </div>
           </section>
 
-          {/* Seção de Ordens de Serviço / Prestadores Terceirizados */}
+          {/* Seção de Ordens de Serviço Internas (Colaboradores / Fornecedores PF e PJ) */}
           <section className="crm-card overflow-hidden">
-            <div className="flex items-center justify-between border-b p-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b p-5 gap-3">
               <div>
-                <p className="technical-label">EXECUÇÃO EXTERNA / TERCEIRIZADA</p>
+                <p className="technical-label">ORDENS DE SERVIÇO INTERNAS</p>
                 <h2 className="font-bold flex items-center gap-2">
-                  Ordens de Serviço de Terceiros ({ordens.length})
+                  Ordens de Serviço do Projeto ({ordens.length})
                 </h2>
+                <p className="text-xs text-neutral-500 mt-0.5">
+                  Atribuição de serviços técnicos a colaboradores ou fornecedores (PF/PJ) com
+                  cláusulas contratuais e versão A4.
+                </p>
               </div>
               {canManageOS && (
                 <Button
@@ -745,10 +806,10 @@ export default function ProjectDetailPage() {
                     setEditingOs(null)
                     setOsOpen(true)
                   }}
-                  className="bg-[#FF6A13] hover:bg-[#E85B06] text-white"
+                  className="bg-[#FF6A13] hover:bg-[#E85B06] text-white shrink-0 font-bold"
                 >
-                  <Plus className="mr-2 h-4 w-4" />
-                  Designar Terceiro
+                  <Plus className="mr-1.5 h-4 w-4" />
+                  Nova Ordem de Serviço
                 </Button>
               )}
             </div>
@@ -760,70 +821,196 @@ export default function ProjectDetailPage() {
                   border: 'border-neutral-200',
                 }
                 const prestadorDisplay =
-                  item.expand?.prestador_usuario?.name || item.prestador || 'Sem prestador'
+                  item.expand?.colaborador?.nome_completo ||
+                  item.expand?.fornecedor?.nome_completo ||
+                  item.expand?.fornecedor?.razao_social ||
+                  item.expand?.prestador_usuario?.name ||
+                  item.prestador ||
+                  'Prestador não informado'
+
+                const prestadorTipoDisplay =
+                  item.prestador_tipo === 'colaborador'
+                    ? 'Colaborador'
+                    : item.prestador_tipo === 'fornecedor'
+                      ? item.expand?.fornecedor?.tipo_pessoa === 'pf' ||
+                        (item.expand?.fornecedor?.cnpj_cpf &&
+                          item.expand?.fornecedor?.cnpj_cpf.replace(/\D/g, '').length === 11)
+                        ? 'Fornecedor PF'
+                        : 'Fornecedor PJ'
+                      : item.prestador_tipo === 'terceiro_usuario'
+                        ? 'Portal Terceiro'
+                        : 'Prestador Externo'
+
+                const valorExibir =
+                  item.valor !== undefined && item.valor !== null && item.valor > 0
+                    ? item.valor
+                    : item.valor_interno !== undefined &&
+                        item.valor_interno !== null &&
+                        item.valor_interno > 0
+                      ? item.valor_interno
+                      : null
 
                 return (
                   <div
                     key={item.id}
-                    className="flex flex-col justify-between gap-3 p-4 sm:flex-row sm:items-center hover:bg-[#FFF6EC]/50 transition"
+                    className="flex flex-col justify-between gap-3 p-4 hover:bg-[#FFF6EC]/40 transition"
                   >
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-sm font-bold text-[#333]">
-                          {item.titulo || item.descricao.slice(0, 50)}
-                        </span>
-                        <span
-                          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold ${statusCfg.bg} ${statusCfg.text} ${statusCfg.border}`}
-                        >
-                          {osStatusLabels[item.status] || item.status}
-                        </span>
-                      </div>
-                      <p className="mt-1 text-xs text-[#666]">
-                        Prestador: <strong className="text-[#333]">{prestadorDisplay}</strong>
-                        {item.prazo && ` · Prazo: ${formatDate(item.prazo)}`}
-                        {item.data_conclusao && ` · Conclusão: ${formatDate(item.data_conclusao)}`}
-                      </p>
-                      {item.descricao && (
-                        <p className="mt-1 line-clamp-2 text-xs text-[#777] italic">
-                          {item.descricao}
-                        </p>
-                      )}
-                    </div>
+                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-bold text-sm text-neutral-900">
+                            {item.titulo || `OS-${item.id.slice(0, 6).toUpperCase()}`}
+                          </span>
+                          <span
+                            className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold ${statusCfg.bg} ${statusCfg.text} ${statusCfg.border}`}
+                          >
+                            {osStatusLabels[item.status] || item.status}
+                          </span>
+                          <span className="inline-flex rounded-full bg-orange-100 text-[#D65100] text-[10px] font-semibold px-2 py-0.5">
+                            {prestadorTipoDisplay}
+                          </span>
+                        </div>
 
-                    <div className="flex items-center gap-3">
-                      {isAdmin &&
-                        item.valor_interno !== undefined &&
-                        item.valor_interno !== null && (
+                        {/* Tipo de serviço em destaque */}
+                        <p className="text-xs font-semibold text-neutral-800 line-clamp-1">
+                          {item.tipo_servico || item.descricao}
+                        </p>
+
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-neutral-600">
+                          <span>
+                            Prestador:{' '}
+                            <strong className="text-neutral-900">{prestadorDisplay}</strong>
+                          </span>
+                          {(item.prazo_execucao || item.prazo) && (
+                            <span>
+                              · Prazo:{' '}
+                              <strong>{item.prazo_execucao || formatDate(item.prazo)}</strong>
+                            </span>
+                          )}
+                          {item.forma_pagamento && (
+                            <span className="text-neutral-500">
+                              · Pagto: {item.forma_pagamento}
+                            </span>
+                          )}
+                        </div>
+
+                        {item.observacoes && (
+                          <p className="text-[11px] text-neutral-500 italic line-clamp-2 mt-0.5">
+                            Obs: {item.observacoes}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Bloco de Valor e Ações */}
+                      <div className="flex flex-wrap sm:flex-col items-end justify-between gap-2 shrink-0">
+                        {valorExibir !== null && (
                           <div className="text-right">
-                            <p className="text-[10px] font-bold uppercase tracking-wider text-amber-700">
-                              Custo Interno
-                            </p>
-                            <p className="font-mono text-xs font-bold text-amber-900">
-                              {formatCurrency(item.valor_interno)}
-                            </p>
+                            <span className="text-[10px] uppercase font-bold text-neutral-400 block">
+                              Valor do Serviço
+                            </span>
+                            <span className="font-mono font-black text-sm text-[#FF6A13]">
+                              {formatCurrency(valorExibir)}
+                            </span>
                           </div>
                         )}
 
-                      {canManageOS && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setEditingOs(item)
-                            setOsOpen(true)
-                          }}
-                        >
-                          Editar
-                        </Button>
-                      )}
+                        <div className="flex items-center gap-1.5 mt-1">
+                          {/* Troca Rápida de Status */}
+                          {canManageOS && (
+                            <Select
+                              value={item.status}
+                              onValueChange={(val) =>
+                                void handleAlterarStatusOS(item, val as OrdemServicoStatus)
+                              }
+                            >
+                              <SelectTrigger className="h-7 text-[11px] w-[110px] bg-white">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="atribuida">Aberta</SelectItem>
+                                <SelectItem value="em_execucao">Em execução</SelectItem>
+                                <SelectItem value="concluida">Concluída</SelectItem>
+                                <SelectItem value="recusada">Recusada</SelectItem>
+                                <SelectItem value="cancelada">Cancelada</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          )}
+
+                          {/* Botão de Visualizar / Imprimir A4 */}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setOsParaVisualizar(item)
+                              setVisualizarOsModalOpen(true)
+                            }}
+                            className="h-7 px-2 text-xs border-neutral-300 hover:text-[#FF6A13] hover:border-orange-300"
+                            title="Visualizar e Imprimir Ordem de Serviço A4"
+                          >
+                            <Printer className="h-3.5 w-3.5 mr-1 text-[#FF6A13]" />
+                            A4
+                          </Button>
+
+                          {/* Botão Editar */}
+                          {canManageOS && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setEditingOs(item)
+                                setOsOpen(true)
+                              }}
+                              className="h-7 px-2 text-xs"
+                              title="Editar Ordem de Serviço"
+                            >
+                              <Edit3 className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+
+                          {/* Botão Excluir (Admin / Técnico) */}
+                          {canManageOS && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setOsParaExcluir(item)
+                                setExcluirOsModalOpen(true)
+                              }}
+                              className="h-7 px-1.5 text-xs text-neutral-400 hover:text-rose-600 hover:bg-rose-50"
+                              title="Excluir Ordem de Serviço"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 )
               })}
               {!ordens.length && (
-                <p className="p-8 text-center text-sm text-[#8A8A8A]">
-                  Nenhuma ordem de serviço designada para prestadores terceirizados neste projeto.
-                </p>
+                <div className="p-8 text-center text-sm text-neutral-500">
+                  <p className="font-semibold text-neutral-700">
+                    Nenhuma Ordem de Serviço cadastrada
+                  </p>
+                  <p className="text-xs text-neutral-400 mt-1">
+                    Crie uma OS interna para atribuir atividades técnicas a colaboradores ou
+                    fornecedores (PF/PJ).
+                  </p>
+                  {canManageOS && (
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        setEditingOs(null)
+                        setOsOpen(true)
+                      }}
+                      className="mt-3 bg-[#FF6A13] hover:bg-[#E85B06] text-white text-xs font-bold"
+                    >
+                      <Plus className="mr-1.5 h-3.5 w-3.5" />
+                      Criar Primeira Ordem de Serviço
+                    </Button>
+                  )}
+                </div>
               )}
             </div>
           </section>
@@ -1240,6 +1427,8 @@ export default function ProjectDetailPage() {
         presetProjetoId={project.id}
         presetProjetoNumero={project.numero}
         presetProjetoNome={project.nome}
+        presetClienteRazaoSocial={project.expand?.cliente?.razao_social}
+        presetClienteCnpj={project.expand?.cliente?.cnpj_cpf}
         editingOS={editingOs}
         onSuccess={() => void load()}
       />
@@ -1351,6 +1540,356 @@ export default function ProjectDetailPage() {
         parcelas={installments}
         onSuccess={() => void load()}
       />
+
+      {/* Modal de Exclusão de Ordem de Serviço */}
+      <Dialog open={excluirOsModalOpen} onOpenChange={setExcluirOsModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="text-rose-600">Excluir Ordem de Serviço</DialogTitle>
+            <DialogDescription>
+              Tem certeza de que deseja remover a Ordem de Serviço{' '}
+              <strong>{osParaExcluir?.titulo || `OS-${osParaExcluir?.id.slice(0, 6)}`}</strong>?
+              Esta ação será auditada no histórico do projeto.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setExcluirOsModalOpen(false)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              disabled={excluindoOs}
+              onClick={handleExcluirOS}
+            >
+              {excluindoOs ? 'Excluindo...' : 'Confirmar Exclusão'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Visualização e Impressão A4 de Ordem de Serviço Existente */}
+      <Dialog open={visualizarOsModalOpen} onOpenChange={setVisualizarOsModalOpen}>
+        <DialogContent className="max-w-4xl max-h-[92vh] overflow-y-auto p-0">
+          <div className="sticky top-0 z-20 bg-neutral-900 text-white px-5 py-3 flex items-center justify-between shadow-md print:hidden">
+            <div>
+              <p className="text-[10px] uppercase font-bold text-[#FF6A13] tracking-widest">
+                PREVIEW A4 · ORDEM DE SERVIÇO INTERNA
+              </p>
+              <h3 className="text-sm font-bold text-white truncate">
+                {osParaVisualizar?.titulo || 'Ordem de Serviço'} — {project.numero}
+              </h3>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                onClick={() => {
+                  imprimirElementoA4({
+                    elementId: 'print-ordem-servico-detalhe-a4',
+                    titulo: `${osParaVisualizar?.titulo || 'Ordem de Servico'} - AEROCAD`,
+                    orientacao: 'portrait',
+                  })
+                }}
+                className="bg-[#FF6A13] hover:bg-[#E85B06] text-white font-bold text-xs h-8"
+              >
+                <Printer className="mr-1.5 h-3.5 w-3.5" />
+                Imprimir / Salvar PDF (A4)
+              </Button>
+            </div>
+          </div>
+
+          <div className="p-4 sm:p-6 bg-neutral-100 flex justify-center">
+            {osParaVisualizar && (
+              <div className="bg-white shadow-lg border border-neutral-300 w-full max-w-[210mm]">
+                <div
+                  id="print-ordem-servico-detalhe-a4"
+                  className="bg-white text-[#2D2D2D] p-8 print:p-0 min-h-[297mm] flex flex-col justify-between text-xs"
+                  style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}
+                >
+                  <div>
+                    {/* Cabeçalho Oficial AEROCAD */}
+                    <header className="border-b-2 border-[#FF6A13] pb-4 mb-6 aerocad-doc-header">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3.5">
+                          <div className="aerocad-logo-header-wrapper shrink-0">
+                            <AerocadLogo
+                              className="h-9 w-auto max-w-[190px] object-contain block"
+                              style={{
+                                maxHeight: '38px',
+                                maxWidth: '190px',
+                                width: 'auto',
+                                height: '38px',
+                              }}
+                            />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-[10px] font-bold tracking-[0.2em] text-[#FF6A13] uppercase">
+                              Engenharia & Consultoria Aeroportuária
+                            </p>
+                            <h1 className="text-base sm:text-lg font-black text-[#2D2D2D] tracking-tight uppercase leading-tight">
+                              ORDEM DE SERVIÇO INTERNA
+                            </h1>
+                          </div>
+                        </div>
+
+                        <div className="text-right font-mono text-[10px] text-neutral-500 space-y-0.5">
+                          <div>
+                            OS Nº:{' '}
+                            <strong className="text-neutral-800">
+                              {osParaVisualizar.titulo || `OS-${osParaVisualizar.id.slice(0, 6)}`}
+                            </strong>
+                          </div>
+                          <div>Emissão: {formatDate(osParaVisualizar.created)}</div>
+                          <div>
+                            Status: {(osParaVisualizar.status || 'atribuida').toUpperCase()}
+                          </div>
+                        </div>
+                      </div>
+                    </header>
+
+                    {/* 1. DADOS DE CONTROLE DO PROJETO */}
+                    <div className="space-y-2 mb-5">
+                      <div className="border-l-4 border-[#FF6A13] pl-2.5 py-0.5">
+                        <h2 className="text-xs font-bold uppercase tracking-wider text-neutral-900">
+                          1. DADOS DE CONTROLE DO PROJETO & TOMADOR
+                        </h2>
+                      </div>
+
+                      <table className="w-full text-left text-[11px] border border-neutral-300 border-collapse">
+                        <tbody>
+                          <tr className="border-b border-neutral-200">
+                            <th className="bg-neutral-50 px-3 py-2 w-1/4 font-bold text-neutral-700">
+                              Projeto AEROCAD
+                            </th>
+                            <td className="px-3 py-2 font-bold text-[#FF6A13]">
+                              {project.numero} — {project.nome}
+                            </td>
+                          </tr>
+                          <tr className="border-b border-neutral-200">
+                            <th className="bg-neutral-50 px-3 py-2 font-bold text-neutral-700">
+                              Tomador dos Serviços
+                            </th>
+                            <td className="px-3 py-2">
+                              {INSTITUTIONAL_DATA.razaoSocial} (CNPJ {INSTITUTIONAL_DATA.cnpj})
+                            </td>
+                          </tr>
+                          {project.expand?.cliente?.razao_social && (
+                            <tr className="border-b border-neutral-200">
+                              <th className="bg-neutral-50 px-3 py-2 font-bold text-neutral-700">
+                                Cliente do Projeto
+                              </th>
+                              <td className="px-3 py-2">
+                                {project.expand.cliente.razao_social}{' '}
+                                {project.expand.cliente.cnpj_cpf
+                                  ? `(${project.expand.cliente.cnpj_cpf})`
+                                  : ''}
+                              </td>
+                            </tr>
+                          )}
+                          <tr>
+                            <th className="bg-neutral-50 px-3 py-2 font-bold text-neutral-700">
+                              Data de Criação
+                            </th>
+                            <td className="px-3 py-2">{formatDate(osParaVisualizar.created)}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* 2. DADOS DO PRESTADOR DESIGNADO */}
+                    <div className="space-y-2 mb-5">
+                      <div className="border-l-4 border-[#FF6A13] pl-2.5 py-0.5">
+                        <h2 className="text-xs font-bold uppercase tracking-wider text-neutral-900">
+                          2. PRESTADOR DESIGNADO & CONDIÇÕES CONTRATUAIS
+                        </h2>
+                      </div>
+
+                      {(() => {
+                        const prestadorNome =
+                          osParaVisualizar.expand?.colaborador?.nome_completo ||
+                          osParaVisualizar.expand?.fornecedor?.nome_completo ||
+                          osParaVisualizar.expand?.fornecedor?.razao_social ||
+                          osParaVisualizar.expand?.prestador_usuario?.name ||
+                          osParaVisualizar.prestador ||
+                          'Prestador não informado'
+
+                        const prestadorDoc =
+                          osParaVisualizar.expand?.fornecedor?.cnpj_cpf ||
+                          osParaVisualizar.expand?.fornecedor?.cpf ||
+                          osParaVisualizar.expand?.colaborador?.cpf ||
+                          ''
+
+                        const prestadorTipoRotulo =
+                          osParaVisualizar.prestador_tipo === 'colaborador'
+                            ? 'Colaborador Interno'
+                            : osParaVisualizar.prestador_tipo === 'fornecedor'
+                              ? osParaVisualizar.expand?.fornecedor?.tipo_pessoa === 'pf' ||
+                                (prestadorDoc && prestadorDoc.replace(/\D/g, '').length === 11)
+                                ? 'Fornecedor Pessoa Física (PF)'
+                                : 'Fornecedor Pessoa Jurídica (PJ)'
+                              : osParaVisualizar.prestador_tipo === 'terceiro_usuario'
+                                ? 'Prestador Terceiro (Portal)'
+                                : 'Prestador Designado'
+
+                        const valorOS =
+                          osParaVisualizar.valor !== undefined &&
+                          osParaVisualizar.valor !== null &&
+                          osParaVisualizar.valor > 0
+                            ? osParaVisualizar.valor
+                            : osParaVisualizar.valor_interno || 0
+
+                        return (
+                          <table className="w-full text-left text-[11px] border border-neutral-300 border-collapse">
+                            <tbody>
+                              <tr className="border-b border-neutral-200">
+                                <th className="bg-neutral-50 px-3 py-2 w-1/4 font-bold text-neutral-700">
+                                  Prestador do Serviço
+                                </th>
+                                <td className="px-3 py-2 font-bold text-neutral-900">
+                                  {prestadorNome}
+                                </td>
+                              </tr>
+                              {prestadorDoc && (
+                                <tr className="border-b border-neutral-200">
+                                  <th className="bg-neutral-50 px-3 py-2 font-bold text-neutral-700">
+                                    Documento Fiscal / Cadastro
+                                  </th>
+                                  <td className="px-3 py-2 font-mono">{prestadorDoc}</td>
+                                </tr>
+                              )}
+                              <tr className="border-b border-neutral-200">
+                                <th className="bg-neutral-50 px-3 py-2 font-bold text-neutral-700">
+                                  Vínculo / Categoria
+                                </th>
+                                <td className="px-3 py-2">{prestadorTipoRotulo}</td>
+                              </tr>
+                              <tr className="border-b border-neutral-200">
+                                <th className="bg-neutral-50 px-3 py-2 font-bold text-neutral-700">
+                                  Valor do Serviço (R$)
+                                </th>
+                                <td className="px-3 py-2 font-bold font-mono text-[#FF6A13]">
+                                  {valorOS > 0
+                                    ? formatCurrency(valorOS)
+                                    : 'Conforme proposta / A definir'}
+                                </td>
+                              </tr>
+                              <tr className="border-b border-neutral-200">
+                                <th className="bg-neutral-50 px-3 py-2 font-bold text-neutral-700">
+                                  Forma de Pagamento
+                                </th>
+                                <td className="px-3 py-2">
+                                  {osParaVisualizar.forma_pagamento ||
+                                    'Transferência bancária / PIX mediante apresentação de Nota Fiscal'}
+                                </td>
+                              </tr>
+                              <tr>
+                                <th className="bg-neutral-50 px-3 py-2 font-bold text-neutral-700">
+                                  Prazo de Execução (Interno)
+                                </th>
+                                <td className="px-3 py-2 font-semibold">
+                                  {osParaVisualizar.prazo_execucao ||
+                                    formatDate(osParaVisualizar.prazo) ||
+                                    'A combinar'}
+                                </td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        )
+                      })()}
+                    </div>
+
+                    {/* 3. TIPO DE SERVIÇO & ESCOPO */}
+                    <div className="space-y-2 mb-5">
+                      <div className="border-l-4 border-[#FF6A13] pl-2.5 py-0.5">
+                        <h2 className="text-xs font-bold uppercase tracking-wider text-neutral-900">
+                          3. ESCOPO DO SERVIÇO TÉCNICO
+                        </h2>
+                      </div>
+
+                      <div className="border border-neutral-300 rounded p-3 bg-neutral-50/50 text-[11px] leading-relaxed">
+                        <p className="font-bold text-neutral-900 mb-1">
+                          {osParaVisualizar.tipo_servico || osParaVisualizar.descricao}
+                        </p>
+                        {osParaVisualizar.observacoes && (
+                          <div className="mt-2 text-neutral-700 whitespace-pre-wrap border-t border-neutral-200 pt-2 text-[10.5px]">
+                            <strong>Detalhamento / Observações:</strong>{' '}
+                            {osParaVisualizar.observacoes}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* 4. CLÁUSULAS CONTRATUAIS OBRIGATÓRIAS */}
+                    <div className="space-y-2 mb-6">
+                      <div className="border-l-4 border-[#FF6A13] pl-2.5 py-0.5">
+                        <h2 className="text-xs font-bold uppercase tracking-wider text-neutral-900">
+                          4. CLÁUSULAS OBRIGATÓRIAS E CONDIÇÕES DE PRESTAÇÃO
+                        </h2>
+                      </div>
+
+                      <div className="border border-amber-300 bg-[#FFF9F4] rounded p-3 text-[10.5px] leading-relaxed space-y-2">
+                        <p className="text-neutral-800">
+                          <strong>Cláusula 1ª (Comprovação Fiscal):</strong> "O prestador será pago
+                          mediante a apresentação da nota fiscal emitida em favor do tomador
+                          (Aerocad Terraplanagem e Construção LTDA)."
+                        </p>
+                        <p className="text-neutral-800">
+                          <strong>Cláusula 2ª (Inexistência de Vínculo):</strong> "Os serviços serão
+                          ou são prestados de maneira eventual, mediante demanda, e a execução deles
+                          por tempo determinado não caracteriza, sob nenhuma hipótese, vínculo
+                          empregatício com a AEROCAD."
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Bloco de Assinaturas */}
+                    <div className="pt-8 page-break-inside-avoid">
+                      <p className="text-center text-[10px] text-neutral-500 mb-6">
+                        Brasília – DF, {new Date().toLocaleDateString('pt-BR')}
+                      </p>
+
+                      <div className="grid grid-cols-2 gap-8">
+                        <div className="border-t border-neutral-400 pt-2 text-center text-[10px]">
+                          <strong className="block text-neutral-900">
+                            AEROCAD TERRAPLANAGEM E CONSTRUÇÃO LTDA
+                          </strong>
+                          <span className="text-neutral-500">Tomador dos Serviços</span>
+                        </div>
+                        <div className="border-t border-neutral-400 pt-2 text-center text-[10px]">
+                          <strong className="block text-neutral-900">
+                            {osParaVisualizar.expand?.colaborador?.nome_completo ||
+                              osParaVisualizar.expand?.fornecedor?.nome_completo ||
+                              osParaVisualizar.expand?.fornecedor?.razao_social ||
+                              osParaVisualizar.prestador ||
+                              'Prestador Designado'}
+                          </strong>
+                          <span className="text-neutral-500">Prestador Designado</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Rodapé Oficial da Prancheta AEROCAD */}
+                  <footer className="border-t border-neutral-300 pt-3 mt-8">
+                    <div className="flex items-center justify-between text-[9px] text-neutral-500 font-mono">
+                      <div>
+                        AEROCAD ENGENHARIA & CONSULTORIA AEROPORTUÁRIA · CNPJ 19.822.868/0001-38
+                      </div>
+                      <div>Ordem de Serviço Emitida via CRM AEROCAD</div>
+                    </div>
+                  </footer>
+                </div>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
