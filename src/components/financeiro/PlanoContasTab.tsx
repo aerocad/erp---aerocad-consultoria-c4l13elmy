@@ -77,6 +77,7 @@ import { formatCurrency, formatDate } from '@/lib/format'
 import { exportarTabelaParaXlsx } from '@/services/aerocadXlsxExporter'
 import { imprimirElementoA4 } from '@/services/relatorioImpressaoService'
 import { AerocadRelatorioA4 } from '@/components/financeiro/AerocadRelatorioA4'
+import { ContaContabilBadgeInline } from '@/components/financeiro/ContaContabilBadgeInline'
 
 export interface PlanoContasTabProps {
   contasPagar?: ContaPagarRecord[]
@@ -90,6 +91,7 @@ export interface PlanoContasTabProps {
     tipo: 'pagar' | 'receber' | 'extratos',
     filtro: { codigo: string; nome: string; categoria?: string },
   ) => void
+  onReload?: () => void
 }
 
 interface GrupoEstruturado {
@@ -153,6 +155,7 @@ export function PlanoContasTab({
   contasBancarias = [],
   ativosPatrimonio = [],
   onNavegarParaLancamentos,
+  onReload,
 }: PlanoContasTabProps) {
   const { user } = useAuth()
   const { ocultarValores } = useFinanceiroVisibilidade()
@@ -331,6 +334,8 @@ export function PlanoContasTab({
         const val = Number(cr.valor) || Number(cr.valor_recebido) || 0
         lista.push({
           id: `cr-${cr.id}`,
+          registroIdOriginal: cr.id,
+          classificacaoManual: cr.classificacao_manual,
           origem: 'conta_receber',
           origemLabel: 'Conta a Receber',
           codigoConta: contaReceita.codigo,
@@ -357,6 +362,8 @@ export function PlanoContasTab({
         const val = Number(p.valor_recebido) || Number(p.valor) || 0
         lista.push({
           id: `parc-${p.id}`,
+          registroIdOriginal: p.id,
+          classificacaoManual: p.classificacao_manual,
           origem: 'parcela',
           origemLabel: 'Parcela de Projeto',
           codigoConta: contaReceita.codigo,
@@ -404,6 +411,8 @@ export function PlanoContasTab({
 
         lista.push({
           id: `cp-${cp.id}`,
+          registroIdOriginal: cp.id,
+          classificacaoManual: cp.classificacao_manual,
           origem: 'conta_pagar',
           origemLabel: 'Conta a Pagar',
           codigoConta: contaDespesa.codigo,
@@ -465,6 +474,8 @@ export function PlanoContasTab({
         const valorTx = Number(tx.valor) || 0
         lista.push({
           id: `tx-${tx.id}`,
+          registroIdOriginal: tx.id,
+          classificacaoManual: tx.classificacao_manual,
           origem: 'extrato',
           origemLabel: 'Extrato Bancário',
           codigoConta: contaAlvo.codigo,
@@ -1621,62 +1632,113 @@ export function PlanoContasTab({
                   <table className="w-full text-left text-xs border-collapse">
                     <thead>
                       <tr className="bg-neutral-100 text-neutral-700 font-semibold border-b border-neutral-200 text-[11px]">
-                        <th className="py-2 px-3 w-[14%]">Data</th>
-                        <th className="py-2 px-3 w-[15%]">Origem</th>
-                        <th className="py-2 px-3 w-[45%]">Descrição / Favorecido</th>
-                        <th className="py-2 px-3 w-[14%] text-center">Status</th>
-                        <th className="py-2 px-3 w-[12%] text-right">Valor</th>
+                        <th className="py-2 px-3 w-[12%]">Data</th>
+                        <th className="py-2 px-3 w-[13%]">Origem</th>
+                        <th className="py-2 px-3 w-[35%]">Descrição / Favorecido</th>
+                        <th className="py-2 px-3 w-[20%]">Conta Contábil</th>
+                        <th className="py-2 px-3 w-[10%] text-center">Status</th>
+                        <th className="py-2 px-3 w-[10%] text-right">Valor</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-neutral-100">
-                      {contaSelecionadaModal.lancamentos.map((item) => (
-                        <tr key={item.id} className="hover:bg-neutral-50/80 transition">
-                          <td className="py-2.5 px-3 font-mono text-neutral-600">
-                            {formatDate(item.data)}
-                          </td>
-                          <td className="py-2.5 px-3">
-                            <Badge
-                              variant="outline"
-                              className={`text-[10px] py-0 px-1.5 font-normal ${
-                                item.origem === 'extrato'
-                                  ? 'bg-purple-50 text-purple-700 border-purple-200'
-                                  : item.origem === 'conta_pagar'
-                                    ? 'bg-red-50 text-red-700 border-red-200'
-                                    : item.origem === 'parcela' || item.origem === 'conta_receber'
-                                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                      : 'bg-blue-50 text-blue-700 border-blue-200'
-                              }`}
-                            >
-                              {item.origemLabel}
-                            </Badge>
-                          </td>
-                          <td className="py-2.5 px-3">
-                            <div className="font-medium text-neutral-800">{item.descricao}</div>
-                            {(item.entidade || item.documentoRef) && (
-                              <div className="text-[11px] text-neutral-500 mt-0.5">
-                                {item.entidade && (
-                                  <span className="font-semibold text-neutral-600">
-                                    {item.entidade}
-                                  </span>
-                                )}
-                                {item.documentoRef && (
-                                  <span className="ml-2 text-neutral-400">
-                                    · Doc: {item.documentoRef}
-                                  </span>
-                                )}
-                              </div>
-                            )}
-                          </td>
-                          <td className="py-2.5 px-3 text-center">
-                            <span className="text-[11px] font-medium capitalize text-neutral-600">
-                              {item.status || '—'}
-                            </span>
-                          </td>
-                          <td className="py-2.5 px-3 text-right font-mono font-bold text-neutral-800">
-                            {formatCurrency(item.valor)}
-                          </td>
-                        </tr>
-                      ))}
+                      {contaSelecionadaModal.lancamentos.map((item) => {
+                        const targetColecao =
+                          item.origem === 'extrato'
+                            ? 'extratos_transacoes'
+                            : item.origem === 'conta_pagar'
+                              ? 'contas_pagar'
+                              : item.origem === 'parcela'
+                                ? 'parcelas'
+                                : item.origem === 'conta_receber'
+                                  ? 'contas_receber'
+                                  : null
+                        const targetId = item.registroIdOriginal
+
+                        return (
+                          <tr key={item.id} className="hover:bg-neutral-50/80 transition">
+                            <td className="py-2.5 px-3 font-mono text-neutral-600">
+                              {formatDate(item.data)}
+                            </td>
+                            <td className="py-2.5 px-3">
+                              <Badge
+                                variant="outline"
+                                className={`text-[10px] py-0 px-1.5 font-normal ${
+                                  item.origem === 'extrato'
+                                    ? 'bg-purple-50 text-purple-700 border-purple-200'
+                                    : item.origem === 'conta_pagar'
+                                      ? 'bg-red-50 text-red-700 border-red-200'
+                                      : item.origem === 'parcela' || item.origem === 'conta_receber'
+                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                        : 'bg-blue-50 text-blue-700 border-blue-200'
+                                }`}
+                              >
+                                {item.origemLabel}
+                              </Badge>
+                            </td>
+                            <td className="py-2.5 px-3">
+                              <div className="font-medium text-neutral-800">{item.descricao}</div>
+                              {(item.entidade || item.documentoRef) && (
+                                <div className="text-[11px] text-neutral-500 mt-0.5">
+                                  {item.entidade && (
+                                    <span className="font-semibold text-neutral-600">
+                                      {item.entidade}
+                                    </span>
+                                  )}
+                                  {item.documentoRef && (
+                                    <span className="ml-2 text-neutral-400">
+                                      · Doc: {item.documentoRef}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                            </td>
+                            <td className="py-2.5 px-3">
+                              {targetColecao && targetId ? (
+                                <ContaContabilBadgeInline
+                                  colecao={targetColecao}
+                                  id={targetId}
+                                  codigoAtual={item.codigoConta}
+                                  nomeAtual={item.nomeConta}
+                                  descricaoRegistro={item.descricao}
+                                  dataRegistro={item.data}
+                                  classificacaoManual={item.classificacaoManual}
+                                  compacto
+                                  onReclassificado={(novoCod, novoNom) => {
+                                    // Atualiza o lançamento na visualização do modal imediatamente
+                                    setContaSelecionadaModal((prev) => {
+                                      if (!prev) return null
+                                      const atualizados = prev.lancamentos.map((l) =>
+                                        l.id === item.id
+                                          ? {
+                                              ...l,
+                                              codigoConta: novoCod,
+                                              nomeConta: novoNom,
+                                              classificacaoManual: true,
+                                            }
+                                          : l,
+                                      )
+                                      return { ...prev, lancamentos: atualizados }
+                                    })
+                                    if (onReload) onReload()
+                                  }}
+                                />
+                              ) : (
+                                <span className="font-mono text-xs text-neutral-600">
+                                  {item.codigoConta} · {item.nomeConta}
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-2.5 px-3 text-center">
+                              <span className="text-[11px] font-medium capitalize text-neutral-600">
+                                {item.status || '—'}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-mono font-bold text-neutral-800">
+                              {formatCurrency(item.valor)}
+                            </td>
+                          </tr>
+                        )
+                      })}
                     </tbody>
                   </table>
                 </div>

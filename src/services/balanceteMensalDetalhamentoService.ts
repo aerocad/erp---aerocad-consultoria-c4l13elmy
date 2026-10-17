@@ -154,6 +154,8 @@ export function consolidarBalanceteMensal(
 
     const lancamentoAnalitico: BalanceteLancamentoAnalitico = {
       id: `parc-${p.id}`,
+      registroIdOriginal: p.id,
+      classificacaoManual: p.classificacao_manual,
       data: dataLanc,
       origem: 'parcela',
       origemLabel: 'Parcela de Projeto',
@@ -202,6 +204,8 @@ export function consolidarBalanceteMensal(
 
     const lancamentoAnalitico: BalanceteLancamentoAnalitico = {
       id: `cr-${c.id}`,
+      registroIdOriginal: c.id,
+      classificacaoManual: c.classificacao_manual,
       data: dataLanc,
       origem: 'receita_avulsa',
       origemLabel: 'Receita Avulsa',
@@ -250,6 +254,8 @@ export function consolidarBalanceteMensal(
 
       const lancamentoAnalitico: BalanceteLancamentoAnalitico = {
         id: `tx-${tx.id}`,
+        registroIdOriginal: tx.id,
+        classificacaoManual: tx.classificacao_manual,
         data: dataLanc,
         origem: 'extrato',
         origemLabel: 'Extrato Bancário',
@@ -344,6 +350,8 @@ export function consolidarBalanceteMensal(
 
     const lancamentoAnalitico: BalanceteLancamentoAnalitico = {
       id: `cp-${c.id}`,
+      registroIdOriginal: c.id,
+      classificacaoManual: c.classificacao_manual,
       data: dataLanc,
       origem: 'conta_pagar',
       origemLabel: 'Conta a Pagar',
@@ -392,6 +400,8 @@ export function consolidarBalanceteMensal(
 
       const lancamentoAnalitico: BalanceteLancamentoAnalitico = {
         id: `tx-${tx.id}`,
+        registroIdOriginal: tx.id,
+        classificacaoManual: tx.classificacao_manual,
         data: dataLanc,
         origem: 'extrato',
         origemLabel: 'Extrato Bancário',

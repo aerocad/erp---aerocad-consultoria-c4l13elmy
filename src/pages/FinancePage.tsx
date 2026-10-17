@@ -1723,6 +1723,12 @@ export function FinancePage() {
             contasBancarias={contasBancarias.data}
             ativosPatrimonio={ativosPatrimonio.data}
             canWrite={canWrite}
+            onReload={() => {
+              contasPagar.reload()
+              installments.reload()
+              contasReceber.reload()
+              extratosTransacoes.reload()
+            }}
             onNavegarParaLancamentos={(tipo, filtro) => {
               if (tipo === 'pagar') {
                 setActiveTab('contas_pagar')

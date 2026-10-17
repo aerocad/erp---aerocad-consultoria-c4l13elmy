@@ -303,6 +303,8 @@ export interface LancamentoMapeado {
   status?: string
   documentoRef?: string
   observacoes?: string
+  registroIdOriginal?: string
+  classificacaoManual?: boolean
 }
 
 function normalizarTextoComparacao(texto?: string): string {

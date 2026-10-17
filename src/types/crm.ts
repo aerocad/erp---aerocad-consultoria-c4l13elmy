@@ -738,6 +738,8 @@ export interface BalanceteLancamentoAnalitico {
   valor: number
   tipoMovimento: 'debito' | 'credito'
   status?: string
+  registroIdOriginal?: string
+  classificacaoManual?: boolean
 }
 
 export interface BalanceteContaResumo {
