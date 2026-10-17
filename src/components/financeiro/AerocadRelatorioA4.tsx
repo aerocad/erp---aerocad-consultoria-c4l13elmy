@@ -15,13 +15,14 @@ export interface RelatorioA4Props {
   referenciaPeriodo?: string
   responsavelNome?: string
   dataEmissao?: string
+  orientacao?: 'portrait' | 'landscape'
   resumoKpis?: Array<{
     rotulo: string
     valorFormatado: string
     destaque?: boolean
     cor?: 'laranja' | 'verde' | 'vermelho' | 'neutro'
   }>
-  secoes: Array<{
+  secoes?: Array<{
     titulo: string
     subtitulo?: string
     tabela?: {
@@ -49,23 +50,27 @@ export interface RelatorioA4Props {
 }
 
 export function AerocadRelatorioA4({
-  titulo,
+  titulo = 'Relatório Contábil AEROCAD',
   subtitulo,
   referenciaPeriodo,
   responsavelNome,
   dataEmissao,
-  resumoKpis,
-  secoes,
+  orientacao = 'portrait',
+  resumoKpis = [],
+  secoes = [],
   observacoesFinais,
 }: RelatorioA4Props) {
   const ocultar = isValoresOcultos()
   const dataHoje = dataEmissao || new Date().toLocaleDateString('pt-BR')
   const horaHoje = new Date().toLocaleTimeString('pt-BR')
+  const isLandscape = orientacao === 'landscape'
 
   return (
     <div
       id="print-document"
-      className="bg-white text-[#2D2D2D] font-sans p-8 print:p-0 max-w-[210mm] mx-auto min-h-[297mm] flex flex-col justify-between text-xs"
+      className={`bg-white text-[#2D2D2D] font-sans p-8 print:p-0 ${
+        isLandscape ? 'max-w-[297mm] min-h-[210mm] landscape-mode' : 'max-w-[210mm] min-h-[297mm]'
+      } mx-auto flex flex-col justify-between text-xs`}
       style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}
     >
       <div>
@@ -136,55 +141,57 @@ export function AerocadRelatorioA4({
 
         {/* Seções e Tabelas */}
         <div className="space-y-6">
-          {secoes.map((sec, secIdx) => (
+          {(secoes || []).map((sec, secIdx) => (
             <section key={secIdx} className="space-y-2.5">
               <div className="border-l-4 border-[#FF6A13] pl-2.5 py-0.5">
                 <h2 className="text-xs font-bold uppercase tracking-wider text-neutral-900">
-                  {sec.titulo}
+                  {sec?.titulo || 'Seção'}
                 </h2>
-                {sec.subtitulo && <p className="text-[10px] text-neutral-500">{sec.subtitulo}</p>}
+                {sec?.subtitulo && <p className="text-[10px] text-neutral-500">{sec.subtitulo}</p>}
               </div>
 
-              {sec.tabela && (
+              {sec?.tabela && (
                 <div className="border border-neutral-200 rounded overflow-hidden">
                   <table className="w-full text-left text-[11px] border-collapse">
                     <thead>
                       <tr className="bg-[#2D2D2D] text-white">
-                        {sec.tabela.colunas.map((col, colIdx) => (
+                        {(sec.tabela.colunas || []).map((col, colIdx) => (
                           <th
                             key={colIdx}
-                            style={{ width: col.largura }}
+                            style={{ width: col?.largura }}
                             className={`px-3 py-2 font-bold tracking-tight ${
-                              col.alinhamento === 'right'
+                              col?.alinhamento === 'right'
                                 ? 'text-right'
-                                : col.alinhamento === 'center'
+                                : col?.alinhamento === 'center'
                                   ? 'text-center'
                                   : 'text-left'
                             }`}
                           >
-                            {col.cabecalho}
+                            {col?.cabecalho || ''}
                           </th>
                         ))}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-neutral-200">
-                      {sec.tabela.linhas.map((row, rowIdx) => (
+                      {(sec.tabela.linhas || []).map((row, rowIdx) => (
                         <tr
                           key={rowIdx}
                           className={rowIdx % 2 === 0 ? 'bg-white' : 'bg-neutral-50/70'}
                         >
-                          {row.map((cell, cellIdx) => (
+                          {(row || []).map((cell, cellIdx) => (
                             <td
                               key={cellIdx}
                               className={`px-3 py-2 ${
-                                cell.alinhamento === 'right'
+                                cell?.alinhamento === 'right'
                                   ? 'text-right font-mono'
-                                  : cell.alinhamento === 'center'
+                                  : cell?.alinhamento === 'center'
                                     ? 'text-center'
                                     : 'text-left'
-                              } ${cell.destaque ? 'font-bold text-neutral-900' : 'text-neutral-700'}`}
+                              } ${cell?.destaque ? 'font-bold text-neutral-900' : 'text-neutral-700'}`}
                             >
-                              {cell.conteudo}
+                              {cell?.conteudo !== undefined && cell?.conteudo !== null
+                                ? cell.conteudo
+                                : '—'}
                             </td>
                           ))}
                         </tr>
@@ -196,14 +203,16 @@ export function AerocadRelatorioA4({
                             <td
                               key={cellIdx}
                               className={`px-3 py-2.5 ${
-                                cell.alinhamento === 'right'
+                                cell?.alinhamento === 'right'
                                   ? 'text-right font-mono text-[#D65100]'
-                                  : cell.alinhamento === 'center'
+                                  : cell?.alinhamento === 'center'
                                     ? 'text-center'
                                     : 'text-left'
                               }`}
                             >
-                              {cell.conteudo}
+                              {cell?.conteudo !== undefined && cell?.conteudo !== null
+                                ? cell.conteudo
+                                : '—'}
                             </td>
                           ))}
                         </tr>
@@ -213,7 +222,7 @@ export function AerocadRelatorioA4({
                 </div>
               )}
 
-              {sec.conteudoLivre}
+              {sec?.conteudoLivre}
             </section>
           ))}
         </div>

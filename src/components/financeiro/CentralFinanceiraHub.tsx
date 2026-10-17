@@ -13,6 +13,7 @@ import {
   Clock,
   CheckCircle2,
   Building2,
+  BookOpen,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/lib/format'
@@ -28,6 +29,7 @@ export type FinanceTabKey =
   | 'ativos_patrimonio'
   | 'relatorios'
   | 'relatorios_avancados'
+  | 'plano_contas'
   | 'parcelas'
   | 'orfas'
 
@@ -301,6 +303,26 @@ export function CentralFinanceiraHub({
         </span>
       ),
       statSubtext: 'Débitos, créditos, saldos e contas PJ',
+      visible: true,
+    },
+    {
+      id: 'plano_contas',
+      title: 'Plano de Contas',
+      subtitle: 'Estrutura analítica de categorias, contas e lançamentos',
+      icon: BookOpen,
+      accentColor: '#FF6A13',
+      iconBg: 'bg-orange-50 border-orange-200 text-[#FF6A13]',
+      iconColor: 'text-[#FF6A13]',
+      badge: (
+        <span className="inline-flex items-center rounded-full bg-orange-50 px-2 py-0.5 text-[10px] font-bold text-[#D65100] border border-[#FFD2B3]">
+          Contábil
+        </span>
+      ),
+      statLabel: 'Árvore Contábil',
+      statValue: (
+        <span className="font-semibold text-neutral-900 text-xs sm:text-sm">4 Macro-Grupos</span>
+      ),
+      statSubtext: 'Ativo, Passivo, Despesas e Receitas',
       visible: true,
     },
     {

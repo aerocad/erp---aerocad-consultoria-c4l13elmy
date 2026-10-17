@@ -80,6 +80,17 @@ import {
   TipoPeriodoDossie,
 } from '@/services/dossieContabilService'
 import { calcularBalanceteVerificacao } from '@/services/balanceteContabilService'
+import { imprimirElementoA4 } from '@/services/relatorioImpressaoService'
+
+// Helper seguro para parsing numérico defensivo
+function safeNumber(val: unknown, fallback: number = 0): number {
+  if (typeof val === 'number' && !isNaN(val)) return val
+  if (typeof val === 'string') {
+    const parsed = parseFloat(val.replace(',', '.'))
+    if (!isNaN(parsed)) return parsed
+  }
+  return fallback
+}
 
 export interface RelatoriosContabeisAvancadosTabProps {
   parcelas: ParcelaRecord[]
@@ -2499,15 +2510,40 @@ export function RelatoriosContabeisAvancadosTab({
       {/* 4. MODAL COM PREVIEW A4 OFICIAL AEROCAD */}
       <Dialog open={modalA4Aberto} onOpenChange={setModalA4Aberto}>
         <DialogContent className="max-w-4xl max-h-[92vh] overflow-y-auto p-4 sm:p-6 bg-neutral-100">
-          <div className="flex justify-between items-center mb-3 print:hidden">
-            <span className="text-xs font-bold text-neutral-600 uppercase tracking-wider">
-              Preview A4 Oficial · Prancheta Técnica AEROCAD
-            </span>
+          <div className="flex justify-between items-center mb-3 print:hidden border-b border-neutral-200 pb-3">
+            <div>
+              <span className="text-xs font-bold text-neutral-800 uppercase tracking-wider block">
+                Preview A4 Oficial · Prancheta Técnica AEROCAD
+              </span>
+              <span className="text-[11px] text-neutral-500">
+                {secaoAtiva === 'balancete'
+                  ? 'Balancete de Verificação Contábil'
+                  : secaoAtiva === 'balanco'
+                    ? 'Balanço Patrimonial Gerencial'
+                    : secaoAtiva === 'ponto_equilibrio'
+                      ? 'Ponto de Equilíbrio & Margem de Segurança'
+                      : secaoAtiva === 'indicadores'
+                        ? 'Relatório Executivo de Indicadores & Insights'
+                        : 'Demonstração do Resultado do Exercício (DRE)'}
+              </span>
+            </div>
             <div className="flex items-center gap-2">
               <Button
                 size="sm"
-                onClick={() => window.print()}
-                className="bg-[#FF6A13] hover:bg-[#E85B06] text-white text-xs"
+                onClick={() => {
+                  imprimirElementoA4({
+                    elementId: 'print-document',
+                    titulo:
+                      secaoAtiva === 'balancete'
+                        ? 'Balancete de Verificação Contábil'
+                        : secaoAtiva === 'balanco'
+                          ? 'Balanço Patrimonial'
+                          : secaoAtiva === 'ponto_equilibrio'
+                            ? 'Ponto de Equilíbrio'
+                            : 'DRE - Demonstração do Resultado',
+                  })
+                }}
+                className="bg-[#FF6A13] hover:bg-[#E85B06] text-white text-xs font-semibold shadow-xs"
               >
                 <Printer className="mr-1.5 h-3.5 w-3.5" />
                 Imprimir / Salvar PDF
@@ -2515,40 +2551,40 @@ export function RelatoriosContabeisAvancadosTab({
             </div>
           </div>
 
-          {/* Componente A4 padrão */}
+          {/* Componente A4 padrão com renderização defensiva para todas as 5 seções */}
           {secaoAtiva === 'balancete' ? (
             <AerocadRelatorioA4
               titulo="BALANCETE DE VERIFICAÇÃO CONTÁBIL"
-              subtitulo={`Testagem dos Saldos das Contas · ${periodoRotulo} · Conta: ${contaAtivaNome}`}
-              referenciaPeriodo={`${periodoRotulo} · ${contaAtivaNome}`}
-              responsavelNome={usuarioNome}
+              subtitulo={`Testagem dos Saldos das Contas · ${periodoRotulo || 'Geral'} · Conta: ${contaAtivaNome || 'Todas'}`}
+              referenciaPeriodo={`${periodoRotulo || 'Geral'} · ${contaAtivaNome || 'Todas'}`}
+              responsavelNome={usuarioNome || 'Equipe AEROCAD'}
               resumoKpis={[
                 {
                   rotulo: 'Saldo Anterior Devedor',
                   valorFormatado: mascararValores
                     ? VALOR_MASCARADO
-                    : formatCurrency(balanceteData.totalSaldoAnteriorDevedor),
+                    : formatCurrency(safeNumber(balanceteData?.totalSaldoAnteriorDevedor)),
                   cor: 'neutro',
                 },
                 {
                   rotulo: 'Total Débitos Período',
                   valorFormatado: mascararValores
                     ? VALOR_MASCARADO
-                    : formatCurrency(balanceteData.totalDebitos),
+                    : formatCurrency(safeNumber(balanceteData?.totalDebitos)),
                   cor: 'verde',
                 },
                 {
                   rotulo: 'Total Créditos Período',
                   valorFormatado: mascararValores
                     ? VALOR_MASCARADO
-                    : formatCurrency(balanceteData.totalCreditos),
+                    : formatCurrency(safeNumber(balanceteData?.totalCreditos)),
                   cor: 'verde',
                 },
                 {
                   rotulo: 'Saldo Final Devedor',
                   valorFormatado: mascararValores
                     ? VALOR_MASCARADO
-                    : formatCurrency(balanceteData.totalSaldoFinalDevedor),
+                    : formatCurrency(safeNumber(balanceteData?.totalSaldoFinalDevedor)),
                   cor: 'laranja',
                   destaque: true,
                 },
@@ -2571,25 +2607,29 @@ export function RelatoriosContabeisAvancadosTab({
                       { cabecalho: 'Débitos (R$)', alinhamento: 'right', largura: '15%' },
                       { cabecalho: 'Créditos (R$)', alinhamento: 'right', largura: '15%' },
                     ],
-                    linhas: balanceteData.linhas.map((l) => [
-                      { conteudo: l.codigo, destaque: l.grau === 1 },
+                    linhas: (balanceteData?.linhas || []).map((l) => [
+                      { conteudo: l?.codigo || '—', destaque: l?.grau === 1 },
                       {
-                        conteudo: `${l.grau === 3 ? '   ' : l.grau === 2 ? ' ' : ''}${l.descricao}`,
-                        destaque: l.grau === 1,
+                        conteudo: `${l?.grau === 3 ? '   ' : l?.grau === 2 ? ' ' : ''}${l?.descricao || 'Sem descrição'}`,
+                        destaque: l?.grau === 1,
                       },
-                      { conteudo: l.natureza, alinhamento: 'center' },
+                      { conteudo: l?.natureza || '—', alinhamento: 'center' },
                       {
                         conteudo: mascararValores
                           ? VALOR_MASCARADO
-                          : formatCurrency(l.saldoAnterior),
+                          : formatCurrency(safeNumber(l?.saldoAnterior)),
                         alinhamento: 'right',
                       },
                       {
-                        conteudo: mascararValores ? VALOR_MASCARADO : formatCurrency(l.debitos),
+                        conteudo: mascararValores
+                          ? VALOR_MASCARADO
+                          : formatCurrency(safeNumber(l?.debitos)),
                         alinhamento: 'right',
                       },
                       {
-                        conteudo: mascararValores ? VALOR_MASCARADO : formatCurrency(l.creditos),
+                        conteudo: mascararValores
+                          ? VALOR_MASCARADO
+                          : formatCurrency(safeNumber(l?.creditos)),
                         alinhamento: 'right',
                       },
                     ]),
@@ -2600,19 +2640,19 @@ export function RelatoriosContabeisAvancadosTab({
                       {
                         conteudo: mascararValores
                           ? VALOR_MASCARADO
-                          : formatCurrency(balanceteData.totalSaldoAnteriorDevedor),
+                          : formatCurrency(safeNumber(balanceteData?.totalSaldoAnteriorDevedor)),
                         alinhamento: 'right',
                       },
                       {
                         conteudo: mascararValores
                           ? VALOR_MASCARADO
-                          : formatCurrency(balanceteData.totalDebitos),
+                          : formatCurrency(safeNumber(balanceteData?.totalDebitos)),
                         alinhamento: 'right',
                       },
                       {
                         conteudo: mascararValores
                           ? VALOR_MASCARADO
-                          : formatCurrency(balanceteData.totalCreditos),
+                          : formatCurrency(safeNumber(balanceteData?.totalCreditos)),
                         alinhamento: 'right',
                       },
                     ],
@@ -2625,35 +2665,35 @@ export function RelatoriosContabeisAvancadosTab({
             <AerocadRelatorioA4
               titulo="BALANÇO PATRIMONIAL (MINUTA GERENCIAL)"
               subtitulo="CARIMBO: MINUTA — SUJEITA A REVISÃO E CHANCELA DO CONTADOR RESPONSÁVEL"
-              referenciaPeriodo={`${periodoRotulo} · Conta: ${contaAtivaNome}`}
-              responsavelNome={usuarioNome}
+              referenciaPeriodo={`${periodoRotulo || 'Geral'} · Conta: ${contaAtivaNome || 'Todas'}`}
+              responsavelNome={usuarioNome || 'Equipe AEROCAD'}
               resumoKpis={[
                 {
                   rotulo: 'Ativo Circulante',
                   valorFormatado: mascararValores
                     ? VALOR_MASCARADO
-                    : formatCurrency(balancoData.totalAtivoCirculante),
+                    : formatCurrency(safeNumber(balancoData?.totalAtivoCirculante)),
                   cor: 'laranja',
                 },
                 {
                   rotulo: 'Ativo Não Circulante (Líquido)',
                   valorFormatado: mascararValores
                     ? VALOR_MASCARADO
-                    : formatCurrency(balancoData.totalAtivoNaoCirculante),
+                    : formatCurrency(safeNumber(balancoData?.totalAtivoNaoCirculante)),
                   cor: 'verde',
                 },
                 {
                   rotulo: 'Passivo Circulante',
                   valorFormatado: mascararValores
                     ? VALOR_MASCARADO
-                    : formatCurrency(balancoData.totalPassivoCirculante),
+                    : formatCurrency(safeNumber(balancoData?.totalPassivoCirculante)),
                   cor: 'vermelho',
                 },
                 {
                   rotulo: 'Patrimônio Líquido',
                   valorFormatado: mascararValores
                     ? VALOR_MASCARADO
-                    : formatCurrency(balancoData.patrimonioLiquidoTotal),
+                    : formatCurrency(safeNumber(balancoData?.patrimonioLiquidoTotal)),
                   cor: 'neutro',
                 },
               ]}
@@ -2669,21 +2709,21 @@ export function RelatoriosContabeisAvancadosTab({
                     linhas: [
                       [
                         { conteudo: '1.1 Disponibilidades (Bancos Movimento PJ)' },
-                        { conteudo: contaAtivaNome, alinhamento: 'center' },
+                        { conteudo: contaAtivaNome || 'Todas', alinhamento: 'center' },
                         {
                           conteudo: mascararValores
                             ? VALOR_MASCARADO
-                            : formatCurrency(balancoData.totalDisponibilidades),
+                            : formatCurrency(safeNumber(balancoData?.totalDisponibilidades)),
                           alinhamento: 'right',
                         },
                       ],
                       [
                         { conteudo: '1.2 Contas a Receber (Parcelas e Clientes)' },
-                        { conteudo: contaAtivaNome, alinhamento: 'center' },
+                        { conteudo: contaAtivaNome || 'Todas', alinhamento: 'center' },
                         {
                           conteudo: mascararValores
                             ? VALOR_MASCARADO
-                            : formatCurrency(balancoData.totalContasReceber),
+                            : formatCurrency(safeNumber(balancoData?.totalContasReceber)),
                           alinhamento: 'right',
                         },
                       ],
@@ -2693,7 +2733,7 @@ export function RelatoriosContabeisAvancadosTab({
                         {
                           conteudo: mascararValores
                             ? VALOR_MASCARADO
-                            : formatCurrency(balancoData.totalCustoHistoricoAtivos),
+                            : formatCurrency(safeNumber(balancoData?.totalCustoHistoricoAtivos)),
                           alinhamento: 'right',
                         },
                       ],
@@ -2703,7 +2743,7 @@ export function RelatoriosContabeisAvancadosTab({
                         {
                           conteudo: mascararValores
                             ? VALOR_MASCARADO
-                            : `- ${formatCurrency(balancoData.totalDepreciacaoAcumulada)}`,
+                            : `- ${formatCurrency(safeNumber(balancoData?.totalDepreciacaoAcumulada))}`,
                           alinhamento: 'right',
                         },
                       ],
@@ -2714,7 +2754,7 @@ export function RelatoriosContabeisAvancadosTab({
                       {
                         conteudo: mascararValores
                           ? VALOR_MASCARADO
-                          : formatCurrency(balancoData.totalAtivo),
+                          : formatCurrency(safeNumber(balancoData?.totalAtivo)),
                         alinhamento: 'right',
                       },
                     ],
@@ -2735,11 +2775,11 @@ export function RelatoriosContabeisAvancadosTab({
                     linhas: [
                       [
                         { conteudo: '2.1 Fornecedores e Contas a Pagar (Passivo Circulante)' },
-                        { conteudo: contaAtivaNome, alinhamento: 'center' },
+                        { conteudo: contaAtivaNome || 'Todas', alinhamento: 'center' },
                         {
                           conteudo: mascararValores
                             ? VALOR_MASCARADO
-                            : formatCurrency(balancoData.totalPassivoCirculante),
+                            : formatCurrency(safeNumber(balancoData?.totalPassivoCirculante)),
                           alinhamento: 'right',
                         },
                       ],
@@ -2749,7 +2789,7 @@ export function RelatoriosContabeisAvancadosTab({
                         {
                           conteudo: mascararValores
                             ? VALOR_MASCARADO
-                            : formatCurrency(balancoData.capitalSocialEstimado),
+                            : formatCurrency(safeNumber(balancoData?.capitalSocialEstimado)),
                           alinhamento: 'right',
                         },
                       ],
@@ -2759,7 +2799,7 @@ export function RelatoriosContabeisAvancadosTab({
                         {
                           conteudo: mascararValores
                             ? VALOR_MASCARADO
-                            : formatCurrency(balancoData.resultadoAcumuladoHistorico),
+                            : formatCurrency(safeNumber(balancoData?.resultadoAcumuladoHistorico)),
                           alinhamento: 'right',
                         },
                       ],
@@ -2770,7 +2810,7 @@ export function RelatoriosContabeisAvancadosTab({
                       {
                         conteudo: mascararValores
                           ? VALOR_MASCARADO
-                          : formatCurrency(balancoData.totalPassivoEPL),
+                          : formatCurrency(safeNumber(balancoData?.totalPassivoEPL)),
                         alinhamento: 'right',
                       },
                     ],
@@ -2779,37 +2819,266 @@ export function RelatoriosContabeisAvancadosTab({
               ]}
               observacoesFinais="ESTE DOCUMENTO CONSTITUI MINUTA CONTÁBIL GERENCIAL EMITIDA PELO CRM AEROCAD CONSULTORIA PARA CONCILIAÇÃO FINANCEIRA E PLANEJAMENTO FISCAL. OS VALORES DE ATIVO NÃO CIRCULANTE CONSIDERAM CRITÉRIO DE DEPRECIAÇÃO LINEAR COM VIDA ÚTIL PREVISTA PELA LEGISLAÇÃO BRASILEIRA. DOCUMENTO SUJEITO À REVISÃO FINAL DA ESCRITURAÇÃO CONTÁBIL PELO CONTADOR RESPONSÁVEL TÉCNICO."
             />
+          ) : secaoAtiva === 'ponto_equilibrio' ? (
+            <AerocadRelatorioA4
+              titulo="RELATÓRIO DE PONTO DE EQUILÍBRIO & MARGEM DE SEGURANÇA"
+              subtitulo={`Análise de Break-Even Operacional · ${periodoRotulo || 'Geral'} · Conta: ${contaAtivaNome || 'Todas'}`}
+              referenciaPeriodo={`${periodoRotulo || 'Geral'} · ${contaAtivaNome || 'Todas'}`}
+              responsavelNome={usuarioNome || 'Equipe AEROCAD'}
+              resumoKpis={[
+                {
+                  rotulo: 'Ponto de Equilíbrio (Break-Even)',
+                  valorFormatado: mascararValores
+                    ? VALOR_MASCARADO
+                    : formatCurrency(safeNumber(pontoEquilibrioData?.faturamentoPontoEquilibrio)),
+                  cor: 'laranja',
+                  destaque: true,
+                },
+                {
+                  rotulo: 'Faturamento Realizado',
+                  valorFormatado: mascararValores
+                    ? VALOR_MASCARADO
+                    : formatCurrency(safeNumber(dreData?.receitaBruta)),
+                  cor: 'verde',
+                },
+                {
+                  rotulo: 'Margem de Segurança',
+                  valorFormatado: mascararValores
+                    ? VALOR_MASCARADO
+                    : `${formatCurrency(safeNumber(pontoEquilibrioData?.margemSegurancaValor))} (${safeNumber(pontoEquilibrioData?.margemSegurancaPercentual).toFixed(1)}%)`,
+                  cor: (pontoEquilibrioData?.margemSegurancaValor || 0) >= 0 ? 'verde' : 'vermelho',
+                },
+                {
+                  rotulo: 'Status Operacional',
+                  valorFormatado: pontoEquilibrioData?.atingiuBreakEven
+                    ? 'Break-Even Superado'
+                    : 'Déficit Operacional',
+                  cor: pontoEquilibrioData?.atingiuBreakEven ? 'verde' : 'vermelho',
+                },
+              ]}
+              secoes={[
+                {
+                  titulo: 'QUADRO TÉCNICO DE CUSTOS E MARGEM DE CONTRIBUIÇÃO',
+                  subtitulo:
+                    'Premissas contábeis de custeio variável para cobertura dos custos fixos estruturais AEROCAD',
+                  tabela: {
+                    colunas: [
+                      { cabecalho: 'Parâmetro / Indicador', alinhamento: 'left', largura: '50%' },
+                      { cabecalho: 'Fórmula Contábil', alinhamento: 'left', largura: '25%' },
+                      { cabecalho: 'Valor Apurado', alinhamento: 'right', largura: '25%' },
+                    ],
+                    linhas: [
+                      [
+                        { conteudo: 'Custos e Despesas Fixas do Período' },
+                        { conteudo: 'Σ Despesas Administrativas Fixas' },
+                        {
+                          conteudo: mascararValores
+                            ? VALOR_MASCARADO
+                            : formatCurrency(safeNumber(pontoEquilibrioData?.custosFixos)),
+                          alinhamento: 'right',
+                        },
+                      ],
+                      [
+                        { conteudo: 'Índice da Margem de Contribuição (IMC)' },
+                        { conteudo: 'Margem de Contribuição ÷ Receita Bruta' },
+                        {
+                          conteudo: `${(safeNumber(pontoEquilibrioData?.indiceMargemContribuicao) * 100).toFixed(1)}%`,
+                          alinhamento: 'right',
+                          destaque: true,
+                        },
+                      ],
+                      [
+                        { conteudo: 'Faturamento de Equilíbrio Necessário' },
+                        { conteudo: 'Custos Fixos ÷ IMC' },
+                        {
+                          conteudo: mascararValores
+                            ? VALOR_MASCARADO
+                            : formatCurrency(
+                                safeNumber(pontoEquilibrioData?.faturamentoPontoEquilibrio),
+                              ),
+                          alinhamento: 'right',
+                          destaque: true,
+                        },
+                      ],
+                      [
+                        { conteudo: 'Faturamento Realizado no Recorte' },
+                        { conteudo: 'Σ Parcelas Quitadas + NFS-e' },
+                        {
+                          conteudo: mascararValores
+                            ? VALOR_MASCARADO
+                            : formatCurrency(safeNumber(dreData?.receitaBruta)),
+                          alinhamento: 'right',
+                        },
+                      ],
+                      [
+                        { conteudo: 'Margem de Segurança Financeira' },
+                        { conteudo: 'Receita Realizada - Ponto Equilíbrio' },
+                        {
+                          conteudo: mascararValores
+                            ? VALOR_MASCARADO
+                            : formatCurrency(safeNumber(pontoEquilibrioData?.margemSegurancaValor)),
+                          alinhamento: 'right',
+                          destaque: true,
+                        },
+                      ],
+                      [
+                        { conteudo: 'Meta Mensal para Cobertura Fixa' },
+                        { conteudo: 'Ponto Equilíbrio ÷ Qtd Meses' },
+                        {
+                          conteudo: mascararValores
+                            ? VALOR_MASCARADO
+                            : formatCurrency(
+                                safeNumber(pontoEquilibrioData?.metaFaturamentoMensal),
+                              ),
+                          alinhamento: 'right',
+                        },
+                      ],
+                    ],
+                  },
+                },
+              ]}
+              observacoesFinais="RELATÓRIO DE PONTO DE EQUILÍBRIO OPERACIONAL GERADO PELO SISTEMA AEROCAD CONSULTORIA PARA ANÁLISE DE CAPACIDADE DE ABSORÇÃO DE CUSTOS E MARGEM DE SEGURANÇA. FORMULADO CONFORME PRINCÍPIOS FUNDAMENTAIS DE CONTABILIDADE GERENCIAL."
+            />
+          ) : secaoAtiva === 'indicadores' ? (
+            <AerocadRelatorioA4
+              titulo="RELATÓRIO EXECUTIVO DE INDICADORES & PERFORMANCE"
+              subtitulo={`Painel de Métricas e Análise Gerencial · ${periodoRotulo || 'Geral'} · Conta: ${contaAtivaNome || 'Todas'}`}
+              referenciaPeriodo={`${periodoRotulo || 'Geral'} · ${contaAtivaNome || 'Todas'}`}
+              responsavelNome={usuarioNome || 'Equipe AEROCAD'}
+              resumoKpis={[
+                {
+                  rotulo: 'Prazo Médio Recebimento',
+                  valorFormatado: `${indicadoresData?.pmrMedio || 0} dias`,
+                  cor: 'laranja',
+                },
+                {
+                  rotulo: 'Maior Cliente (% Receita)',
+                  valorFormatado: `${(indicadoresData?.concentracaoMaiorCliente || 0).toFixed(1)}%`,
+                  cor: 'neutro',
+                },
+                {
+                  rotulo: 'Inadimplência no Período',
+                  valorFormatado: mascararValores
+                    ? VALOR_MASCARADO
+                    : formatCurrency(safeNumber(indicadoresData?.totalAtrasado)),
+                  cor: (indicadoresData?.totalAtrasado || 0) === 0 ? 'verde' : 'vermelho',
+                },
+                {
+                  rotulo: 'Resultado Operacional',
+                  valorFormatado: mascararValores
+                    ? VALOR_MASCARADO
+                    : formatCurrency(safeNumber(dreData?.resultadoOperacional)),
+                  cor: (dreData?.resultadoOperacional || 0) >= 0 ? 'verde' : 'vermelho',
+                  destaque: true,
+                },
+              ]}
+              secoes={[
+                {
+                  titulo: 'INSIGHTS DETERMINÍSTICOS E RECOMENDAÇÕES DA CONTROLADORIA',
+                  subtitulo:
+                    'Diagnóstico automatizado sobre receita, margens, concentração e prazos de liquidação',
+                  tabela: {
+                    colunas: [
+                      { cabecalho: 'Status', alinhamento: 'center', largura: '15%' },
+                      { cabecalho: 'Diagnóstico Gerencial', alinhamento: 'left', largura: '35%' },
+                      {
+                        cabecalho: 'Detalhamento Operacional',
+                        alinhamento: 'left',
+                        largura: '50%',
+                      },
+                    ],
+                    linhas: (indicadoresData?.insights || []).map((ins) => [
+                      {
+                        conteudo:
+                          ins?.tipo === 'positivo'
+                            ? '✓ Positivo'
+                            : ins?.tipo === 'alerta'
+                              ? '⚠ Atenção'
+                              : 'ℹ Informativo',
+                        alinhamento: 'center',
+                        destaque: ins?.tipo === 'alerta',
+                      },
+                      { conteudo: ins?.titulo || '—', destaque: true },
+                      { conteudo: ins?.descricao || '—' },
+                    ]),
+                  },
+                },
+                {
+                  titulo: 'FLUXO COMPARATIVO MENSAL DO EXERCÍCIO (ENTRADAS VS SAÍDAS)',
+                  subtitulo: 'Consolidação das receitas e despesas distribuídas mês a mês',
+                  tabela: {
+                    colunas: [
+                      { cabecalho: 'Mês', alinhamento: 'left', largura: '25%' },
+                      {
+                        cabecalho: 'Entradas Realizadas (R$)',
+                        alinhamento: 'right',
+                        largura: '25%',
+                      },
+                      {
+                        cabecalho: 'Saídas Operacionais (R$)',
+                        alinhamento: 'right',
+                        largura: '25%',
+                      },
+                      { cabecalho: 'Saldo Líquido (R$)', alinhamento: 'right', largura: '25%' },
+                    ],
+                    linhas: (indicadoresData?.evolucaoMensal || []).map((m) => [
+                      { conteudo: m.nome, destaque: true },
+                      {
+                        conteudo: mascararValores
+                          ? VALOR_MASCARADO
+                          : formatCurrency(safeNumber(m.entradas)),
+                        alinhamento: 'right',
+                      },
+                      {
+                        conteudo: mascararValores
+                          ? VALOR_MASCARADO
+                          : formatCurrency(safeNumber(m.saidas)),
+                        alinhamento: 'right',
+                      },
+                      {
+                        conteudo: mascararValores
+                          ? VALOR_MASCARADO
+                          : formatCurrency(safeNumber(m.saldo)),
+                        alinhamento: 'right',
+                        destaque: true,
+                      },
+                    ]),
+                  },
+                },
+              ]}
+              observacoesFinais="RELATÓRIO EXECUTIVO DE INDICADORES EMITIDO PELO ERP AEROCAD PARA MONITORAMENTO ESTRATÉGICO, GOVERNANÇA E CONTROLE ORÇAMENTÁRIO. INFORMAÇÕES CONFIDENCIAIS E PRIVATIVAS DA DIRETORIA."
+            />
           ) : (
             <AerocadRelatorioA4
               titulo="DEMONSTRATIVO DO RESULTADO DO EXERCÍCIO (DRE)"
-              subtitulo={`Degraus Contábeis · ${periodoRotulo} · Conta: ${contaAtivaNome}`}
-              referenciaPeriodo={periodoRotulo}
-              responsavelNome={usuarioNome}
+              subtitulo={`Degraus Contábeis · ${periodoRotulo || 'Geral'} · Conta: ${contaAtivaNome || 'Todas'}`}
+              referenciaPeriodo={periodoRotulo || 'Geral'}
+              responsavelNome={usuarioNome || 'Equipe AEROCAD'}
               resumoKpis={[
                 {
                   rotulo: 'Receita Bruta',
                   valorFormatado: mascararValores
                     ? VALOR_MASCARADO
-                    : formatCurrency(dreData.receitaBruta),
+                    : formatCurrency(safeNumber(dreData?.receitaBruta)),
                   cor: 'laranja',
                 },
                 {
                   rotulo: 'Margem Contribuição',
                   valorFormatado: mascararValores
                     ? VALOR_MASCARADO
-                    : formatCurrency(dreData.margemContribuicao),
+                    : formatCurrency(safeNumber(dreData?.margemContribuicao)),
                   cor: 'neutro',
                 },
                 {
                   rotulo: 'Resultado Operacional',
                   valorFormatado: mascararValores
                     ? VALOR_MASCARADO
-                    : formatCurrency(dreData.resultadoOperacional),
-                  cor: dreData.resultadoOperacional >= 0 ? 'verde' : 'vermelho',
+                    : formatCurrency(safeNumber(dreData?.resultadoOperacional)),
+                  cor: (dreData?.resultadoOperacional || 0) >= 0 ? 'verde' : 'vermelho',
                 },
                 {
                   rotulo: 'Margem Líquida',
-                  valorFormatado: `${dreData.margemLiquidaPercentual.toFixed(1)}%`,
+                  valorFormatado: `${safeNumber(dreData?.margemLiquidaPercentual).toFixed(1)}%`,
                   cor: 'neutro',
                 },
               ]}
@@ -2832,14 +3101,14 @@ export function RelatoriosContabeisAvancadosTab({
                         {
                           conteudo: mascararValores
                             ? VALOR_MASCARADO
-                            : formatCurrency(dreData.receitaBruta),
+                            : formatCurrency(safeNumber(dreData?.receitaBruta)),
                           alinhamento: 'right',
                           destaque: true,
                         },
                         {
                           conteudo: mascararValores
                             ? VALOR_MASCARADO
-                            : formatCurrency(dreData.recBrutaAnterior),
+                            : formatCurrency(safeNumber(dreData?.recBrutaAnterior)),
                           alinhamento: 'right',
                         },
                       ],
@@ -2848,7 +3117,7 @@ export function RelatoriosContabeisAvancadosTab({
                         {
                           conteudo: mascararValores
                             ? VALOR_MASCARADO
-                            : `- ${formatCurrency(dreData.deducoesImpostos)}`,
+                            : `- ${formatCurrency(safeNumber(dreData?.deducoesImpostos))}`,
                           alinhamento: 'right',
                         },
                         { conteudo: '—', alinhamento: 'right' },
@@ -2858,14 +3127,14 @@ export function RelatoriosContabeisAvancadosTab({
                         {
                           conteudo: mascararValores
                             ? VALOR_MASCARADO
-                            : formatCurrency(dreData.receitaLiquida),
+                            : formatCurrency(safeNumber(dreData?.receitaLiquida)),
                           alinhamento: 'right',
                           destaque: true,
                         },
                         {
                           conteudo: mascararValores
                             ? VALOR_MASCARADO
-                            : formatCurrency(dreData.recBrutaAnterior),
+                            : formatCurrency(safeNumber(dreData?.recBrutaAnterior)),
                           alinhamento: 'right',
                         },
                       ],
@@ -2874,7 +3143,7 @@ export function RelatoriosContabeisAvancadosTab({
                         {
                           conteudo: mascararValores
                             ? VALOR_MASCARADO
-                            : `- ${formatCurrency(dreData.custosVariaveis)}`,
+                            : `- ${formatCurrency(safeNumber(dreData?.custosVariaveis))}`,
                           alinhamento: 'right',
                         },
                         { conteudo: '—', alinhamento: 'right' },
@@ -2884,7 +3153,7 @@ export function RelatoriosContabeisAvancadosTab({
                         {
                           conteudo: mascararValores
                             ? VALOR_MASCARADO
-                            : formatCurrency(dreData.margemContribuicao),
+                            : formatCurrency(safeNumber(dreData?.margemContribuicao)),
                           alinhamento: 'right',
                           destaque: true,
                         },
@@ -2895,13 +3164,13 @@ export function RelatoriosContabeisAvancadosTab({
                         {
                           conteudo: mascararValores
                             ? VALOR_MASCARADO
-                            : `- ${formatCurrency(dreData.despesasFixas)}`,
+                            : `- ${formatCurrency(safeNumber(dreData?.despesasFixas))}`,
                           alinhamento: 'right',
                         },
                         {
                           conteudo: mascararValores
                             ? VALOR_MASCARADO
-                            : `- ${formatCurrency(dreData.despAnt)}`,
+                            : `- ${formatCurrency(safeNumber(dreData?.despAnt))}`,
                           alinhamento: 'right',
                         },
                       ],
@@ -2911,13 +3180,13 @@ export function RelatoriosContabeisAvancadosTab({
                       {
                         conteudo: mascararValores
                           ? VALOR_MASCARADO
-                          : formatCurrency(dreData.resultadoOperacional),
+                          : formatCurrency(safeNumber(dreData?.resultadoOperacional)),
                         alinhamento: 'right',
                       },
                       {
                         conteudo: mascararValores
                           ? VALOR_MASCARADO
-                          : formatCurrency(dreData.resOperacionalAnterior),
+                          : formatCurrency(safeNumber(dreData?.resOperacionalAnterior)),
                         alinhamento: 'right',
                       },
                     ],

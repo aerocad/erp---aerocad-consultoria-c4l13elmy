@@ -138,6 +138,13 @@
 }
 
 @media print {
+  /* Oculta tudo que não for o documento A4 */
+  body {
+    background: #ffffff !important;
+    color: #2d2d2d !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
   body * {
     visibility: hidden !important;
   }
@@ -146,23 +153,43 @@
     visibility: visible !important;
   }
   #print-document {
-    position: absolute !important;
-    inset: 0 !important;
+    position: static !important;
+    display: block !important;
     width: 100% !important;
+    max-width: 100% !important;
     min-height: auto !important;
     box-shadow: none !important;
     border: 0 !important;
     margin: 0 !important;
-    padding: 20mm !important;
+    padding: 0 !important;
     box-sizing: border-box !important;
+    transform: none !important;
   }
   #print-document.landscape-mode {
     width: 297mm !important;
     min-height: 210mm !important;
   }
+  /* Remove overlays, backdrops e scrollbars do Radix Dialog na impressão */
+  [data-radix-portal],
+  [role='dialog'] {
+    position: static !important;
+    transform: none !important;
+    overflow: visible !important;
+    max-height: none !important;
+    width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: none !important;
+    background: transparent !important;
+  }
+  [data-radix-portal] > div[style*='fixed'],
+  div[data-state][class*='fixed'] {
+    position: static !important;
+    background: transparent !important;
+  }
   @page {
     size: auto;
-    margin: 0;
+    margin: 10mm;
   }
 }
 

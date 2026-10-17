@@ -98,6 +98,8 @@ interface ContasPagarTabProps {
   credores?: CredorRecord[]
   canWrite: boolean
   onReload: () => Promise<void> | void
+  filtroCategoriaInicial?: string
+  filtroPlanoContaInicial?: string
 }
 
 export function ContasPagarTab({
@@ -107,11 +109,13 @@ export function ContasPagarTab({
   credores = [],
   canWrite,
   onReload,
+  filtroCategoriaInicial,
+  filtroPlanoContaInicial,
 }: ContasPagarTabProps) {
   const { user } = useAuth()
-  const [busca, setBusca] = useState('')
+  const [busca, setBusca] = useState(filtroPlanoContaInicial || '')
   const [filtroCredor, setFiltroCredor] = useState<string>('todos')
-  const [filtroCategoria, setFiltroCategoria] = useState<string>('todos')
+  const [filtroCategoria, setFiltroCategoria] = useState<string>(filtroCategoriaInicial || 'todos')
   const [filtroStatus, setFiltroStatus] = useState<string>('todos')
   const [filtroProjeto, setFiltroProjeto] = useState<string>('todos')
 
@@ -211,14 +215,16 @@ export function ContasPagarTab({
     return contasProcessadas.filter((c) => {
       const credorNome = c.expand?.credor?.nome_razao_social || ''
       const credorDoc = c.expand?.credor?.cnpj_cpf || ''
+      const termoBusca = busca.toLowerCase()
       const matchBusca =
-        c.descricao.toLowerCase().includes(busca.toLowerCase()) ||
-        c.fornecedor.toLowerCase().includes(busca.toLowerCase()) ||
-        credorNome.toLowerCase().includes(busca.toLowerCase()) ||
-        credorDoc.toLowerCase().includes(busca.toLowerCase()) ||
-        (c.numero_documento && c.numero_documento.toLowerCase().includes(busca.toLowerCase())) ||
-        (c.expand?.projeto?.numero &&
-          c.expand.projeto.numero.toLowerCase().includes(busca.toLowerCase()))
+        c.descricao.toLowerCase().includes(termoBusca) ||
+        c.fornecedor.toLowerCase().includes(termoBusca) ||
+        credorNome.toLowerCase().includes(termoBusca) ||
+        credorDoc.toLowerCase().includes(termoBusca) ||
+        (c.numero_documento && c.numero_documento.toLowerCase().includes(termoBusca)) ||
+        (c.plano_contas_codigo && c.plano_contas_codigo.toLowerCase().includes(termoBusca)) ||
+        (c.plano_contas_nome && c.plano_contas_nome.toLowerCase().includes(termoBusca)) ||
+        (c.expand?.projeto?.numero && c.expand.projeto.numero.toLowerCase().includes(termoBusca))
 
       const matchCredor =
         filtroCredor === 'todos' ||

@@ -87,6 +87,7 @@ interface ContasReceberTabProps {
   canWrite: boolean
   onReloadParcelas: () => Promise<void> | void
   onReloadContasReceber: () => Promise<void> | void
+  filtroBuscaInicial?: string
 }
 
 export function ContasReceberTab({
@@ -97,9 +98,10 @@ export function ContasReceberTab({
   canWrite,
   onReloadParcelas,
   onReloadContasReceber,
+  filtroBuscaInicial,
 }: ContasReceberTabProps) {
   const { user } = useAuth()
-  const [busca, setBusca] = useState('')
+  const [busca, setBusca] = useState(filtroBuscaInicial || '')
   const [filtroOrigem, setFiltroOrigem] = useState<'todos' | 'parcelas' | 'avulsas'>('todos')
   const [filtroStatus, setFiltroStatus] = useState<string>('todos')
   const [filtroCliente, setFiltroCliente] = useState<string>('todos')
