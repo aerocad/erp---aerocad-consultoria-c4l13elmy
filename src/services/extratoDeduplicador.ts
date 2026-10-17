@@ -46,6 +46,7 @@ export interface AnaliseDeduplicacaoArquivo<T extends TransacaoCandidataImportac
   totalSaidasNovas: number
   itensNovos: Array<ResultadoDeduplicacaoTransacao<T>>
   itensDuplicados: Array<ResultadoDeduplicacaoTransacao<T>>
+  todasCandidatas?: T[]
 }
 
 /**
@@ -392,5 +393,6 @@ export function analisarDeduplicacao<T extends TransacaoCandidataImportacao>(par
     totalSaidasNovas,
     itensNovos,
     itensDuplicados,
+    todasCandidatas: transacoesCandidatas,
   }
 }

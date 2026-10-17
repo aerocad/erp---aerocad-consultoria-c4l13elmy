@@ -877,6 +877,7 @@ export type ExtratoVinculoTipo = 'parcela' | 'conta_pagar' | 'conta_receber'
 
 export interface ExtratoTransacaoRecord extends RecordModel {
   extrato: string
+  conta_bancaria?: string
   data: string
   descricao: string
   valor: number
@@ -894,6 +895,7 @@ export interface ExtratoTransacaoRecord extends RecordModel {
   classificacao_manual?: boolean
   expand?: {
     extrato?: ExtratoRecord
+    conta_bancaria?: ContaBancariaRecord
   }
 }
 

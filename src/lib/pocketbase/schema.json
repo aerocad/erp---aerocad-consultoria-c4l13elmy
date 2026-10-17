@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-17T20:41:30.514Z",
+  "generatedAt": "2026-10-17T21:18:43.135Z",
   "collections": [
     {
       "name": "users",
@@ -3130,6 +3130,13 @@
           "type": "bool",
           "required": false,
           "system": false
+        },
+        {
+          "name": "conta_bancaria",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "contas_bancarias"
         }
       ],
       "indexes": [

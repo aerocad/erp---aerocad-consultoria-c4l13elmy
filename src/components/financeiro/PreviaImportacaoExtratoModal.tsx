@@ -63,7 +63,14 @@ export function PreviaImportacaoExtratoModal<T extends TransacaoCandidataImporta
   // Detecção preventiva se o arquivo ou conteúdo sugere Caixa Econômica Federal (CAIXA / CEF / código 104)
   // e a conta selecionada não é a Caixa Econômica Federal
   const nomeArqUpper = (analise.arquivoNome || '').toUpperCase()
-  const primeirasDescricoes = analise.todasCandidatas
+  const candidatasLista: T[] =
+    analise.todasCandidatas && analise.todasCandidatas.length > 0
+      ? analise.todasCandidatas
+      : [
+          ...(analise.itensNovos || []).map((i) => i.item),
+          ...(analise.itensDuplicados || []).map((i) => i.item),
+        ]
+  const primeirasDescricoes = candidatasLista
     .slice(0, 30)
     .map((c) => (c.descricao || '').toUpperCase())
     .join(' ')

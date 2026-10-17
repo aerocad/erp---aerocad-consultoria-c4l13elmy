@@ -23,6 +23,7 @@ import {
   Square,
   Trash2,
   Upload,
+  Landmark,
 } from 'lucide-react'
 import { CapturaComprovanteModal } from './CapturaComprovanteModal'
 import { useIsMobile } from '@/hooks/use-mobile'
@@ -129,8 +130,13 @@ export function ExtratosComprovantesTab({
   const listaProjetos = Array.isArray(projetos) ? projetos : []
   const listaCredores = Array.isArray(credores) ? credores : []
 
-  // Permissão de exclusão de extratos: restrita exclusivamente ao Administrador (admin)
+  // Permissões sobre extratos bancários:
+  // Exclusão: restrita exclusivamente ao Administrador (admin)
   const podeExcluirExtratos = Boolean(canWrite && user?.role === 'admin')
+  // Alteração de conta bancária: visível apenas a admin e financeiro
+  const podeAlterarContaExtrato = Boolean(
+    canWrite && (user?.role === 'admin' || user?.role === 'financeiro'),
+  )
 
   // Modal de Captura Fotográfica & Visão IA
   const [modalCapturaIaAberto, setModalCapturaIaAberto] = useState(false)
@@ -426,6 +432,7 @@ export function ExtratosComprovantesTab({
         const t = itemNovo.item
         return {
           extrato: extratoRecord.id,
+          conta_bancaria: contaBancariaId || null,
           data: `${t.data} 12:00:00.000Z`,
           descricao: t.descricao,
           valor: t.valor,
@@ -463,6 +470,7 @@ export function ExtratosComprovantesTab({
   // Estado do Modal de Reatribuição de Conta Bancária do Extrato
   const [extratoParaReatribuir, setExtratoParaReatribuir] = useState<ExtratoRecord | null>(null)
   const [novaContaReatribuicaoId, setNovaContaReatribuicaoId] = useState<string>('')
+  const [confirmouCienciaReatribuicao, setConfirmouCienciaReatribuicao] = useState(false)
   const [isReatribuindoConta, setIsReatribuindoConta] = useState(false)
 
   // Executa reatribuição da conta bancária de um extrato existente
@@ -472,38 +480,94 @@ export function ExtratosComprovantesTab({
     if (!contaNova) return
 
     const contaAnteriorId = extratoParaReatribuir.conta_bancaria || null
+    const contaAnterior = contasBancarias.find((c) => c.id === contaAnteriorId)
     const extratoId = extratoParaReatribuir.id
+
+    // Captura estado original do extrato para rollback seguro se houver falha de rede
+    const snapshotExtratoOriginal = {
+      conta_bancaria: extratoParaReatribuir.conta_bancaria || '',
+      banco: extratoParaReatribuir.banco || '',
+      conta: extratoParaReatribuir.conta || '',
+    }
 
     try {
       setIsReatribuindoConta(true)
 
-      // 1. Atualizar registro do extrato
+      // 1. Busca todas as transações vinculadas a este extrato para mover e registrar
+      const transacoesDoExtrato = await pb
+        .collection('extratos_transacoes')
+        .getFullList<ExtratoTransacaoRecord>({
+          filter: `extrato = "${extratoId}"`,
+          requestKey: null,
+        })
+
+      // 2. Atualizar registro do extrato com dados da nova conta
       await pb.collection('extratos').update(extratoId, {
         conta_bancaria: contaNova.id,
         banco: `${contaNova.banco_nome} (${contaNova.apelido})`,
         conta: contaNova.numero_conta || '',
       })
 
-      // 2. Registrar auditoria tipo_operacao='reatribuicao_conta_extrato'
+      // 3. Atualizar em bloco todas as transações (coleção extratos_transacoes) de uma vez
+      let totalMovidas = 0
+      let totalFalhas = 0
+      const CHUNK_SIZE = 15
+      for (let i = 0; i < transacoesDoExtrato.length; i += CHUNK_SIZE) {
+        const chunk = transacoesDoExtrato.slice(i, i + CHUNK_SIZE)
+        const promessas = chunk.map(async (tx) => {
+          try {
+            await pb.collection('extratos_transacoes').update(tx.id, {
+              conta_bancaria: contaNova.id,
+            })
+            return 1
+          } catch (txErr) {
+            console.error(`Falha ao atualizar transação ${tx.id}:`, txErr)
+            return 0
+          }
+        })
+        const resultados = await Promise.all(promessas)
+        const ok = resultados.reduce((acc, curr) => acc + curr, 0)
+        totalMovidas += ok
+        totalFalhas += chunk.length - ok
+      }
+
+      // Se todas as atualizações falharem em lote de transações (e havia transações), tenta rollback defensivo
+      if (transacoesDoExtrato.length > 0 && totalMovidas === 0) {
+        try {
+          await pb.collection('extratos').update(extratoId, snapshotExtratoOriginal)
+        } catch {
+          /* intentionally ignored */
+        }
+        throw new Error(
+          'Falha de rede ao mover as transações do extrato. A operação foi revertida.',
+        )
+      }
+
+      // 4. Registrar auditoria (coleção auditoria_operacoes_bloco, padrão já existente)
       try {
         await pb.collection('auditoria_operacoes_bloco').create({
           usuario: user?.id || null,
           tipo_operacao: 'reatribuicao_conta_extrato',
           colecao_alvo: 'extratos',
-          descricao: `Reatribuição da conta bancária do extrato "${extratoParaReatribuir.nome_arquivo}" para ${contaNova.apelido}`,
+          descricao: `Reatribuição da conta bancária do extrato "${extratoParaReatribuir.nome_arquivo}" de [${contaAnterior?.apelido || 'Sem conta'}] para [${contaNova.apelido}]: ${totalMovidas} transações movidas`,
           criterio_filtro: { extrato_id: extratoId },
           alteracoes_solicitadas: {
-            detalhes_json: {
-              extrato_id: extratoId,
-              nome_arquivo: extratoParaReatribuir.nome_arquivo,
-              total_transacoes: extratoParaReatribuir.total_transacoes || 0,
-              conta_anterior_id: contaAnteriorId,
-              conta_nova_id: contaNova.id,
-              conta_nova_apelido: contaNova.apelido,
-            },
+            extrato_id: extratoId,
+            nome_arquivo: extratoParaReatribuir.nome_arquivo,
+            total_transacoes: extratoParaReatribuir.total_transacoes || transacoesDoExtrato.length,
+            conta_anterior_id: contaAnteriorId,
+            conta_anterior_apelido: contaAnterior?.apelido || 'Sem conta',
+            conta_nova_id: contaNova.id,
+            conta_nova_apelido: contaNova.apelido,
+            transacoes_movidas: totalMovidas,
+            transacoes_falhas: totalFalhas,
           },
-          total_registros_afetados: 1,
-          total_falhas: 0,
+          snapshot_anterior: {
+            extrato: snapshotExtratoOriginal,
+            total_transacoes: transacoesDoExtrato.length,
+          },
+          total_registros_afetados: totalMovidas + 1,
+          total_falhas: totalFalhas,
           desfeito: false,
         })
       } catch (errAudit) {
@@ -513,18 +577,22 @@ export function ExtratosComprovantesTab({
         )
       }
 
-      // 3. Invalidar caches de extratos, transações e balancetes
+      // 5. Invalidar caches de dados financeiros
       invalidateApiCache('extratos')
       invalidateApiCache('extratos_transacoes')
       invalidateApiCache('balancetes_mensais')
+      invalidateApiCache('contas_bancarias')
 
+      // Toast de confirmação com a quantidade de transações movidas
       toast.success(
-        `Extrato "${extratoParaReatribuir.nome_arquivo}" reatribuído com sucesso para ${contaNova.apelido}!`,
+        `Extrato "${extratoParaReatribuir.nome_arquivo}" reatribuído com sucesso para ${contaNova.apelido}! ${totalMovidas} transações foram movidas.`,
       )
 
       setExtratoParaReatribuir(null)
+      setNovaContaReatribuicaoId('')
+      setConfirmouCienciaReatribuicao(false)
 
-      // 4. Recarregar demonstrativos uma única vez ao final
+      // 6. Recarregar e atualizar o Fluxo de Caixa e agregados que dependem de conta bancária
       await Promise.all([
         onReloadExtratos(),
         onReloadTransacoes(),
@@ -533,10 +601,16 @@ export function ExtratosComprovantesTab({
         onReloadContasReceber(),
       ])
 
-      // Notifica balancetes e demonstrativos contábeis
+      // Notifica balancetes, fluxo de caixa e demonstrativos contábeis
       if (typeof window !== 'undefined') {
         window.dispatchEvent(
-          new CustomEvent('aerocad:balancete_regenerado', { detail: { extratoId } }),
+          new CustomEvent('aerocad:balancete_regenerado', {
+            detail: {
+              extratoId,
+              contaNovaId: contaNova.id,
+              totalMovidas,
+            },
+          }),
         )
       }
     } catch (err: unknown) {
@@ -597,6 +671,7 @@ export function ExtratosComprovantesTab({
         const t = itemNovo.item
         return {
           extrato: extratoRecord.id,
+          conta_bancaria: contaBancariaId || null,
           data: `${normalizarDataChave(t.data)} 12:00:00.000Z`,
           descricao: t.descricao,
           valor: t.valor,
@@ -1451,6 +1526,21 @@ export function ExtratosComprovantesTab({
                     >
                       <FileUp className="h-3 w-3 rotate-180" />
                     </a>
+                  )}
+
+                  {podeAlterarContaExtrato && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setExtratoParaReatribuir(ex)
+                        setNovaContaReatribuicaoId('')
+                        setConfirmouCienciaReatribuicao(false)
+                      }}
+                      className="text-neutral-400 hover:text-[#FF6A13] p-0.5 rounded transition"
+                      title="Alterar conta bancária vinculada a este extrato e suas transações"
+                    >
+                      <Landmark className="h-3 w-3" />
+                    </button>
                   )}
 
                   {podeExcluirExtratos && (
@@ -2752,6 +2842,180 @@ export function ExtratosComprovantesTab({
           linhasNaoInterpretadas={modalPreviaExtrato?.linhasNaoInterpretadas}
         />
       )}
+      {/* Modal de Reatribuição de Conta Bancária do Extrato */}
+      <Dialog
+        open={!!extratoParaReatribuir}
+        onOpenChange={(aberto) => {
+          if (!aberto && !isReatribuindoConta) {
+            setExtratoParaReatribuir(null)
+            setNovaContaReatribuicaoId('')
+            setConfirmouCienciaReatribuicao(false)
+          }
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-neutral-900 text-base">
+              <Landmark className="h-5 w-5 text-[#FF6A13]" />
+              Alterar Conta Bancária do Extrato
+            </DialogTitle>
+          </DialogHeader>
+
+          {extratoParaReatribuir && (
+            <div className="space-y-4 text-xs py-2">
+              {/* Informações detalhadas do extrato selecionado */}
+              <div className="bg-neutral-50 rounded-lg p-3.5 border border-neutral-200 space-y-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <span className="text-[10px] uppercase font-semibold text-neutral-400 block">
+                      Arquivo Importado
+                    </span>
+                    <strong className="text-sm font-semibold text-neutral-900 block truncate max-w-[340px]">
+                      {extratoParaReatribuir.nome_arquivo || 'Extrato'}
+                    </strong>
+                  </div>
+                  {extratoParaReatribuir.formato && (
+                    <span className="px-2 py-0.5 bg-neutral-200 text-neutral-700 font-bold uppercase rounded text-[10px]">
+                      {extratoParaReatribuir.formato}
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2 border-t border-neutral-200/80 text-[11px]">
+                  <div>
+                    <span className="text-neutral-400 block text-[10px]">Conta Atual</span>
+                    <span className="font-semibold text-neutral-800">
+                      {contasBancarias.find((c) => c.id === extratoParaReatribuir.conta_bancaria)
+                        ?.apelido ||
+                        extratoParaReatribuir.banco ||
+                        'Não vinculada'}
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="text-neutral-400 block text-[10px]">Transações</span>
+                    <span className="font-semibold text-neutral-800">
+                      {extratoParaReatribuir.total_transacoes || 0} lançamentos
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="text-neutral-400 block text-[10px]">Período</span>
+                    <span className="font-semibold text-neutral-800">
+                      {extratoParaReatribuir.data_inicio
+                        ? `${formatDate(extratoParaReatribuir.data_inicio)} a ${
+                            extratoParaReatribuir.data_fim
+                              ? formatDate(extratoParaReatribuir.data_fim)
+                              : '—'
+                          }`
+                        : '—'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Seleção da nova conta bancária (excluindo a atual) */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-neutral-800">
+                  Nova Conta Bancária PJ de Destino *
+                </Label>
+                <Select
+                  value={novaContaReatribuicaoId}
+                  onValueChange={setNovaContaReatribuicaoId}
+                  disabled={isReatribuindoConta}
+                >
+                  <SelectTrigger className="h-9 text-xs">
+                    <SelectValue placeholder="Selecione a nova conta bancária..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {contasBancarias
+                      .filter((cb) => cb.id !== extratoParaReatribuir.conta_bancaria)
+                      .map((cb) => (
+                        <SelectItem key={cb.id} value={cb.id}>
+                          {cb.apelido} — {cb.banco_nome} (Ag {cb.agencia || '—'} / CC{' '}
+                          {cb.numero_conta || '—'})
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+                {contasBancarias.filter((cb) => cb.id !== extratoParaReatribuir.conta_bancaria)
+                  .length === 0 && (
+                  <p className="text-[11px] text-amber-600">
+                    Nenhuma outra conta bancária cadastrada no CRM. Cadastre primeiro a nova conta
+                    na aba Contas Bancárias.
+                  </p>
+                )}
+              </div>
+
+              {/* Alerta de Confirmação Explícita e Impacto Contábil */}
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-900 space-y-1.5">
+                <div className="flex items-center gap-1.5 font-bold text-amber-950">
+                  <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+                  <span>Atenção: Impacto da Reatribuição</span>
+                </div>
+                <p className="text-[11px] leading-relaxed">
+                  • <strong>TODAS</strong> as {extratoParaReatribuir.total_transacoes || 0}{' '}
+                  transações deste extrato serão movidas para a nova conta selecionada.
+                </p>
+                <p className="text-[11px] leading-relaxed">
+                  • O <strong>Fluxo de Caixa</strong>, <strong>Balancetes Contábeis</strong>, DRE e
+                  demonstrativos dependentes da conta bancária serão automaticamente recalculados.
+                </p>
+                <p className="text-[11px] leading-relaxed">
+                  • A operação será registrada na <strong>Auditoria em Bloco</strong> do sistema.
+                </p>
+              </div>
+
+              {/* Checkbox de confirmação explícita */}
+              <label className="flex items-start gap-2.5 p-2.5 rounded border border-neutral-200 bg-neutral-50/70 hover:bg-neutral-50 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={confirmouCienciaReatribuicao}
+                  onChange={(e) => setConfirmouCienciaReatribuicao(e.target.checked)}
+                  disabled={isReatribuindoConta}
+                  className="mt-0.5 rounded border-neutral-300 text-[#FF6A13] focus:ring-[#FF6A13] h-4 w-4 cursor-pointer"
+                />
+                <span className="text-[11px] text-neutral-700 leading-snug">
+                  Estou ciente de que todas as transações deste extrato serão transferidas para a
+                  nova conta bancária e os demonstrativos financeiros serão atualizados.
+                </span>
+              </label>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={isReatribuindoConta}
+              onClick={() => {
+                setExtratoParaReatribuir(null)
+                setNovaContaReatribuicaoId('')
+                setConfirmouCienciaReatribuicao(false)
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              size="sm"
+              disabled={
+                !novaContaReatribuicaoId || !confirmouCienciaReatribuicao || isReatribuindoConta
+              }
+              onClick={handleConfirmarReatribuicaoConta}
+              className="bg-[#FF6A13] hover:bg-[#E85B06] text-white font-semibold"
+            >
+              {isReatribuindoConta ? (
+                <>
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                  Reatribuindo transações...
+                </>
+              ) : (
+                'Confirmar Reatribuição'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {/* Modal de Captura Mobile / Extração IA de Comprovantes */}
       <CapturaComprovanteModal
         open={modalCapturaIaAberto}
