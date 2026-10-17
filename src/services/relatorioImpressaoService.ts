@@ -32,16 +32,23 @@ export function imprimirElementoA4(opcoes: OpcoesImpressaoA4 = {}): boolean {
     console.warn(
       `[AEROCAD Print] Elemento #${elementId} não encontrado no DOM. Tentando impressão da janela atual.`,
     )
-    toast.error(
-      'Documento A4 não renderizado na página. Por favor, abra a visualização antes de imprimir.',
-    )
+    toast({
+      title: 'Documento não encontrado',
+      description:
+        'Documento A4 não renderizado na página. Por favor, abra a visualização antes de imprimir.',
+      variant: 'destructive',
+    })
     return false
   }
 
   // 2. Valida se há conteúdo textual ou de tabela
   const innerHtml = targetElement.innerHTML.trim()
   if (!innerHtml || innerHtml.length < 50) {
-    toast.error('O documento A4 ainda está carregando ou não possui conteúdo para impressão.')
+    toast({
+      title: 'Aguarde a renderização',
+      description: 'O documento A4 ainda está carregando ou não possui conteúdo para impressão.',
+      variant: 'destructive',
+    })
     return false
   }
 
@@ -131,7 +138,11 @@ export function imprimirElementoA4(opcoes: OpcoesImpressaoA4 = {}): boolean {
 
     if (!printWindow || printWindow.closed || typeof printWindow.closed === 'undefined') {
       // Popup bloqueado pelo navegador -> Fallback nativo com aviso explicativo
-      toast.info('Pop-up bloqueado pelo navegador. Abrindo diálogo de impressão direto da página.')
+      toast({
+        title: 'Aviso de Pop-up',
+        description:
+          'Pop-up bloqueado pelo navegador. Abrindo diálogo de impressão direto da página.',
+      })
       setTimeout(() => {
         window.print()
       }, 100)
@@ -151,16 +162,27 @@ export function imprimirElementoA4(opcoes: OpcoesImpressaoA4 = {}): boolean {
       }
     }, timeoutRenderMs + 100)
 
-    toast.success('Diálogo de impressão A4 preparado com sucesso!')
+    toast({
+      title: 'Impressão A4',
+      description: 'Diálogo de impressão A4 preparado com sucesso!',
+    })
     return true
   } catch (err: unknown) {
     console.error('[AEROCAD Print] Erro ao preparar documento para impressão:', err)
-    toast.warning('Tentando diálogo padrão de impressão...')
+    toast({
+      title: 'Aviso',
+      description: 'Tentando diálogo padrão de impressão...',
+    })
     try {
       window.print()
       return true
     } catch (fallbackErr) {
-      toast.error('Não foi possível acionar a impressão. Verifique as permissões do seu navegador.')
+      toast({
+        title: 'Erro de Impressão',
+        description:
+          'Não foi possível acionar a impressão. Verifique as permissões do seu navegador.',
+        variant: 'destructive',
+      })
       return false
     }
   }

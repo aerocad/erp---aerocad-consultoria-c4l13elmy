@@ -2,6 +2,7 @@ import { Component, useMemo, useState, type ErrorInfo, type FormEvent, type Reac
 import {
   Banknote,
   BarChart3,
+  BookOpen,
   Building2,
   Calendar,
   CalendarClock,
@@ -141,6 +142,7 @@ import { BalancetesTab } from '@/components/financeiro/BalancetesTab'
 import { RelatoriosFinanceirosTab } from '@/components/financeiro/RelatoriosFinanceirosTab'
 import { RelatoriosContabeisAvancadosTab } from '@/components/financeiro/RelatoriosContabeisAvancadosTab'
 import { AtivosPatrimonioTab } from '@/components/financeiro/AtivosPatrimonioTab'
+import { PlanoContasTab } from '@/components/financeiro/PlanoContasTab'
 import { AssistenteFinanceiroChatDrawer } from '@/components/financeiro/AssistenteFinanceiroChatDrawer'
 import {
   CentralFinanceiraHub,
@@ -1509,6 +1511,20 @@ export function FinancePage() {
           Balancete, Balanço & DRE
         </button>
 
+        {canWrite && (
+          <button
+            onClick={() => setActiveTab('plano_contas')}
+            className={`pb-3 px-3 text-xs sm:text-sm font-bold border-b-2 transition flex items-center gap-1.5 ${
+              activeTab === 'plano_contas'
+                ? 'border-[#FF6A13] text-[#FF6A13]'
+                : 'border-transparent text-[#737373] hover:text-[#333]'
+            }`}
+          >
+            <BookOpen className="h-4 w-4" />
+            Plano de Contas
+          </button>
+        )}
+
         <button
           onClick={() => setActiveTab('relatorios')}
           className={`pb-3 px-3 text-xs sm:text-sm font-bold border-b-2 transition flex items-center gap-1.5 ${
@@ -1694,6 +1710,15 @@ export function FinancePage() {
                 setActiveTab(tab)
               }
             }}
+          />
+        </div>
+      ) : activeTab === 'plano_contas' ? (
+        <div className="mt-5">
+          <PlanoContasTab
+            contasPagar={contasPagar.data}
+            parcelas={installments.data}
+            contasReceber={contasReceber.data}
+            canWrite={canWrite}
           />
         </div>
       ) : activeTab === 'relatorios' ? (
@@ -3052,6 +3077,7 @@ export function FinancePage() {
         'fluxo_caixa',
         'balancetes',
         'ativos_patrimonio',
+        'plano_contas',
         'relatorios',
         'relatorios_avancados',
       ].includes(activeTab) && (
@@ -3067,7 +3093,9 @@ export function FinancePage() {
                     ? 'ativos'
                     : activeTab === 'relatorios_avancados'
                       ? 'demonstracoes'
-                      : 'relatorios'
+                      : activeTab === 'plano_contas'
+                        ? 'balancos'
+                        : 'relatorios'
           }
           onAcaoExecutada={() => {
             void contasPagar.reload()

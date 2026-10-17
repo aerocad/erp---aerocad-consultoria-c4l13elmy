@@ -323,7 +323,7 @@ export function CentralFinanceiraHub({
         <span className="font-semibold text-neutral-900 text-xs sm:text-sm">4 Macro-Grupos</span>
       ),
       statSubtext: 'Ativo, Passivo, Despesas e Receitas',
-      visible: true,
+      visible: canWrite,
     },
     {
       id: 'relatorios',
