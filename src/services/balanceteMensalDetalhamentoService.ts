@@ -538,7 +538,17 @@ export function derivarDetalhamentoContasBalancete(
     return { contasReceitas: [], contasDespesas: [] }
   }
 
-  // 1. Se já possui o campo `porConta` preenchido com dados, retorna direto
+  // 1. Se temos o contexto de dados vivos da tela, recomputa com fidelidade total
+  // Isso garante que reclassificações contábeis manuais reflitam IMEDIATAMENTE no detalhamento expansível
+  if (contexto && balancete.ano && balancete.mes) {
+    const recres = consolidarBalanceteMensal(balancete.ano, balancete.mes, contexto)
+    return {
+      contasReceitas: recres.receitas.porConta || [],
+      contasDespesas: recres.despesas.porConta || [],
+    }
+  }
+
+  // 2. Se já possui o campo `porConta` preenchido com dados gravados, usa o gravado
   const temPorContaRec =
     Array.isArray(dados.receitas?.porConta) && dados.receitas.porConta.length > 0
   const temPorContaDesp =
@@ -548,15 +558,6 @@ export function derivarDetalhamentoContasBalancete(
     return {
       contasReceitas: dados.receitas.porConta!,
       contasDespesas: dados.despesas.porConta!,
-    }
-  }
-
-  // 2. Se temos o contexto de dados vivos da tela, recomputa com fidelidade total
-  if (contexto && balancete.ano && balancete.mes) {
-    const recres = consolidarBalanceteMensal(balancete.ano, balancete.mes, contexto)
-    return {
-      contasReceitas: recres.receitas.porConta || [],
-      contasDespesas: recres.despesas.porConta || [],
     }
   }
 

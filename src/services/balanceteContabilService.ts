@@ -508,18 +508,24 @@ export function calcularBalanceteVerificacao({
       if (!ehNoPeriodo(dataRef)) return
 
       const cod = cp.plano_contas_codigo || ''
-      if (cat.codigo === '3.3' && (cp.categoria === 'impostos' || cod.startsWith('3.3'))) {
-        catDebitos += cp.valor || 0
-      } else if (
-        cat.codigo === '3.2' &&
-        (cp.categoria === 'terceirizados' || cod.startsWith('3.2') || Boolean(cp.projeto))
-      ) {
-        catDebitos += cp.valor || 0
-      } else if (cat.codigo === '3.1') {
-        const ehImp = cp.categoria === 'impostos' || cod.startsWith('3.3')
-        const ehTerc =
-          cp.categoria === 'terceirizados' || cod.startsWith('3.2') || Boolean(cp.projeto)
-        if (!ehImp && !ehTerc) catDebitos += cp.valor || 0
+      // Se possui código contábil explícito (definido ou reclassificado), prioriza-o
+      if (cod) {
+        if (cod.startsWith(cat.codigo)) {
+          catDebitos += cp.valor || 0
+        }
+      } else {
+        if (cat.codigo === '3.3' && cp.categoria === 'impostos') {
+          catDebitos += cp.valor || 0
+        } else if (
+          cat.codigo === '3.2' &&
+          (cp.categoria === 'terceirizados' || Boolean(cp.projeto))
+        ) {
+          catDebitos += cp.valor || 0
+        } else if (cat.codigo === '3.1') {
+          const ehImp = cp.categoria === 'impostos'
+          const ehTerc = cp.categoria === 'terceirizados' || Boolean(cp.projeto)
+          if (!ehImp && !ehTerc) catDebitos += cp.valor || 0
+        }
       }
     })
 

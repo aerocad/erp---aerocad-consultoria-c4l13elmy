@@ -461,9 +461,9 @@ export function RelatoriosContabeisAvancadosTab({
     const deducoesImpostos = contasPagarPeriodo
       .filter((cp) => {
         const codigo = cp.plano_contas_codigo || ''
+        if (codigo) return codigo.startsWith('3.3')
         return (
           cp.categoria === 'impostos' ||
-          codigo.startsWith('3.3') ||
           cp.descricao?.toLowerCase().includes('iss') ||
           cp.descricao?.toLowerCase().includes('das')
         )
@@ -477,13 +477,8 @@ export function RelatoriosContabeisAvancadosTab({
     const custosVariaveis = contasPagarPeriodo
       .filter((cp) => {
         const codigo = cp.plano_contas_codigo || ''
-        return (
-          cp.categoria === 'terceirizados' ||
-          codigo.startsWith('3.2') ||
-          codigo === '3.1.4' ||
-          codigo === '3.1.5' ||
-          Boolean(cp.projeto)
-        )
+        if (codigo) return codigo.startsWith('3.2') || codigo === '3.1.4' || codigo === '3.1.5'
+        return cp.categoria === 'terceirizados' || Boolean(cp.projeto)
       })
       .reduce((acc, cp) => acc + (cp.valor || 0), 0)
 
@@ -495,16 +490,13 @@ export function RelatoriosContabeisAvancadosTab({
     const despesasFixas = contasPagarPeriodo
       .filter((cp) => {
         const codigo = cp.plano_contas_codigo || ''
-        const ehImposto =
-          cp.categoria === 'impostos' ||
-          codigo.startsWith('3.3') ||
-          cp.descricao?.toLowerCase().includes('iss')
-        const ehVariavel =
-          cp.categoria === 'terceirizados' ||
-          codigo.startsWith('3.2') ||
-          codigo === '3.1.4' ||
-          codigo === '3.1.5' ||
-          Boolean(cp.projeto)
+        if (codigo) {
+          const ehImposto = codigo.startsWith('3.3')
+          const ehVariavel = codigo.startsWith('3.2') || codigo === '3.1.4' || codigo === '3.1.5'
+          return !ehImposto && !ehVariavel
+        }
+        const ehImposto = cp.categoria === 'impostos' || cp.descricao?.toLowerCase().includes('iss')
+        const ehVariavel = cp.categoria === 'terceirizados' || Boolean(cp.projeto)
         return !ehImposto && !ehVariavel
       })
       .reduce((acc, cp) => acc + (cp.valor || 0), 0)

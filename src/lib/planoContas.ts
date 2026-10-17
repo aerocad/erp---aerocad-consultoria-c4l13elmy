@@ -318,12 +318,18 @@ function normalizarTextoComparacao(texto?: string): string {
  * Classifica uma movimentação de extrato bancário (.RET, OFX, CSV, PDF) em uma conta do Plano AEROCAD
  */
 export function classificarTransacaoExtrato(tx: {
+  plano_contas_codigo?: string
   descricao?: string
   observacoes?: string
   tipo?: 'entrada' | 'saida' | string
   valor?: number
   documento_ref?: string
 }): ItemPlanoContas {
+  // Se já possui conta contábil explícita (definida ou reclassificada manualmente), prioriza-a
+  if (tx.plano_contas_codigo) {
+    const achado = obterItemPlanoContasPorCodigo(tx.plano_contas_codigo)
+    if (achado) return achado
+  }
   const descNorm = normalizarTextoComparacao(tx.descricao)
   const obsNorm = normalizarTextoComparacao(tx.observacoes)
   const texto = `${descNorm} ${obsNorm}`.trim()
@@ -592,11 +598,17 @@ export function classificarContaReceber(cr: {
  * Classifica uma parcela de projeto no Plano de Contas
  */
 export function classificarParcela(p: {
+  plano_contas_codigo?: string
   descricao?: string
   expand?: {
     projeto?: { nome?: string; numero?: string; trilha?: string }
   }
 }): ItemPlanoContas {
+  // Se já possui conta contábil explícita (definida ou reclassificada manualmente), prioriza-a
+  if (p.plano_contas_codigo) {
+    const achado = obterItemPlanoContasPorCodigo(p.plano_contas_codigo)
+    if (achado) return achado
+  }
   const texto = normalizarTextoComparacao(
     `${p.descricao || ''} ${p.expand?.projeto?.nome || ''} ${p.expand?.projeto?.trilha || ''}`,
   )

@@ -237,6 +237,10 @@ export interface ParcelaRecord extends RecordModel {
   origem_importacao?: boolean
   nfse_chave?: string
   nfse_dados?: Record<string, unknown>
+  plano_contas_codigo?: string
+  plano_contas_nome?: string
+  classificacao_manual?: boolean
+  conta_bancaria?: string
   expand?: { projeto?: ProjetoRecord; cliente?: ClienteRecord }
 }
 
@@ -629,6 +633,7 @@ export interface ContaPagarRecord extends RecordModel {
   valor_juros_multa?: number
   plano_contas_codigo?: string
   plano_contas_nome?: string
+  classificacao_manual?: boolean
   conta_bancaria?: string
   expand?: {
     cliente_fornecedor?: ClienteRecord
@@ -831,6 +836,7 @@ export interface ContaReceberRecord extends RecordModel {
   criado_por?: string
   plano_contas_codigo?: string
   plano_contas_nome?: string
+  classificacao_manual?: boolean
   conta_bancaria?: string
   expand?: {
     cliente?: ClienteRecord
@@ -881,6 +887,9 @@ export interface ExtratoTransacaoRecord extends RecordModel {
   vinculo_id?: string
   data_conciliacao?: string
   observacoes?: string
+  plano_contas_codigo?: string
+  plano_contas_nome?: string
+  classificacao_manual?: boolean
   expand?: {
     extrato?: ExtratoRecord
   }
