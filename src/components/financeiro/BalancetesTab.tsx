@@ -1,15 +1,19 @@
-import { useMemo, useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import {
   AlertCircle,
+  ArrowUpRight,
+  BookOpen,
   Building2,
   Calendar,
   CheckCircle2,
   ChevronDown,
+  ChevronRight,
   Download,
   Eye,
   FileSpreadsheet,
   FileText,
   Filter,
+  Layers,
   Plus,
   Printer,
   Receipt,
@@ -18,10 +22,12 @@ import {
   Sparkles,
   TrendingDown,
   TrendingUp,
+  X,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { CrmBadge } from '@/components/common/CrmBadge'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -46,8 +52,15 @@ import pb from '@/lib/pocketbase/client'
 import { exportarTabelaParaXlsx } from '@/services/aerocadXlsxExporter'
 import { AerocadRelatorioA4 } from '@/components/financeiro/AerocadRelatorioA4'
 import { imprimirElementoA4 } from '@/services/relatorioImpressaoService'
+import {
+  consolidarBalanceteMensal,
+  derivarDetalhamentoContasBalancete,
+  MESES_NOMES,
+} from '@/services/balanceteMensalDetalhamentoService'
 import type {
   BalanceteConsolidadoDados,
+  BalanceteContaResumo,
+  BalanceteLancamentoAnalitico,
   BalanceteMensalRecord,
   ContaPagarRecord,
   ContaReceberRecord,
@@ -63,21 +76,6 @@ interface BalancetesTabProps {
   projetos: ProjetoRecord[]
   extratosTransacoes?: ExtratoTransacaoRecord[]
 }
-
-const MESES_NOMES = [
-  'Janeiro',
-  'Fevereiro',
-  'Março',
-  'Abril',
-  'Maio',
-  'Junho',
-  'Julho',
-  'Agosto',
-  'Setembro',
-  'Outubro',
-  'Novembro',
-  'Dezembro',
-]
 
 export function BalancetesTab({
   parcelas,
@@ -122,6 +120,91 @@ export function BalancetesTab({
   const [balanceteAtivo, setBalanceteAtivo] = useState<BalanceteMensalRecord | null>(null)
   const [gerando, setGerando] = useState(false)
   const [visualizandoModal, setVisualizandoModal] = useState(false)
+
+  // Estado da expansão de balancete na listagem principal
+  // Permite expandir múltiplos balancetes (ex: "bal-id")
+  const [balancetesExpandidos, setBalancetesExpandidos] = useState<Set<string>>(new Set())
+  // Permite expandir grupos de receitas e despesas por balancete (ex: `${balId}-rec`, `${balId}-desp`)
+  const [gruposExpandidos, setGruposExpandidos] = useState<Set<string>>(new Set())
+  // Permite expandir contas individuais (nível 2: grupo -> conta)
+  const [contasExpandidas, setContasExpandidas] = useState<Set<string>>(new Set())
+
+  // Modal de Lançamentos Analíticos da Conta (estilo Plano de Contas)
+  const [contaSelecionadaModal, setContaSelecionadaModal] = useState<{
+    conta: BalanceteContaResumo
+    lancamentos: BalanceteLancamentoAnalitico[]
+    totalValor: number
+    balanceteTitulo: string
+  } | null>(null)
+
+  // Modo de visualização do documento A4 (Resumido vs Detalhado por Contas & Lançamentos)
+  const [modoImpressaoA4, setModoImpressaoA4] = useState<'resumido' | 'detalhado'>('detalhado')
+
+  // Cache/lazy loading sob demanda dos detalhes por conta de cada balancete
+  const [cacheDetalhamento, setCacheDetalhamento] = useState<
+    Record<
+      string,
+      {
+        contasReceitas: BalanceteContaResumo[]
+        contasDespesas: BalanceteContaResumo[]
+      }
+    >
+  >({})
+
+  // Obter ou calcular sob demanda o detalhamento de contas de um balancete
+  function obterDetalhamentoBalancete(bal: BalanceteMensalRecord) {
+    if (cacheDetalhamento[bal.id]) {
+      return cacheDetalhamento[bal.id]
+    }
+    const det = derivarDetalhamentoContasBalancete(bal, {
+      parcelas,
+      contasPagar,
+      contasReceber,
+      projetos,
+      extratosTransacoes,
+    })
+    setCacheDetalhamento((prev) => ({ ...prev, [bal.id]: det }))
+    return det
+  }
+
+  function toggleExpandirBalancete(balId: string, bal: BalanceteMensalRecord) {
+    setBalancetesExpandidos((prev) => {
+      const next = new Set(prev)
+      if (next.has(balId)) {
+        next.delete(balId)
+      } else {
+        next.add(balId)
+        // Pré-carrega sob demanda os detalhes
+        obterDetalhamentoBalancete(bal)
+        // Por padrão, abre ambos os grupos (receitas e despesas) para facilitar navegação
+        setGruposExpandidos((gPrev) => {
+          const gNext = new Set(gPrev)
+          gNext.add(`${balId}-rec`)
+          gNext.add(`${balId}-desp`)
+          return gNext
+        })
+      }
+      return next
+    })
+  }
+
+  function toggleExpandirGrupo(chave: string) {
+    setGruposExpandidos((prev) => {
+      const next = new Set(prev)
+      if (next.has(chave)) next.delete(chave)
+      else next.add(chave)
+      return next
+    })
+  }
+
+  function toggleExpandirConta(chave: string) {
+    setContasExpandidas((prev) => {
+      const next = new Set(prev)
+      if (next.has(chave)) next.delete(chave)
+      else next.add(chave)
+      return next
+    })
+  }
 
   // Extrai lista de anos disponíveis com base nas transações e balancetes
   const anosDisponiveis = useMemo(() => {
@@ -444,7 +527,15 @@ export function BalancetesTab({
       const mesNome = MESES_NOMES[mes - 1]
       const mesStr = String(mes).padStart(2, '0')
       const ref = `${ano}-${mesStr}`
-      const consolidado = consolidarDadosMes(ano, mes)
+
+      // Usar a consolidação com contas contábeis e lançamentos analíticos
+      const consolidado = consolidarBalanceteMensal(ano, mes, {
+        parcelas,
+        contasPagar,
+        contasReceber,
+        projetos,
+        extratosTransacoes,
+      })
 
       const payload = {
         referencia: ref,
@@ -485,6 +576,279 @@ export function BalancetesTab({
       setGerando(false)
     }
   }
+
+  // Monta as seções para o Relatório A4 (Resumido ou Detalhado por Contas & Lançamentos)
+  const secoesDocumentoA4 = useMemo(() => {
+    if (!balanceteAtivo) return []
+
+    const detalhe = derivarDetalhamentoContasBalancete(balanceteAtivo, {
+      parcelas,
+      contasPagar,
+      contasReceber,
+      projetos,
+      extratosTransacoes,
+    })
+
+    if (modoImpressaoA4 === 'detalhado') {
+      // MODO DETALHADO: Contas contábeis expandidas com lançamentos analíticos
+      return [
+        {
+          titulo: '1. Receitas Detalhadas por Contas Contábeis e Lançamentos (Grupo 4.0)',
+          subtitulo:
+            'Classificação pelo Plano de Contas AEROCAD com notas fiscais, parcelas e clientes',
+          tabela: {
+            colunas: [
+              { cabecalho: 'Conta / Lançamento', largura: '48%' },
+              { cabecalho: 'Data', alinhamento: 'center' as const, largura: '14%' },
+              { cabecalho: 'Documento / NFS-e', alinhamento: 'center' as const, largura: '18%' },
+              { cabecalho: 'Valor (R$)', alinhamento: 'right' as const, largura: '20%' },
+            ],
+            linhas: detalhe.contasReceitas.flatMap((c) => {
+              const headerConta = [
+                {
+                  conteudo: `CONTA ${c.codigoConta} — ${c.nomeConta.toUpperCase()}`,
+                  destaque: true,
+                },
+                { conteudo: `${c.qtdLancamentos} item(ns)`, alinhamento: 'center' as const },
+                { conteudo: 'Subtotal Conta', alinhamento: 'center' as const },
+                {
+                  conteudo: formatCurrency(c.total),
+                  alinhamento: 'right' as const,
+                  destaque: true,
+                },
+              ]
+
+              const linhasLanc = (c.lancamentos || []).map((l) => [
+                { conteudo: `  ↳ ${l.entidade} — ${l.descricao}` },
+                { conteudo: l.data ? formatDate(l.data) : '—', alinhamento: 'center' as const },
+                { conteudo: l.documentoRef || '—', alinhamento: 'center' as const },
+                { conteudo: formatCurrency(l.valor), alinhamento: 'right' as const },
+              ])
+
+              return [headerConta, ...linhasLanc]
+            }),
+            linhaTotal: [
+              { conteudo: 'TOTAL GERAL DE RECEITAS DO MÊS' },
+              {
+                conteudo: `${detalhe.contasReceitas.reduce(
+                  (acc, curr) => acc + curr.qtdLancamentos,
+                  0,
+                )} lançamentos`,
+                alinhamento: 'center' as const,
+              },
+              { conteudo: '—', alinhamento: 'center' as const },
+              {
+                conteudo: formatCurrency(balanceteAtivo.receita_total ?? 0),
+                alinhamento: 'right' as const,
+              },
+            ],
+          },
+        },
+        {
+          titulo: '2. Despesas Detalhadas por Contas Contábeis e Favorecidos (Grupo 3.0)',
+          subtitulo:
+            'Custos e despesas operacionais classificadas com credores, comprovantes e valores',
+          tabela: {
+            colunas: [
+              { cabecalho: 'Conta / Despesa Favorecido', largura: '48%' },
+              { cabecalho: 'Data', alinhamento: 'center' as const, largura: '14%' },
+              { cabecalho: 'Doc. / Referência', alinhamento: 'center' as const, largura: '18%' },
+              { cabecalho: 'Valor (R$)', alinhamento: 'right' as const, largura: '20%' },
+            ],
+            linhas: detalhe.contasDespesas.flatMap((c) => {
+              const headerConta = [
+                {
+                  conteudo: `CONTA ${c.codigoConta} — ${c.nomeConta.toUpperCase()}`,
+                  destaque: true,
+                },
+                { conteudo: `${c.qtdLancamentos} item(ns)`, alinhamento: 'center' as const },
+                { conteudo: 'Subtotal Conta', alinhamento: 'center' as const },
+                {
+                  conteudo: `- ${formatCurrency(c.total)}`,
+                  alinhamento: 'right' as const,
+                  destaque: true,
+                },
+              ]
+
+              const linhasLanc = (c.lancamentos || []).map((l) => [
+                { conteudo: `  ↳ ${l.entidade} — ${l.descricao}` },
+                { conteudo: l.data ? formatDate(l.data) : '—', alinhamento: 'center' as const },
+                { conteudo: l.documentoRef || '—', alinhamento: 'center' as const },
+                { conteudo: `- ${formatCurrency(l.valor)}`, alinhamento: 'right' as const },
+              ])
+
+              return [headerConta, ...linhasLanc]
+            }),
+            linhaTotal: [
+              { conteudo: 'TOTAL GERAL DE DESPESAS DO MÊS' },
+              {
+                conteudo: `${detalhe.contasDespesas.reduce(
+                  (acc, curr) => acc + curr.qtdLancamentos,
+                  0,
+                )} lançamentos`,
+                alinhamento: 'center' as const,
+              },
+              { conteudo: '—', alinhamento: 'center' as const },
+              {
+                conteudo: `- ${formatCurrency(balanceteAtivo.despesa_total ?? 0)}`,
+                alinhamento: 'right' as const,
+              },
+            ],
+          },
+        },
+        {
+          titulo: '3. Evolução Acumulada no Exercício (Janeiro ao Mês de Referência)',
+          subtitulo: 'Comportamento das entradas e saídas e saldo residual consolidado',
+          tabela: {
+            colunas: [
+              { cabecalho: 'Mês', largura: '30%' },
+              { cabecalho: 'Receitas (R$)', alinhamento: 'right' as const, largura: '25%' },
+              { cabecalho: 'Despesas (R$)', alinhamento: 'right' as const, largura: '25%' },
+              { cabecalho: 'Resultado (R$)', alinhamento: 'right' as const, largura: '20%' },
+            ],
+            linhas: (balanceteAtivo.dados_consolidados?.acumuladoAno?.meses ?? []).map((m) => [
+              { conteudo: m.nomeMes, destaque: true },
+              { conteudo: formatCurrency(m.receita ?? 0), alinhamento: 'right' as const },
+              { conteudo: `- ${formatCurrency(m.despesa ?? 0)}`, alinhamento: 'right' as const },
+              {
+                conteudo: formatCurrency(m.saldo ?? 0),
+                alinhamento: 'right' as const,
+                destaque: true,
+              },
+            ]),
+            linhaTotal: [
+              { conteudo: 'TOTAL ACUMULADO NO ANO' },
+              {
+                conteudo: formatCurrency(balanceteAtivo.total_receitas_ano ?? 0),
+                alinhamento: 'right' as const,
+              },
+              {
+                conteudo: `- ${formatCurrency(balanceteAtivo.total_despesas_ano ?? 0)}`,
+                alinhamento: 'right' as const,
+              },
+              {
+                conteudo: formatCurrency(balanceteAtivo.saldo_acumulado_ano ?? 0),
+                alinhamento: 'right' as const,
+              },
+            ],
+          },
+        },
+      ]
+    }
+
+    // MODO RESUMIDO (padrão compacto tradicional)
+    return [
+      {
+        titulo: '1. Receitas Realizadas no Período (por Cliente / Tomador)',
+        subtitulo:
+          'Parcelas contratuais quitadas, consultorias avulsas e serviços técnicos faturados',
+        tabela: {
+          colunas: [
+            { cabecalho: 'Cliente / Tomador', largura: '45%' },
+            { cabecalho: 'Lançamentos', alinhamento: 'center' as const, largura: '20%' },
+            {
+              cabecalho: 'Total Recebido (R$)',
+              alinhamento: 'right' as const,
+              largura: '35%',
+            },
+          ],
+          linhas: (balanceteAtivo.dados_consolidados?.receitas?.porCliente ?? []).map((item) => [
+            { conteudo: item.clienteNome, destaque: true },
+            {
+              conteudo: `${item.qtdLancamentos ?? 0} nota(s)/parcela(s)`,
+              alinhamento: 'center' as const,
+            },
+            { conteudo: formatCurrency(item.total ?? 0), alinhamento: 'right' as const },
+          ]),
+          linhaTotal: [
+            { conteudo: 'TOTAL DE RECEITAS DO MÊS' },
+            {
+              conteudo: `${balanceteAtivo.dados_consolidados?.receitas?.itens?.length ?? 0} itens`,
+              alinhamento: 'center' as const,
+            },
+            {
+              conteudo: formatCurrency(balanceteAtivo.receita_total ?? 0),
+              alinhamento: 'right' as const,
+            },
+          ],
+        },
+      },
+      {
+        titulo: '2. Despesas Operacionais e Tributárias (por Categoria)',
+        subtitulo: 'Contas a pagar quitadas: impostos, colaboradores, terceirizados e suprimentos',
+        tabela: {
+          colunas: [
+            { cabecalho: 'Categoria da Despesa', largura: '60%' },
+            { cabecalho: 'Total Pago (R$)', alinhamento: 'right' as const, largura: '40%' },
+          ],
+          linhas: Object.entries(
+            balanceteAtivo.dados_consolidados?.despesas?.porCategoria ?? {},
+          ).map(([cat, val]) => [
+            { conteudo: cat.toUpperCase().replace(/_/g, ' ') },
+            {
+              conteudo: `- ${formatCurrency(Number(val) || 0)}`,
+              alinhamento: 'right' as const,
+            },
+          ]),
+          linhaTotal: [
+            { conteudo: 'TOTAL DE DESPESAS DO MÊS' },
+            {
+              conteudo: `- ${formatCurrency(balanceteAtivo.despesa_total ?? 0)}`,
+              alinhamento: 'right' as const,
+            },
+          ],
+        },
+      },
+      {
+        titulo: '3. Evolução Acumulada no Exercício (Janeiro ao Mês de Referência)',
+        subtitulo: 'Comportamento das entradas e saídas e saldo residual consolidado',
+        tabela: {
+          colunas: [
+            { cabecalho: 'Mês', largura: '30%' },
+            { cabecalho: 'Receitas (R$)', alinhamento: 'right' as const, largura: '25%' },
+            { cabecalho: 'Despesas (R$)', alinhamento: 'right' as const, largura: '25%' },
+            { cabecalho: 'Resultado (R$)', alinhamento: 'right' as const, largura: '20%' },
+          ],
+          linhas: (balanceteAtivo.dados_consolidados?.acumuladoAno?.meses ?? []).map((m) => [
+            { conteudo: m.nomeMes, destaque: true },
+            { conteudo: formatCurrency(m.receita ?? 0), alinhamento: 'right' as const },
+            {
+              conteudo: `- ${formatCurrency(m.despesa ?? 0)}`,
+              alinhamento: 'right' as const,
+            },
+            {
+              conteudo: formatCurrency(m.saldo ?? 0),
+              alinhamento: 'right' as const,
+              destaque: true,
+            },
+          ]),
+          linhaTotal: [
+            { conteudo: 'TOTAL ACUMULADO NO ANO' },
+            {
+              conteudo: formatCurrency(balanceteAtivo.total_receitas_ano ?? 0),
+              alinhamento: 'right' as const,
+            },
+            {
+              conteudo: `- ${formatCurrency(balanceteAtivo.total_despesas_ano ?? 0)}`,
+              alinhamento: 'right' as const,
+            },
+            {
+              conteudo: formatCurrency(balanceteAtivo.saldo_acumulado_ano ?? 0),
+              alinhamento: 'right' as const,
+            },
+          ],
+        },
+      },
+    ]
+  }, [
+    balanceteAtivo,
+    modoImpressaoA4,
+    parcelas,
+    contasPagar,
+    contasReceber,
+    projetos,
+    extratosTransacoes,
+  ])
 
   // Exportar balancete atual para planilha Excel no template AEROCAD
   async function handleExportarBalanceteXlsx(bal: BalanceteMensalRecord) {
@@ -734,63 +1098,451 @@ export function BalancetesTab({
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-200 bg-white">
-                {balancetes.map((bal) => (
-                  <tr key={bal.id} className="hover:bg-[#FFF6EC]/30 transition-colors">
-                    <td className="px-4 py-3">
-                      <div className="font-bold text-neutral-900">
-                        {bal.titulo || 'Balancete Mensal'}
-                      </div>
-                      <div className="font-mono text-[11px] text-neutral-500">
-                        Ref: {bal.referencia || '—'} · Resp: {bal.responsavel_emissao || 'AEROCAD'}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono font-semibold text-emerald-700">
-                      {formatCurrency(bal.receita_total ?? 0)}
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono font-semibold text-rose-700">
-                      - {formatCurrency(bal.despesa_total ?? 0)}
-                    </td>
-                    <td
-                      className={`px-4 py-3 text-right font-mono font-bold ${
-                        (bal.saldo_mes ?? 0) >= 0 ? 'text-emerald-700' : 'text-rose-700'
-                      }`}
-                    >
-                      {formatCurrency(bal.saldo_mes ?? 0)}
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono font-bold text-[#D65100]">
-                      {formatCurrency(bal.saldo_acumulado_ano ?? 0)}
-                    </td>
-                    <td className="px-4 py-3 text-center font-mono text-neutral-600">
-                      {bal.data_emissao ? formatDate(bal.data_emissao) : '—'}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            setBalanceteAtivo(bal)
-                            setVisualizandoModal(true)
-                          }}
-                          className="h-8 px-2.5 text-xs text-[#555] hover:text-[#FF6A13] hover:border-[#FF6A13]"
-                          title="Visualizar documento oficial A4"
+                {balancetes.map((bal) => {
+                  const expandido = balancetesExpandidos.has(bal.id)
+                  const detalhe = expandido ? obterDetalhamentoBalancete(bal) : null
+                  const recGrupoKey = `${bal.id}-rec`
+                  const despGrupoKey = `${bal.id}-desp`
+                  const expandeRec = gruposExpandidos.has(recGrupoKey)
+                  const expandeDesp = gruposExpandidos.has(despGrupoKey)
+
+                  return (
+                    <React.Fragment key={bal.id}>
+                      <tr
+                        className={`hover:bg-[#FFF6EC]/30 transition-colors ${expandido ? 'bg-[#FFF8F3]/60' : ''}`}
+                      >
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => toggleExpandirBalancete(bal.id, bal)}
+                              className="p-1 rounded-md hover:bg-orange-100 text-[#FF6A13] transition-colors focus:outline-none"
+                              title={
+                                expandido
+                                  ? 'Recolher detalhamento por contas'
+                                  : 'Expandir contas contábeis'
+                              }
+                            >
+                              {expandido ? (
+                                <ChevronDown className="h-4 w-4" />
+                              ) : (
+                                <ChevronRight className="h-4 w-4" />
+                              )}
+                            </button>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-neutral-900">
+                                  {bal.titulo || 'Balancete Mensal'}
+                                </span>
+                                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-orange-100 text-[#D65100] font-semibold">
+                                  {expandido ? 'Contas Detalhadas' : 'Clique p/ Expandir'}
+                                </span>
+                              </div>
+                              <div className="font-mono text-[11px] text-neutral-500">
+                                Ref: {bal.referencia || '—'} · Resp:{' '}
+                                {bal.responsavel_emissao || 'AEROCAD'}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono font-semibold text-emerald-700">
+                          {formatCurrency(bal.receita_total ?? 0)}
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono font-semibold text-rose-700">
+                          - {formatCurrency(bal.despesa_total ?? 0)}
+                        </td>
+                        <td
+                          className={`px-4 py-3 text-right font-mono font-bold ${
+                            (bal.saldo_mes ?? 0) >= 0 ? 'text-emerald-700' : 'text-rose-700'
+                          }`}
                         >
-                          <Eye className="mr-1 h-3.5 w-3.5" />
-                          Ver Balancete
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleExportarBalanceteXlsx(bal)}
-                          className="h-8 px-2 text-xs border-emerald-300 text-emerald-700 hover:bg-emerald-50"
-                          title="Exportar planilha Excel (.XLSX)"
-                        >
-                          <FileSpreadsheet className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                          {formatCurrency(bal.saldo_mes ?? 0)}
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono font-bold text-[#D65100]">
+                          {formatCurrency(bal.saldo_acumulado_ano ?? 0)}
+                        </td>
+                        <td className="px-4 py-3 text-center font-mono text-neutral-600">
+                          {bal.data_emissao ? formatDate(bal.data_emissao) : '—'}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => toggleExpandirBalancete(bal.id, bal)}
+                              className="h-8 px-2 text-xs border-orange-200 text-[#FF6A13] hover:bg-orange-50"
+                              title="Expandir/Recolher Contas Contábeis"
+                            >
+                              <Layers className="mr-1 h-3.5 w-3.5" />
+                              {expandido ? 'Recolher' : 'Expandir Contas'}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setBalanceteAtivo(bal)
+                                setVisualizandoModal(true)
+                              }}
+                              className="h-8 px-2.5 text-xs text-[#555] hover:text-[#FF6A13] hover:border-[#FF6A13]"
+                              title="Visualizar documento oficial A4"
+                            >
+                              <Eye className="mr-1 h-3.5 w-3.5" />
+                              Ver Balancete
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleExportarBalanceteXlsx(bal)}
+                              className="h-8 px-2 text-xs border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                              title="Exportar planilha Excel (.XLSX)"
+                            >
+                              <FileSpreadsheet className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+
+                      {/* LINHA EXPANSÍVEL: DETALHAMENTO DE CONTAS CONTÁBEIS */}
+                      {expandido && detalhe && (
+                        <tr className="bg-neutral-50/70 border-b-2 border-orange-200">
+                          <td colSpan={7} className="p-4 sm:p-5">
+                            <div className="space-y-4 rounded-lg bg-white p-4 border border-neutral-200 shadow-xs">
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b pb-3">
+                                <div className="flex items-center gap-2">
+                                  <div className="flex h-7 w-7 items-center justify-center rounded-md bg-[#FF6A13] text-white">
+                                    <BookOpen className="h-4 w-4" />
+                                  </div>
+                                  <div>
+                                    <h4 className="text-xs font-bold uppercase tracking-wider text-neutral-800">
+                                      Detalhamento por Contas Contábeis (Plano de Contas AEROCAD)
+                                    </h4>
+                                    <p className="text-[11px] text-neutral-500">
+                                      Referência {bal.referencia || '—'} · Expansão analítica de
+                                      receitas e despesas vinculadas aos lançamentos
+                                    </p>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <Badge
+                                    variant="outline"
+                                    className="text-[11px] font-mono border-emerald-300 text-emerald-700 bg-emerald-50"
+                                  >
+                                    {detalhe.contasReceitas.length} contas de receita
+                                  </Badge>
+                                  <Badge
+                                    variant="outline"
+                                    className="text-[11px] font-mono border-rose-300 text-rose-700 bg-rose-50"
+                                  >
+                                    {detalhe.contasDespesas.length} contas de despesa
+                                  </Badge>
+                                </div>
+                              </div>
+
+                              {/* 1. GRUPO: RECEITAS OPERACIONAIS */}
+                              <div className="rounded-md border border-emerald-200 bg-white overflow-hidden">
+                                <button
+                                  type="button"
+                                  onClick={() => toggleExpandirGrupo(recGrupoKey)}
+                                  className="w-full flex items-center justify-between px-3 py-2.5 bg-emerald-50/70 hover:bg-emerald-100/60 transition-colors text-left"
+                                >
+                                  <div className="flex items-center gap-2">
+                                    {expandeRec ? (
+                                      <ChevronDown className="h-4 w-4 text-emerald-800" />
+                                    ) : (
+                                      <ChevronRight className="h-4 w-4 text-emerald-800" />
+                                    )}
+                                    <TrendingUp className="h-4 w-4 text-emerald-600" />
+                                    <span className="text-xs font-bold uppercase text-emerald-900 tracking-wide">
+                                      Grupo 4.0 — Receitas Operacionais e Faturamento
+                                    </span>
+                                    <span className="text-[11px] text-emerald-700 font-mono">
+                                      ({detalhe.contasReceitas.length} contas)
+                                    </span>
+                                  </div>
+                                  <div className="text-xs font-mono font-bold text-emerald-700">
+                                    {formatCurrency(bal.receita_total ?? 0)}
+                                  </div>
+                                </button>
+
+                                {expandeRec && (
+                                  <div className="divide-y divide-neutral-100">
+                                    {detalhe.contasReceitas.length === 0 ? (
+                                      <div className="p-3 text-xs text-neutral-400 italic text-center">
+                                        Nenhuma receita registrada neste período.
+                                      </div>
+                                    ) : (
+                                      detalhe.contasReceitas.map((c) => {
+                                        const contaKey = `${bal.id}-rec-${c.codigoConta}`
+                                        const expandeConta = contasExpandidas.has(contaKey)
+                                        return (
+                                          <div key={c.codigoConta} className="text-xs">
+                                            <div className="flex items-center justify-between px-3 py-2 hover:bg-neutral-50 transition-colors">
+                                              <div className="flex items-center gap-2 flex-1 min-w-0">
+                                                <button
+                                                  type="button"
+                                                  onClick={() => toggleExpandirConta(contaKey)}
+                                                  className="p-0.5 rounded hover:bg-neutral-200 text-neutral-500"
+                                                  title="Ver lançamentos analíticos desta conta"
+                                                >
+                                                  {expandeConta ? (
+                                                    <ChevronDown className="h-3.5 w-3.5 text-neutral-700" />
+                                                  ) : (
+                                                    <ChevronRight className="h-3.5 w-3.5 text-neutral-700" />
+                                                  )}
+                                                </button>
+                                                <span className="font-mono font-bold text-neutral-700 bg-neutral-100 px-1.5 py-0.5 rounded text-[11px]">
+                                                  {c.codigoConta}
+                                                </span>
+                                                <span className="font-medium text-neutral-900 truncate">
+                                                  {c.nomeConta}
+                                                </span>
+                                                <span className="text-[10px] text-neutral-400 hidden sm:inline">
+                                                  ({c.grupoContabil})
+                                                </span>
+                                              </div>
+                                              <div className="flex items-center gap-4 shrink-0">
+                                                <span className="text-[11px] font-mono text-neutral-500">
+                                                  {c.qtdLancamentos} lançamento
+                                                  {c.qtdLancamentos !== 1 ? 's' : ''}
+                                                </span>
+                                                <span className="font-mono font-bold text-emerald-700 w-28 text-right">
+                                                  {formatCurrency(c.total)}
+                                                </span>
+                                                <Button
+                                                  size="sm"
+                                                  variant="ghost"
+                                                  onClick={() =>
+                                                    setContaSelecionadaModal({
+                                                      conta: c,
+                                                      lancamentos: c.lancamentos || [],
+                                                      totalValor: c.total,
+                                                      balanceteTitulo:
+                                                        bal.titulo || `Balancete ${bal.referencia}`,
+                                                    })
+                                                  }
+                                                  className="h-6 px-1.5 text-[11px] text-neutral-600 hover:text-[#FF6A13]"
+                                                  title="Abrir modal de lançamentos analíticos"
+                                                >
+                                                  <ArrowUpRight className="h-3 w-3 mr-0.5" />
+                                                  Analítico
+                                                </Button>
+                                              </div>
+                                            </div>
+
+                                            {/* Nível 2: Lançamentos individuais da conta */}
+                                            {expandeConta && (
+                                              <div className="bg-neutral-50/90 px-4 py-2 border-t border-dashed border-neutral-200">
+                                                <div className="overflow-x-auto">
+                                                  <table className="w-full text-left text-[11px]">
+                                                    <thead>
+                                                      <tr className="text-neutral-500 font-semibold border-b border-neutral-200">
+                                                        <th className="py-1 px-2 w-24">Data</th>
+                                                        <th className="py-1 px-2">
+                                                          Cliente / Descrição
+                                                        </th>
+                                                        <th className="py-1 px-2 w-28">
+                                                          Doc. / NFS-e
+                                                        </th>
+                                                        <th className="py-1 px-2 text-right w-24">
+                                                          Valor
+                                                        </th>
+                                                      </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-neutral-200/50">
+                                                      {(c.lancamentos || []).map((lanc) => (
+                                                        <tr
+                                                          key={lanc.id}
+                                                          className="hover:bg-white/80"
+                                                        >
+                                                          <td className="py-1 px-2 font-mono text-neutral-600">
+                                                            {lanc.data
+                                                              ? formatDate(lanc.data)
+                                                              : '—'}
+                                                          </td>
+                                                          <td className="py-1 px-2">
+                                                            <div className="font-semibold text-neutral-800">
+                                                              {lanc.entidade}
+                                                            </div>
+                                                            <div className="text-[10px] text-neutral-500 truncate max-w-md">
+                                                              {lanc.descricao}
+                                                            </div>
+                                                          </td>
+                                                          <td className="py-1 px-2 font-mono text-neutral-600">
+                                                            {lanc.documentoRef || '—'}
+                                                          </td>
+                                                          <td className="py-1 px-2 text-right font-mono font-semibold text-emerald-700">
+                                                            {formatCurrency(lanc.valor)}
+                                                          </td>
+                                                        </tr>
+                                                      ))}
+                                                    </tbody>
+                                                  </table>
+                                                </div>
+                                              </div>
+                                            )}
+                                          </div>
+                                        )
+                                      })
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* 2. GRUPO: DESPESAS OPERACIONAIS E TRIBUTÁRIAS */}
+                              <div className="rounded-md border border-rose-200 bg-white overflow-hidden">
+                                <button
+                                  type="button"
+                                  onClick={() => toggleExpandirGrupo(despGrupoKey)}
+                                  className="w-full flex items-center justify-between px-3 py-2.5 bg-rose-50/70 hover:bg-rose-100/60 transition-colors text-left"
+                                >
+                                  <div className="flex items-center gap-2">
+                                    {expandeDesp ? (
+                                      <ChevronDown className="h-4 w-4 text-rose-800" />
+                                    ) : (
+                                      <ChevronRight className="h-4 w-4 text-rose-800" />
+                                    )}
+                                    <TrendingDown className="h-4 w-4 text-rose-600" />
+                                    <span className="text-xs font-bold uppercase text-rose-900 tracking-wide">
+                                      Grupo 3.0 — Custos e Despesas Operacionais
+                                    </span>
+                                    <span className="text-[11px] text-rose-700 font-mono">
+                                      ({detalhe.contasDespesas.length} contas)
+                                    </span>
+                                  </div>
+                                  <div className="text-xs font-mono font-bold text-rose-700">
+                                    - {formatCurrency(bal.despesa_total ?? 0)}
+                                  </div>
+                                </button>
+
+                                {expandeDesp && (
+                                  <div className="divide-y divide-neutral-100">
+                                    {detalhe.contasDespesas.length === 0 ? (
+                                      <div className="p-3 text-xs text-neutral-400 italic text-center">
+                                        Nenhuma despesa registrada neste período.
+                                      </div>
+                                    ) : (
+                                      detalhe.contasDespesas.map((c) => {
+                                        const contaKey = `${bal.id}-desp-${c.codigoConta}`
+                                        const expandeConta = contasExpandidas.has(contaKey)
+                                        return (
+                                          <div key={c.codigoConta} className="text-xs">
+                                            <div className="flex items-center justify-between px-3 py-2 hover:bg-neutral-50 transition-colors">
+                                              <div className="flex items-center gap-2 flex-1 min-w-0">
+                                                <button
+                                                  type="button"
+                                                  onClick={() => toggleExpandirConta(contaKey)}
+                                                  className="p-0.5 rounded hover:bg-neutral-200 text-neutral-500"
+                                                  title="Ver lançamentos analíticos desta conta"
+                                                >
+                                                  {expandeConta ? (
+                                                    <ChevronDown className="h-3.5 w-3.5 text-neutral-700" />
+                                                  ) : (
+                                                    <ChevronRight className="h-3.5 w-3.5 text-neutral-700" />
+                                                  )}
+                                                </button>
+                                                <span className="font-mono font-bold text-neutral-700 bg-neutral-100 px-1.5 py-0.5 rounded text-[11px]">
+                                                  {c.codigoConta}
+                                                </span>
+                                                <span className="font-medium text-neutral-900 truncate">
+                                                  {c.nomeConta}
+                                                </span>
+                                                <span className="text-[10px] text-neutral-400 hidden sm:inline">
+                                                  ({c.grupoContabil})
+                                                </span>
+                                              </div>
+                                              <div className="flex items-center gap-4 shrink-0">
+                                                <span className="text-[11px] font-mono text-neutral-500">
+                                                  {c.qtdLancamentos} lançamento
+                                                  {c.qtdLancamentos !== 1 ? 's' : ''}
+                                                </span>
+                                                <span className="font-mono font-bold text-rose-700 w-28 text-right">
+                                                  - {formatCurrency(c.total)}
+                                                </span>
+                                                <Button
+                                                  size="sm"
+                                                  variant="ghost"
+                                                  onClick={() =>
+                                                    setContaSelecionadaModal({
+                                                      conta: c,
+                                                      lancamentos: c.lancamentos || [],
+                                                      totalValor: c.total,
+                                                      balanceteTitulo:
+                                                        bal.titulo || `Balancete ${bal.referencia}`,
+                                                    })
+                                                  }
+                                                  className="h-6 px-1.5 text-[11px] text-neutral-600 hover:text-[#FF6A13]"
+                                                  title="Abrir modal de lançamentos analíticos"
+                                                >
+                                                  <ArrowUpRight className="h-3 w-3 mr-0.5" />
+                                                  Analítico
+                                                </Button>
+                                              </div>
+                                            </div>
+
+                                            {/* Nível 2: Lançamentos individuais da conta */}
+                                            {expandeConta && (
+                                              <div className="bg-neutral-50/90 px-4 py-2 border-t border-dashed border-neutral-200">
+                                                <div className="overflow-x-auto">
+                                                  <table className="w-full text-left text-[11px]">
+                                                    <thead>
+                                                      <tr className="text-neutral-500 font-semibold border-b border-neutral-200">
+                                                        <th className="py-1 px-2 w-24">Data</th>
+                                                        <th className="py-1 px-2">
+                                                          Favorecido / Fornecedor
+                                                        </th>
+                                                        <th className="py-1 px-2">Descrição</th>
+                                                        <th className="py-1 px-2 w-28">
+                                                          Doc. / Ref
+                                                        </th>
+                                                        <th className="py-1 px-2 text-right w-24">
+                                                          Valor
+                                                        </th>
+                                                      </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-neutral-200/50">
+                                                      {(c.lancamentos || []).map((lanc) => (
+                                                        <tr
+                                                          key={lanc.id}
+                                                          className="hover:bg-white/80"
+                                                        >
+                                                          <td className="py-1 px-2 font-mono text-neutral-600">
+                                                            {lanc.data
+                                                              ? formatDate(lanc.data)
+                                                              : '—'}
+                                                          </td>
+                                                          <td className="py-1 px-2 font-semibold text-neutral-800">
+                                                            {lanc.entidade}
+                                                          </td>
+                                                          <td className="py-1 px-2 text-neutral-600 truncate max-w-xs">
+                                                            {lanc.descricao}
+                                                          </td>
+                                                          <td className="py-1 px-2 font-mono text-neutral-600">
+                                                            {lanc.documentoRef || '—'}
+                                                          </td>
+                                                          <td className="py-1 px-2 text-right font-mono font-semibold text-rose-700">
+                                                            - {formatCurrency(lanc.valor)}
+                                                          </td>
+                                                        </tr>
+                                                      ))}
+                                                    </tbody>
+                                                  </table>
+                                                </div>
+                                              </div>
+                                            )}
+                                          </div>
+                                        )
+                                      })
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  )
+                })}
               </tbody>
             </table>
           </div>
@@ -809,7 +1561,33 @@ export function BalancetesTab({
                 {balanceteAtivo?.titulo || 'Balancete Mensal AEROCAD'}
               </h3>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Seletor do Modo do Documento A4: Detalhado vs Resumido */}
+              <div className="flex items-center rounded-lg bg-neutral-800 p-0.5 border border-white/10">
+                <button
+                  type="button"
+                  onClick={() => setModoImpressaoA4('detalhado')}
+                  className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-colors ${
+                    modoImpressaoA4 === 'detalhado'
+                      ? 'bg-[#FF6A13] text-white shadow-xs'
+                      : 'text-neutral-300 hover:text-white'
+                  }`}
+                >
+                  Modo Detalhado (Contas & Lançamentos)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setModoImpressaoA4('resumido')}
+                  className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-colors ${
+                    modoImpressaoA4 === 'resumido'
+                      ? 'bg-[#FF6A13] text-white shadow-xs'
+                      : 'text-neutral-300 hover:text-white'
+                  }`}
+                >
+                  Resumido
+                </button>
+              </div>
+
               {balanceteAtivo && (
                 <Button
                   size="sm"
@@ -826,7 +1604,9 @@ export function BalancetesTab({
                 onClick={() => {
                   imprimirElementoA4({
                     elementId: 'print-document',
-                    titulo: balanceteAtivo?.titulo || 'Balancete Mensal AEROCAD',
+                    titulo: `${balanceteAtivo?.titulo || 'Balancete Mensal AEROCAD'} (${
+                      modoImpressaoA4 === 'detalhado' ? 'Detalhado' : 'Resumido'
+                    })`,
                     orientacao: 'portrait',
                   })
                 }}
@@ -843,7 +1623,11 @@ export function BalancetesTab({
               <div className="bg-white shadow-lg border border-neutral-300 w-full max-w-[210mm]">
                 <AerocadRelatorioA4
                   titulo={balanceteAtivo.titulo}
-                  subtitulo="Consolidação Contábil de Receitas Operacionais, Tributos e Despesas"
+                  subtitulo={`Consolidação Contábil AEROCAD — Visualização ${
+                    modoImpressaoA4 === 'detalhado'
+                      ? 'Detalhada por Contas Contábeis e Lançamentos Analíticos'
+                      : 'Sintética Resumida'
+                  }`}
                   referenciaPeriodo={balanceteAtivo.referencia}
                   responsavelNome={balanceteAtivo.responsavel_emissao}
                   dataEmissao={balanceteAtivo.data_emissao}
@@ -871,121 +1655,144 @@ export function BalancetesTab({
                       destaque: true,
                     },
                   ]}
-                  secoes={[
-                    {
-                      titulo: '1. Receitas Realizadas no Período (por Cliente / Tomador)',
-                      subtitulo:
-                        'Parcelas contratuais quitadas, consultorias avulsas e serviços técnicos faturados',
-                      tabela: {
-                        colunas: [
-                          { cabecalho: 'Cliente / Tomador', largura: '45%' },
-                          { cabecalho: 'Lançamentos', alinhamento: 'center', largura: '20%' },
-                          {
-                            cabecalho: 'Total Recebido (R$)',
-                            alinhamento: 'right',
-                            largura: '35%',
-                          },
-                        ],
-                        linhas: (balanceteAtivo.dados_consolidados?.receitas?.porCliente ?? []).map(
-                          (item) => [
-                            { conteudo: item.clienteNome, destaque: true },
-                            {
-                              conteudo: `${item.qtdLancamentos ?? 0} nota(s)/parcela(s)`,
-                              alinhamento: 'center',
-                            },
-                            { conteudo: formatCurrency(item.total ?? 0), alinhamento: 'right' },
-                          ],
-                        ),
-                        linhaTotal: [
-                          { conteudo: 'TOTAL DE RECEITAS DO MÊS' },
-                          {
-                            conteudo: `${
-                              balanceteAtivo.dados_consolidados?.receitas?.itens?.length ?? 0
-                            } itens`,
-                            alinhamento: 'center',
-                          },
-                          {
-                            conteudo: formatCurrency(balanceteAtivo.receita_total ?? 0),
-                            alinhamento: 'right',
-                          },
-                        ],
-                      },
-                    },
-                    {
-                      titulo: '2. Despesas Operacionais e Tributárias (por Categoria)',
-                      subtitulo:
-                        'Contas a pagar quitadas: impostos, colaboradores, terceirizados e suprimentos',
-                      tabela: {
-                        colunas: [
-                          { cabecalho: 'Categoria da Despesa', largura: '60%' },
-                          { cabecalho: 'Total Pago (R$)', alinhamento: 'right', largura: '40%' },
-                        ],
-                        linhas: Object.entries(
-                          balanceteAtivo.dados_consolidados?.despesas?.porCategoria ?? {},
-                        ).map(([cat, val]) => [
-                          { conteudo: cat.toUpperCase().replace(/_/g, ' ') },
-                          {
-                            conteudo: `- ${formatCurrency(Number(val) || 0)}`,
-                            alinhamento: 'right',
-                          },
-                        ]),
-                        linhaTotal: [
-                          { conteudo: 'TOTAL DE DESPESAS DO MÊS' },
-                          {
-                            conteudo: `- ${formatCurrency(balanceteAtivo.despesa_total ?? 0)}`,
-                            alinhamento: 'right',
-                          },
-                        ],
-                      },
-                    },
-                    {
-                      titulo: '3. Evolução Acumulada no Exercício (Janeiro ao Mês de Referência)',
-                      subtitulo: 'Comportamento das entradas e saídas e saldo residual consolidado',
-                      tabela: {
-                        colunas: [
-                          { cabecalho: 'Mês', largura: '30%' },
-                          { cabecalho: 'Receitas (R$)', alinhamento: 'right', largura: '25%' },
-                          { cabecalho: 'Despesas (R$)', alinhamento: 'right', largura: '25%' },
-                          { cabecalho: 'Resultado (R$)', alinhamento: 'right', largura: '20%' },
-                        ],
-                        linhas: (balanceteAtivo.dados_consolidados?.acumuladoAno?.meses ?? []).map(
-                          (m) => [
-                            { conteudo: m.nomeMes, destaque: true },
-                            { conteudo: formatCurrency(m.receita ?? 0), alinhamento: 'right' },
-                            {
-                              conteudo: `- ${formatCurrency(m.despesa ?? 0)}`,
-                              alinhamento: 'right',
-                            },
-                            {
-                              conteudo: formatCurrency(m.saldo ?? 0),
-                              alinhamento: 'right',
-                              destaque: true,
-                            },
-                          ],
-                        ),
-                        linhaTotal: [
-                          { conteudo: 'TOTAL ACUMULADO NO ANO' },
-                          {
-                            conteudo: formatCurrency(balanceteAtivo.total_receitas_ano ?? 0),
-                            alinhamento: 'right',
-                          },
-                          {
-                            conteudo: `- ${formatCurrency(balanceteAtivo.total_despesas_ano ?? 0)}`,
-                            alinhamento: 'right',
-                          },
-                          {
-                            conteudo: formatCurrency(balanceteAtivo.saldo_acumulado_ano ?? 0),
-                            alinhamento: 'right',
-                          },
-                        ],
-                      },
-                    },
-                  ]}
-                  observacoesFinais="Balancete consolidado emitido para fins gerenciais, controle de fluxo de caixa e conciliação de faturamento de contratos da AEROCAD. Documento gerado eletronicamente com base nos lançamentos autenticados do CRM."
+                  secoes={secoesDocumentoA4}
+                  observacoesFinais="Balancete consolidado emitido para fins gerenciais, controle de fluxo de caixa e conciliação contábil da AEROCAD. Documento gerado eletronicamente com base nos lançamentos autenticados do CRM."
                 />
               </div>
             )}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 4. Modal de Lançamentos Analíticos da Conta Contábil Selecionada (Estilo Plano de Contas) */}
+      <Dialog
+        open={Boolean(contaSelecionadaModal)}
+        onOpenChange={(open) => {
+          if (!open) setContaSelecionadaModal(null)
+        }}
+      >
+        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col p-6">
+          <DialogHeader className="border-b pb-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="font-mono font-bold text-xs bg-orange-100 text-[#D65100] px-2 py-0.5 rounded">
+                  {contaSelecionadaModal?.conta.codigoConta}
+                </span>
+                <DialogTitle className="text-base font-bold text-neutral-900">
+                  {contaSelecionadaModal?.conta.nomeConta}
+                </DialogTitle>
+              </div>
+            </div>
+            <DialogDescription className="text-xs text-neutral-500 mt-1">
+              {contaSelecionadaModal?.balanceteTitulo} · Grupo:{' '}
+              <strong className="text-neutral-700">
+                {contaSelecionadaModal?.conta.grupoContabil}
+              </strong>
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Resumo da Conta no Balancete */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 my-2">
+            <div className="p-3 rounded-lg border border-neutral-200 bg-neutral-50">
+              <span className="text-[10px] font-bold uppercase text-neutral-500">Natureza</span>
+              <p className="text-xs font-semibold text-neutral-800 capitalize mt-0.5">
+                {contaSelecionadaModal?.conta.natureza === 'receita'
+                  ? 'Receita (Crédito)'
+                  : 'Despesa (Débito)'}
+              </p>
+            </div>
+            <div className="p-3 rounded-lg border border-neutral-200 bg-neutral-50">
+              <span className="text-[10px] font-bold uppercase text-neutral-500">
+                Total de Itens
+              </span>
+              <p className="text-xs font-mono font-semibold text-neutral-800 mt-0.5">
+                {contaSelecionadaModal?.lancamentos.length ?? 0} lançamento(s)
+              </p>
+            </div>
+            <div className="p-3 rounded-lg border border-neutral-200 bg-neutral-50 col-span-2 sm:col-span-1">
+              <span className="text-[10px] font-bold uppercase text-neutral-500">Volume Total</span>
+              <p
+                className={`text-xs font-mono font-bold mt-0.5 ${
+                  contaSelecionadaModal?.conta.natureza === 'receita'
+                    ? 'text-emerald-700'
+                    : 'text-rose-700'
+                }`}
+              >
+                {contaSelecionadaModal?.conta.natureza === 'despesa' ? '- ' : ''}
+                {formatCurrency(contaSelecionadaModal?.totalValor ?? 0)}
+              </p>
+            </div>
+          </div>
+
+          {/* Tabela de Lançamentos Analíticos */}
+          <div className="flex-1 overflow-y-auto border rounded-lg">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-neutral-50 text-neutral-600 font-semibold border-b sticky top-0">
+                <tr>
+                  <th className="px-3 py-2 w-24">Data</th>
+                  <th className="px-3 py-2">Origem</th>
+                  <th className="px-3 py-2">Favorecido / Tomador</th>
+                  <th className="px-3 py-2">Descrição</th>
+                  <th className="px-3 py-2 w-28">Doc. / Ref</th>
+                  <th className="px-3 py-2 text-right w-28">Valor (R$)</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-neutral-100 bg-white">
+                {(contaSelecionadaModal?.lancamentos ?? []).length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="p-6 text-center text-xs text-neutral-400 italic">
+                      Nenhum lançamento encontrado nesta conta.
+                    </td>
+                  </tr>
+                ) : (
+                  contaSelecionadaModal?.lancamentos.map((lanc) => (
+                    <tr key={lanc.id} className="hover:bg-neutral-50">
+                      <td className="px-3 py-2 font-mono text-neutral-600">
+                        {lanc.data ? formatDate(lanc.data) : '—'}
+                      </td>
+                      <td className="px-3 py-2">
+                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-neutral-100 text-neutral-700">
+                          {lanc.origemLabel}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 font-semibold text-neutral-900">{lanc.entidade}</td>
+                      <td
+                        className="px-3 py-2 text-neutral-600 truncate max-w-[200px]"
+                        title={lanc.descricao}
+                      >
+                        {lanc.descricao}
+                      </td>
+                      <td className="px-3 py-2 font-mono text-neutral-600 text-[11px]">
+                        {lanc.documentoRef || '—'}
+                      </td>
+                      <td
+                        className={`px-3 py-2 text-right font-mono font-bold ${
+                          lanc.tipoMovimento === 'credito' ? 'text-emerald-700' : 'text-rose-700'
+                        }`}
+                      >
+                        {lanc.tipoMovimento === 'debito' ? '- ' : ''}
+                        {formatCurrency(lanc.valor)}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <DialogFooter className="mt-4 border-t pt-3 flex items-center justify-between sm:justify-between">
+            <span className="text-[11px] text-neutral-500 font-mono">
+              Registros conciliados com segurança · Sem dupla contagem
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setContaSelecionadaModal(null)}
+              className="text-xs"
+            >
+              Fechar
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

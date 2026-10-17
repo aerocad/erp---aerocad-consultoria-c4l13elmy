@@ -720,6 +720,31 @@ export interface ColaboradorRecord extends RecordModel {
   }
 }
 
+export interface BalanceteLancamentoAnalitico {
+  id: string
+  data: string // DD/MM/AAAA ou YYYY-MM-DD
+  origem: 'parcela' | 'receita_avulsa' | 'conta_pagar' | 'extrato'
+  origemLabel: string
+  codigoConta: string
+  nomeConta: string
+  descricao: string
+  entidade: string // Favorecido / Fornecedor / Tomador / Cliente
+  documentoRef?: string // NFS-e, Boleto, comprovante, DOC
+  valor: number
+  tipoMovimento: 'debito' | 'credito'
+  status?: string
+}
+
+export interface BalanceteContaResumo {
+  codigoConta: string
+  nomeConta: string
+  grupoContabil: string
+  qtdLancamentos: number
+  total: number
+  natureza: 'receita' | 'despesa'
+  lancamentos?: BalanceteLancamentoAnalitico[]
+}
+
 export interface BalanceteConsolidadoDados {
   ano: number
   mes: number
@@ -728,6 +753,7 @@ export interface BalanceteConsolidadoDados {
     total: number
     porCategoria: Record<string, number>
     porCliente: Array<{ clienteNome: string; total: number; qtdLancamentos: number }>
+    porConta?: BalanceteContaResumo[]
     itens: Array<{
       id: string
       data: string
@@ -737,12 +763,15 @@ export interface BalanceteConsolidadoDados {
       valor: number
       origem: 'parcela' | 'receita_avulsa'
       nfNumero?: string
+      codigoConta?: string
+      nomeConta?: string
     }>
   }
   despesas: {
     total: number
     porCategoria: Record<string, number>
     porFornecedor: Array<{ fornecedorNome: string; total: number; qtdLancamentos: number }>
+    porConta?: BalanceteContaResumo[]
     itens: Array<{
       id: string
       data: string
@@ -751,6 +780,8 @@ export interface BalanceteConsolidadoDados {
       categoria: string
       valor: number
       numeroDocumento?: string
+      codigoConta?: string
+      nomeConta?: string
     }>
   }
   acumuladoAno: {
