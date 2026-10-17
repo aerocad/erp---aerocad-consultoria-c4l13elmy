@@ -94,11 +94,11 @@ export function OrdemServicoDialog({
   const [prestadorUsuarioId, setPrestadorUsuarioId] = useState('')
   const [prestadorNomeManual, setPrestadorNomeManual] = useState('')
 
-  // Tipo de serviço selecionável + opção outro
-  const [tipoServicoSelecionado, setTipoServicoSelecionado] = useState(
+  // Seleção múltipla de tipos de serviço (padrão + customizados)
+  const [tiposServicoSelecionados, setTiposServicoSelecionados] = useState<string[]>([
     TIPOS_SERVICO_ORDEM_SERVICO_PADRAO[0],
-  )
-  const [tipoServicoOutro, setTipoServicoOutro] = useState('')
+  ])
+  const [novoTipoServicoLivre, setNovoTipoServicoLivre] = useState('')
 
   // Campos específicos solicitados
   const [valor, setValor] = useState<number | string>('')
@@ -176,19 +176,53 @@ export function OrdemServicoDialog({
         setPrestadorUsuarioId(editingOS.prestador_usuario || '')
         setPrestadorNomeManual(editingOS.prestador || '')
 
-        // Tipo de serviço
-        const ts = editingOS.tipo_servico || TIPOS_SERVICO_ORDEM_SERVICO_PADRAO[0]
-        const isPadraoOuCustom = [
-          ...TIPOS_SERVICO_ORDEM_SERVICO_PADRAO,
-          ...customServicos,
-        ].includes(ts)
-        if (isPadraoOuCustom) {
-          setTipoServicoSelecionado(ts)
-          setTipoServicoOutro('')
-        } else {
-          setTipoServicoSelecionado('__outro__')
-          setTipoServicoOutro(ts)
+        // Resolução de tipos de serviço (trata legado string único, JSON array ou delimitador)
+        let tiposCarregados: string[] = []
+        const raw = editingOS.tipo_servico
+        if (Array.isArray(raw)) {
+          tiposCarregados = raw
+            .map(String)
+            .map((s) => s.trim())
+            .filter(Boolean)
+        } else if (typeof raw === 'string') {
+          const trimmed = raw.trim()
+          if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+            try {
+              const parsed = JSON.parse(trimmed)
+              if (Array.isArray(parsed)) {
+                tiposCarregados = parsed
+                  .map(String)
+                  .map((s) => s.trim())
+                  .filter(Boolean)
+              }
+            } catch {
+              tiposCarregados = [trimmed]
+            }
+          } else if (trimmed.includes(' · ')) {
+            tiposCarregados = trimmed
+              .split(' · ')
+              .map((s) => s.trim())
+              .filter(Boolean)
+          } else if (trimmed.includes(';\n') || trimmed.includes('; ')) {
+            tiposCarregados = trimmed
+              .split(/;\s*/)
+              .map((s) => s.trim())
+              .filter(Boolean)
+          } else if (trimmed) {
+            tiposCarregados = [trimmed]
+          }
         }
+        if (editingOS.tipo_servico_outro && editingOS.tipo_servico_outro.trim()) {
+          const outro = editingOS.tipo_servico_outro.trim()
+          if (!tiposCarregados.includes(outro)) {
+            tiposCarregados.push(outro)
+          }
+        }
+        if (tiposCarregados.length === 0) {
+          tiposCarregados = [TIPOS_SERVICO_ORDEM_SERVICO_PADRAO[0]]
+        }
+        setTiposServicoSelecionados(tiposCarregados)
+        setNovoTipoServicoLivre('')
 
         setValor(
           editingOS.valor !== undefined
@@ -212,8 +246,8 @@ export function OrdemServicoDialog({
         setFornecedorId('')
         setPrestadorUsuarioId('')
         setPrestadorNomeManual('')
-        setTipoServicoSelecionado(TIPOS_SERVICO_ORDEM_SERVICO_PADRAO[0])
-        setTipoServicoOutro('')
+        setTiposServicoSelecionados([TIPOS_SERVICO_ORDEM_SERVICO_PADRAO[0]])
+        setNovoTipoServicoLivre('')
         setValor('')
         setFormaPagamento('Transferência bancária / PIX mediante apresentação de Nota Fiscal')
         setPrazoExecucao('')
@@ -286,13 +320,17 @@ export function OrdemServicoDialog({
     usuariosTerceiros,
   ])
 
-  // Tipo de serviço final resolvido
-  const tipoServicoFinal = useMemo(() => {
-    if (tipoServicoSelecionado === '__outro__') {
-      return tipoServicoOutro.trim()
-    }
-    return tipoServicoSelecionado.trim()
-  }, [tipoServicoSelecionado, tipoServicoOutro])
+  // Lista final e texto consolidado dos tipos de serviço
+  const tiposServicoFinais = useMemo(() => {
+    const limpos = tiposServicoSelecionados.map((t) => t.trim()).filter(Boolean)
+    return Array.from(new Set(limpos))
+  }, [tiposServicoSelecionados])
+
+  const tipoServicoFinalTexto = useMemo(() => {
+    if (tiposServicoFinais.length === 0) return ''
+    if (tiposServicoFinais.length === 1) return tiposServicoFinais[0]
+    return tiposServicoFinais.join(' · ')
+  }, [tiposServicoFinais])
 
   const numeroOSPreview = useMemo(() => {
     if (editingOS) {
@@ -317,11 +355,36 @@ export function OrdemServicoDialog({
     }
   }
 
+  function toggleTipoServico(tipo: string) {
+    setTiposServicoSelecionados((prev) => {
+      if (prev.includes(tipo)) {
+        if (prev.length === 1) {
+          toast.info('A Ordem de Serviço precisa de pelo menos 1 tipo de serviço selecionado.')
+          return prev
+        }
+        return prev.filter((t) => t !== tipo)
+      } else {
+        return [...prev, tipo]
+      }
+    })
+  }
+
+  function handleAdicionarTipoLivre() {
+    const limpo = novoTipoServicoLivre.trim()
+    if (!limpo) return
+    salvarTipoServicoCustom(limpo)
+    if (!tiposServicoSelecionados.includes(limpo)) {
+      setTiposServicoSelecionados((prev) => [...prev, limpo])
+    }
+    setNovoTipoServicoLivre('')
+    toast.success(`Tipo de serviço "${limpo}" adicionado e selecionado!`)
+  }
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
 
-    if (!tipoServicoFinal) {
-      toast.error('Informe ou selecione o Tipo de Serviço da Ordem de Serviço.')
+    if (tiposServicoFinais.length === 0) {
+      toast.error('Informe ou selecione pelo menos um Tipo de Serviço para a Ordem de Serviço.')
       return
     }
 
@@ -338,18 +401,23 @@ export function OrdemServicoDialog({
     try {
       const valorNum = valor !== '' ? Number(valor) : 0
 
-      // Se utilizou tipo novo, persistir no localStorage
-      if (tipoServicoSelecionado === '__outro__' && tipoServicoOutro.trim()) {
-        salvarTipoServicoCustom(tipoServicoOutro.trim())
+      // Se digitou algo no input livre e não adicionou antes de salvar, salva agora
+      if (novoTipoServicoLivre.trim()) {
+        salvarTipoServicoCustom(novoTipoServicoLivre.trim())
       }
+
+      // Gravamos como string compatível (delimitada por " · ") e como lista JSON se houver múltiplos
+      const tipoServicoPayload =
+        tiposServicoFinais.length === 1 ? tiposServicoFinais[0] : tiposServicoFinais.join(' · ')
 
       const payload: Partial<OrdemServicoRecord> = {
         projeto: presetProjetoId,
         titulo: numeroOSPreview,
-        descricao: observacoes.trim() || tipoServicoFinal,
-        tipo_servico: tipoServicoFinal,
+        descricao: observacoes.trim() || tipoServicoPayload,
+        tipo_servico: tipoServicoPayload,
         tipo_servico_outro:
-          tipoServicoSelecionado === '__outro__' ? tipoServicoOutro.trim() : undefined,
+          tiposServicoFinais.find((t) => !TIPOS_SERVICO_ORDEM_SERVICO_PADRAO.includes(t)) ||
+          undefined,
         prestador_tipo: prestadorTipo,
         colaborador: prestadorTipo === 'colaborador' ? colaboradorId || undefined : undefined,
         fornecedor: prestadorTipo === 'fornecedor' ? fornecedorId || undefined : undefined,
@@ -669,67 +737,112 @@ export function OrdemServicoDialog({
                 )}
             </div>
 
-            {/* Bloco 2: Tipo de Serviço */}
+            {/* Bloco 2: Seleção Múltipla de Tipos de Serviço */}
             <div className="rounded-lg border border-neutral-200 bg-neutral-50/70 p-3.5 space-y-3">
-              <Label className="text-xs font-bold uppercase tracking-wider text-neutral-700 flex items-center gap-1.5">
-                <FileCheck2 className="h-4 w-4 text-[#FF6A13]" />
-                2. Tipo de Serviço Prestado pela AEROCAD
-              </Label>
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-bold uppercase tracking-wider text-neutral-700 flex items-center gap-1.5">
+                  <FileCheck2 className="h-4 w-4 text-[#FF6A13]" />
+                  2. Tipos de Serviço Designados na OS (Seleção Múltipla)
+                </Label>
+                <span className="text-[11px] font-semibold text-[#D65100] bg-orange-100 px-2 py-0.5 rounded-full">
+                  {tiposServicoFinais.length} selecionado(s)
+                </span>
+              </div>
 
-              <div className="space-y-2">
-                <Select
-                  value={tipoServicoSelecionado}
-                  onValueChange={(val) => setTipoServicoSelecionado(val)}
-                >
-                  <SelectTrigger className="h-9 text-xs bg-white text-left font-medium">
-                    <SelectValue placeholder="Selecione um tipo de serviço da AEROCAD..." />
-                  </SelectTrigger>
-                  <SelectContent className="max-w-2xl">
-                    <div className="px-2 py-1 text-[10px] font-bold text-neutral-400 uppercase">
-                      Serviços Padrão AEROCAD
+              {/* Lista dos 5 tipos padrão com checkboxes */}
+              <div className="space-y-2 bg-white rounded-md border border-neutral-200 p-3">
+                <p className="text-[10px] uppercase font-bold text-neutral-400 tracking-wider">
+                  Tipos Oficiais AEROCAD (Marque um ou mais)
+                </p>
+                <div className="space-y-2">
+                  {TIPOS_SERVICO_ORDEM_SERVICO_PADRAO.map((item, idx) => {
+                    const checked = tiposServicoSelecionados.includes(item)
+                    return (
+                      <label
+                        key={`padrao-${idx}`}
+                        className={`flex items-start gap-2.5 p-2 rounded cursor-pointer transition border text-xs leading-relaxed ${
+                          checked
+                            ? 'bg-orange-50/60 border-orange-300 text-neutral-900 font-medium'
+                            : 'bg-white border-transparent hover:bg-neutral-50 text-neutral-700'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleTipoServico(item)}
+                          className="mt-0.5 h-4 w-4 rounded border-neutral-300 text-[#FF6A13] focus:ring-[#FF6A13]"
+                        />
+                        <span className="flex-1">
+                          <strong className="text-[#FF6A13] mr-1.5">{idx + 1}.</strong>
+                          {item}
+                        </span>
+                      </label>
+                    )
+                  })}
+                </div>
+
+                {/* Tipos customizados já salvos */}
+                {customServicos.length > 0 && (
+                  <div className="pt-2 border-t mt-2 space-y-2">
+                    <p className="text-[10px] uppercase font-bold text-[#D65100] tracking-wider">
+                      Outros Tipos Cadastrados / Reaproveitáveis
+                    </p>
+                    <div className="space-y-1.5">
+                      {customServicos.map((item, idx) => {
+                        const checked = tiposServicoSelecionados.includes(item)
+                        return (
+                          <label
+                            key={`custom-${idx}`}
+                            className={`flex items-start gap-2.5 p-2 rounded cursor-pointer transition border text-xs leading-relaxed ${
+                              checked
+                                ? 'bg-orange-50/60 border-orange-300 text-neutral-900 font-medium'
+                                : 'bg-white border-transparent hover:bg-neutral-50 text-neutral-700'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => toggleTipoServico(item)}
+                              className="mt-0.5 h-4 w-4 rounded border-neutral-300 text-[#FF6A13] focus:ring-[#FF6A13]"
+                            />
+                            <span className="flex-1">{item}</span>
+                          </label>
+                        )
+                      })}
                     </div>
-                    {TIPOS_SERVICO_ORDEM_SERVICO_PADRAO.map((item, idx) => (
-                      <SelectItem key={`padrao-${idx}`} value={item} className="text-xs py-2">
-                        <span className="font-semibold text-neutral-900">{idx + 1}.</span> {item}
-                      </SelectItem>
-                    ))}
-
-                    {customServicos.length > 0 && (
-                      <>
-                        <div className="px-2 py-1 text-[10px] font-bold text-[#D65100] uppercase border-t mt-1">
-                          Outros Tipos Salvos Anteriormente
-                        </div>
-                        {customServicos.map((item, idx) => (
-                          <SelectItem key={`custom-${idx}`} value={item} className="text-xs py-1.5">
-                            {item}
-                          </SelectItem>
-                        ))}
-                      </>
-                    )}
-
-                    <SelectItem
-                      value="__outro__"
-                      className="text-xs py-2 text-[#FF6A13] font-bold border-t mt-1"
-                    >
-                      + Outro tipo de serviço não elencado (digitar novo...)
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-
-                {tipoServicoSelecionado === '__outro__' && (
-                  <div className="space-y-1 pt-1">
-                    <Label className="text-xs font-semibold text-[#D65100]">
-                      Especifique o novo Tipo de Serviço (será salvo para futuras OS):
-                    </Label>
-                    <Input
-                      required
-                      value={tipoServicoOutro}
-                      onChange={(e) => setTipoServicoOutro(e.target.value)}
-                      placeholder="Digite o tipo de serviço técnico a ser prestado..."
-                      className="h-9 text-xs bg-white border-orange-300"
-                    />
                   </div>
                 )}
+              </div>
+
+              {/* Inclusão de novo tipo livre digitado */}
+              <div className="space-y-1.5 pt-1">
+                <Label className="text-xs font-semibold text-neutral-700">
+                  Adicionar outro tipo de serviço livre (será salvo para reaproveitamento):
+                </Label>
+                <div className="flex gap-2">
+                  <Input
+                    value={novoTipoServicoLivre}
+                    onChange={(e) => setNovoTipoServicoLivre(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        handleAdicionarTipoLivre()
+                      }
+                    }}
+                    placeholder="Digite um novo tipo de serviço e clique em Adicionar..."
+                    className="h-9 text-xs bg-white"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleAdicionarTipoLivre}
+                    disabled={!novoTipoServicoLivre.trim()}
+                    className="h-9 text-xs border-orange-300 text-[#FF6A13] hover:bg-orange-50 shrink-0 font-semibold"
+                  >
+                    <Plus className="mr-1 h-3.5 w-3.5" /> Adicionar à OS
+                  </Button>
+                </div>
               </div>
             </div>
 
@@ -898,7 +1011,7 @@ export function OrdemServicoDialog({
                         </div>
                         <div className="min-w-0">
                           <p className="text-[10px] font-bold tracking-[0.2em] text-[#FF6A13] uppercase">
-                            Engenharia & Consultoria Aeroportuária
+                            Consultoria & Aeroportos
                           </p>
                           <h1 className="text-base sm:text-lg font-black text-[#2D2D2D] tracking-tight uppercase leading-tight">
                             ORDEM DE SERVIÇO INTERNA
@@ -1024,16 +1137,28 @@ export function OrdemServicoDialog({
                     </table>
                   </div>
 
-                  {/* 3. TIPO DE SERVIÇO & ESCOPO */}
+                  {/* 3. TIPOS DE SERVIÇO & ESCOPO */}
                   <div className="space-y-2 mb-5">
                     <div className="border-l-4 border-[#FF6A13] pl-2.5 py-0.5">
                       <h2 className="text-xs font-bold uppercase tracking-wider text-neutral-900">
-                        3. ESCOPO DO SERVIÇO TÉCNICO
+                        3. ESCOPO DOS SERVIÇOS TÉCNICOS DESIGNADOS ({tiposServicoFinais.length})
                       </h2>
                     </div>
 
                     <div className="border border-neutral-300 rounded p-3 bg-neutral-50/50 text-[11px] leading-relaxed">
-                      <p className="font-bold text-neutral-900 mb-1">{tipoServicoFinal}</p>
+                      {tiposServicoFinais.length <= 1 ? (
+                        <p className="font-bold text-neutral-900 mb-1">
+                          {tiposServicoFinais[0] || 'Serviços Técnicos Especializados'}
+                        </p>
+                      ) : (
+                        <ol className="list-decimal pl-5 space-y-1.5 mb-2">
+                          {tiposServicoFinais.map((item, idx) => (
+                            <li key={idx} className="font-bold text-neutral-900 leading-snug">
+                              {item}
+                            </li>
+                          ))}
+                        </ol>
+                      )}
                       {observacoes && (
                         <div className="mt-2 text-neutral-700 whitespace-pre-wrap border-t border-neutral-200 pt-2 text-[10.5px]">
                           <strong>Detalhamento / Observações:</strong> {observacoes}

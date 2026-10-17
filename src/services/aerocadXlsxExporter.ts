@@ -42,7 +42,7 @@ export async function exportarTabelaParaXlsx(opcoes: OpcoesExportacaoXlsx): Prom
 
   // Construção do Array-of-Arrays (AOA) com cabeçalho institucional AEROCAD
   const aoa: unknown[][] = [
-    ['AEROCAD ENGENHARIA & CONSULTORIA AEROPORTUÁRIA LTDA'],
+    ['AEROCAD CONSULTORIA & AEROPORTOS'],
     [`RELATÓRIO: ${opcoes.tituloRelatorio.toUpperCase()}`],
   ]
 

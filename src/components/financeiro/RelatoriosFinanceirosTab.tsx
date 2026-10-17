@@ -714,7 +714,7 @@ export function RelatoriosFinanceirosTab({
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold text-neutral-900 tracking-tight">
-              AEROCAD ENGENHARIA & CONSULTORIA AEROPORTUÁRIA
+              AEROCAD CONSULTORIA & AEROPORTOS
             </h1>
             <p className="text-xs text-neutral-500">
               Relatório Financeiro e Contábil · Exercício {periodoAno}

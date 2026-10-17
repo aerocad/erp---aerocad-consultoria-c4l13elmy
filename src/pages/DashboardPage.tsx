@@ -106,18 +106,28 @@ export default function DashboardPage() {
       reloadAlertas()
     }
 
-    const handleFocus = () => revalidarTudo()
+    let lastRevalidation = Date.now()
+    const MIN_INTERVAL_MS = 15_000
+
+    const throttledRevalidar = () => {
+      const now = Date.now()
+      if (now - lastRevalidation < MIN_INTERVAL_MS) return
+      lastRevalidation = now
+      revalidarTudo()
+    }
+
+    const handleFocus = () => throttledRevalidar()
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        revalidarTudo()
+        throttledRevalidar()
       }
     }
 
     window.addEventListener('focus', handleFocus)
     document.addEventListener('visibilitychange', handleVisibilityChange)
 
-    // Intervalo de segurança suave a cada 30 segundos
-    const timer = setInterval(revalidarTudo, 30000)
+    // Polling espaçado de segurança: 60s (já temos useRealtime ativo em cada coleção)
+    const timer = setInterval(revalidarTudo, 60000)
 
     return () => {
       window.removeEventListener('focus', handleFocus)
@@ -125,12 +135,12 @@ export default function DashboardPage() {
       clearInterval(timer)
     }
   }, [
-    opportunities,
-    requirements,
-    installments,
-    projects,
-    ordensServico,
-    activities,
+    opportunities.reload,
+    requirements.reload,
+    installments.reload,
+    projects.reload,
+    ordensServico.reload,
+    activities.reload,
     reloadAlertas,
   ])
 

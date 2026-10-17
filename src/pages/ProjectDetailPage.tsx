@@ -1630,7 +1630,7 @@ export default function ProjectDetailPage() {
                           </div>
                           <div className="min-w-0">
                             <p className="text-[10px] font-bold tracking-[0.2em] text-[#FF6A13] uppercase">
-                              Engenharia & Consultoria Aeroportuária
+                              Consultoria & Aeroportos
                             </p>
                             <h1 className="text-base sm:text-lg font-black text-[#2D2D2D] tracking-tight uppercase leading-tight">
                               ORDEM DE SERVIÇO INTERNA
@@ -1813,9 +1813,61 @@ export default function ProjectDetailPage() {
                       </div>
 
                       <div className="border border-neutral-300 rounded p-3 bg-neutral-50/50 text-[11px] leading-relaxed">
-                        <p className="font-bold text-neutral-900 mb-1">
-                          {osParaVisualizar.tipo_servico || osParaVisualizar.descricao}
-                        </p>
+                        {(() => {
+                          const raw =
+                            osParaVisualizar.tipo_servico || osParaVisualizar.descricao || ''
+                          let lista: string[] = []
+                          if (Array.isArray(raw)) {
+                            lista = raw.map(String).filter(Boolean)
+                          } else if (typeof raw === 'string') {
+                            const trimmed = raw.trim()
+                            if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+                              try {
+                                const parsed = JSON.parse(trimmed)
+                                if (Array.isArray(parsed))
+                                  lista = parsed.map(String).filter(Boolean)
+                              } catch {
+                                lista = [trimmed]
+                              }
+                            } else if (trimmed.includes(' · ')) {
+                              lista = trimmed
+                                .split(' · ')
+                                .map((s) => s.trim())
+                                .filter(Boolean)
+                            } else if (trimmed.includes(';\n') || trimmed.includes('; ')) {
+                              lista = trimmed
+                                .split(/;\s*/)
+                                .map((s) => s.trim())
+                                .filter(Boolean)
+                            } else if (trimmed) {
+                              lista = [trimmed]
+                            }
+                          }
+
+                          if (lista.length <= 1) {
+                            return (
+                              <p className="font-bold text-neutral-900 mb-1">
+                                {lista[0] || 'Serviços Técnicos Especializados'}
+                              </p>
+                            )
+                          }
+
+                          return (
+                            <div className="space-y-1.5 mb-2">
+                              <p className="text-[10px] uppercase font-bold text-[#FF6A13] tracking-wider">
+                                Relação dos Serviços Atribuídos ({lista.length}):
+                              </p>
+                              <ol className="list-decimal pl-5 space-y-1">
+                                {lista.map((item, idx) => (
+                                  <li key={idx} className="font-bold text-neutral-900 leading-snug">
+                                    {item}
+                                  </li>
+                                ))}
+                              </ol>
+                            </div>
+                          )
+                        })()}
+
                         {osParaVisualizar.observacoes && (
                           <div className="mt-2 text-neutral-700 whitespace-pre-wrap border-t border-neutral-200 pt-2 text-[10.5px]">
                             <strong>Detalhamento / Observações:</strong>{' '}

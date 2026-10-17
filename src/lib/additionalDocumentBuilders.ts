@@ -131,7 +131,7 @@ export interface InternalServiceOrderData {
   prestadorNome: string
   prestadorDocumento?: string
   prestadorTipoLabel?: string // 'Colaborador' | 'Fornecedor (PF)' | 'Fornecedor (PJ)'
-  tipoServico: string
+  tipoServico: string | string[]
   valor?: number
   formaPagamento?: string
   prazoExecucao?: string
@@ -165,10 +165,43 @@ export function buildInternalServiceOrderHTML(
   const prestadorDocumento = ('prestadorDocumento' in data && data.prestadorDocumento) || ''
   const prestadorTipoLabel =
     ('prestadorTipoLabel' in data && data.prestadorTipoLabel) || 'Prestador Designado'
-  const tipoServico =
+  const rawTipoServico =
     ('tipoServico' in data && data.tipoServico) ||
     ('escopo' in data && data.escopo) ||
     'Serviços Técnicos Especializados'
+
+  let listaTiposServico: string[] = []
+  if (Array.isArray(rawTipoServico)) {
+    listaTiposServico = rawTipoServico.map((s) => String(s).trim()).filter(Boolean)
+  } else if (typeof rawTipoServico === 'string') {
+    const trimmed = rawTipoServico.trim()
+    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+      try {
+        const parsed = JSON.parse(trimmed)
+        if (Array.isArray(parsed)) {
+          listaTiposServico = parsed.map((s) => String(s).trim()).filter(Boolean)
+        }
+      } catch {
+        listaTiposServico = [trimmed]
+      }
+    } else if (trimmed.includes(' · ')) {
+      listaTiposServico = trimmed
+        .split(' · ')
+        .map((s) => s.trim())
+        .filter(Boolean)
+    } else if (trimmed.includes(';\n') || trimmed.includes('; ')) {
+      listaTiposServico = trimmed
+        .split(/;\s*/)
+        .map((s) => s.trim())
+        .filter(Boolean)
+    } else {
+      listaTiposServico = [trimmed]
+    }
+  }
+
+  if (listaTiposServico.length === 0) {
+    listaTiposServico = ['Serviços Técnicos Especializados']
+  }
   const valor = 'valor' in data && typeof data.valor === 'number' ? data.valor : 0
   const formaPagamento =
     ('formaPagamento' in data && data.formaPagamento) || 'Conforme Nota Fiscal emitida'
@@ -215,9 +248,16 @@ export function buildInternalServiceOrderHTML(
     <tr><th>Prazo de Execução</th><td><strong>${prazo}</strong></td></tr>
   </table>
 
-  <div class="os-sec">3. TIPO DE SERVIÇO & ESCOPO DA ATRIBUIÇÃO</div>
+  <div class="os-sec">3. TIPOS DE SERVIÇO & ESCOPO DA ATRIBUIÇÃO</div>
   <table class="os-table">
-    <tr><th>Tipo do Serviço</th><td><strong>${tipoServico}</strong></td></tr>
+    <tr>
+      <th style="vertical-align: top;">Tipos de Serviço Designados (${listaTiposServico.length})</th>
+      <td>
+        <ol style="margin: 0; padding-left: 18px; line-height: 1.6;">
+          ${listaTiposServico.map((item) => `<li style="margin-bottom: 3px; font-weight: bold; color: #1f2937;">${item}</li>`).join('')}
+        </ol>
+      </td>
+    </tr>
   </table>
 
   ${

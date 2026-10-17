@@ -36,6 +36,13 @@ export function useCrmData<T extends RecordModel>(
     void load()
   }, [load])
 
-  useRealtime<T>(collection, () => void load(), options.realtime ?? false)
+  useRealtime<T>(
+    collection,
+    () => {
+      // Quando há evento realtime, revalida forçando atualização
+      void load()
+    },
+    options.realtime ?? false,
+  )
   return { data, loading, error, reload: load, setData }
 }

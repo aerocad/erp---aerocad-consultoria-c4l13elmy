@@ -28,7 +28,7 @@ export interface OrdemServicoRecord extends RecordModel {
   prestador_tipo?: PrestadorTipoOS
   colaborador?: string
   fornecedor?: string
-  tipo_servico?: string
+  tipo_servico?: string | string[]
   tipo_servico_outro?: string
   forma_pagamento?: string
   prazo_execucao?: string
