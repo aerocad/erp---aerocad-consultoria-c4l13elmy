@@ -158,6 +158,8 @@ export function PlanoContasTab({
   const { ocultarValores } = useFinanceiroVisibilidade()
   const canExportAndPrint = user?.role === 'admin' || user?.role === 'financeiro'
 
+  const anoAtualCorrente = new Date().getFullYear()
+  const [filtroAno, setFiltroAno] = useState<string>(String(anoAtualCorrente))
   const [busca, setBusca] = useState('')
   const [filtroNatureza, setFiltroNatureza] = useState<string>('todos')
   const [apenasComLancamentos, setApenasComLancamentos] = useState(false)
@@ -167,7 +169,6 @@ export function PlanoContasTab({
     lancamentos: LancamentoMapeado[]
     totalValor: number
   } | null>(null)
-
   const [gruposAbertos, setGruposAbertos] = useState<Record<string, boolean>>({
     '1': true,
     '2': true,
@@ -175,13 +176,84 @@ export function PlanoContasTab({
     '4': true,
   })
 
-  // 1. Mapear TODOS os lançamentos reais da AEROCAD para as contas analíticas do plano
+  // 0. Extração dinâmica de anos disponíveis nos dados financeiros
+  const anosDisponiveis = useMemo(() => {
+    const anos = new Set<number>()
+    anos.add(anoAtualCorrente)
+    anos.add(anoAtualCorrente - 1)
+    anos.add(2026)
+    anos.add(2025)
+    anos.add(2024)
+
+    parcelas.forEach((p) => {
+      const d = p.data_pagamento || p.data_faturamento || p.vencimento || p.created
+      if (d) {
+        const y = Number(d.slice(0, 4))
+        if (!isNaN(y) && y >= 2015 && y <= 2035) anos.add(y)
+      }
+    })
+    contasPagar.forEach((c) => {
+      const d = c.data_pagamento || c.data_vencimento || c.created
+      if (d) {
+        const y = Number(d.slice(0, 4))
+        if (!isNaN(y) && y >= 2015 && y <= 2035) anos.add(y)
+      }
+    })
+    contasReceber.forEach((c) => {
+      const d = c.data_recebimento || c.data_vencimento || c.created
+      if (d) {
+        const y = Number(d.slice(0, 4))
+        if (!isNaN(y) && y >= 2015 && y <= 2035) anos.add(y)
+      }
+    })
+    extratosTransacoes.forEach((tx) => {
+      const d = tx.data || tx.created
+      if (d) {
+        const y = Number(d.slice(0, 4))
+        if (!isNaN(y) && y >= 2015 && y <= 2035) anos.add(y)
+      }
+    })
+    ativosPatrimonio.forEach((at) => {
+      const d = at.data_aquisicao || at.created
+      if (d) {
+        const y = Number(d.slice(0, 4))
+        if (!isNaN(y) && y >= 2015 && y <= 2035) anos.add(y)
+      }
+    })
+    contasBancarias.forEach((cb) => {
+      const d = cb.data_saldo_inicial || cb.created
+      if (d) {
+        const y = Number(d.slice(0, 4))
+        if (!isNaN(y) && y >= 2015 && y <= 2035) anos.add(y)
+      }
+    })
+
+    return Array.from(anos).sort((a, b) => b - a)
+  }, [
+    anoAtualCorrente,
+    parcelas,
+    contasPagar,
+    contasReceber,
+    extratosTransacoes,
+    ativosPatrimonio,
+    contasBancarias,
+  ])
+
+  // Helper defensivo para testar se uma data pertence ao ano filtrado
+  const correspondeAoAno = (dataStr?: string | null): boolean => {
+    if (!filtroAno || filtroAno === 'todos') return true
+    if (!dataStr) return false
+    return dataStr.startsWith(filtroAno)
+  }
+
+  // 1. Mapear lançamentos da AEROCAD respeitando o filtro de ANO selecionado
   const todosLancamentosMapeados = useMemo<LancamentoMapeado[]>(() => {
     const lista: LancamentoMapeado[] = []
 
     // 1.1 Disponibilidades (Contas Bancárias PJ no Ativo 1.1.1)
     for (const cb of contasBancarias) {
-      if (cb.saldo_atual && Math.abs(cb.saldo_atual) > 0) {
+      const dataCb = cb.data_saldo_inicial || cb.created?.slice(0, 10) || ''
+      if (correspondeAoAno(dataCb) && cb.saldo_atual && Math.abs(cb.saldo_atual) > 0) {
         lista.push({
           id: `cb-${cb.id}`,
           origem: 'conta_bancaria',
@@ -191,10 +263,7 @@ export function PlanoContasTab({
           natureza: 'ativo',
           descricao: `Saldo em Conta Corrente PJ (${cb.banco_nome || 'Banco'} · Ag: ${cb.agencia || '-'} CC: ${cb.conta_corrente || '-'})`,
           entidade: cb.banco_nome || 'Banco PJ',
-          data:
-            cb.data_saldo_inicial ||
-            cb.created?.slice(0, 10) ||
-            new Date().toISOString().slice(0, 10),
+          data: dataCb || `${filtroAno !== 'todos' ? filtroAno : anoAtualCorrente}-01-01`,
           valor: Math.abs(cb.saldo_atual),
           tipoMovimento: 'debito',
           status: cb.status === 'ativa' ? 'Ativa' : 'Inativa',
@@ -205,158 +274,159 @@ export function PlanoContasTab({
 
     // 1.2 Ativos Patrimoniais Imobilizados / Intangíveis (Ativo 1.2.x)
     for (const at of ativosPatrimonio) {
-      const contaAlvo = classificarAtivoPatrimonio(at)
-      lista.push({
-        id: `at-${at.id}`,
-        origem: 'ativo',
-        origemLabel: 'Ativo Patrimonial',
-        codigoConta: contaAlvo.codigo,
-        nomeConta: contaAlvo.nome,
-        natureza: 'ativo',
-        descricao: `${at.descricao || at.categoria} (${at.identificador_codigo || 'Sem código'})`,
-        entidade: at.fornecedor_nome || at.expand?.credor?.nome_razao_social || 'AEROCAD',
-        data: at.data_aquisicao || at.created?.slice(0, 10) || '',
-        valor: at.valor_contabil_atual || at.valor_aquisicao || 0,
-        tipoMovimento: 'debito',
-        status: at.status || 'ativo',
-        documentoRef: at.numero_nf_registro ? `NF ${at.numero_nf_registro}` : undefined,
-      })
+      const dataAt = at.data_aquisicao || at.created?.slice(0, 10) || ''
+      if (correspondeAoAno(dataAt)) {
+        const contaAlvo = classificarAtivoPatrimonio(at)
+        lista.push({
+          id: `at-${at.id}`,
+          origem: 'ativo',
+          origemLabel: 'Ativo Patrimonial',
+          codigoConta: contaAlvo.codigo,
+          nomeConta: contaAlvo.nome,
+          natureza: 'ativo',
+          descricao: `${at.descricao || at.categoria} (${at.identificador_codigo || 'Sem código'})`,
+          entidade: at.fornecedor_nome || at.expand?.credor?.nome_razao_social || 'AEROCAD',
+          data: dataAt,
+          valor: at.valor_contabil_atual || at.valor_aquisicao || 0,
+          tipoMovimento: 'debito',
+          status: at.status || 'ativo',
+          documentoRef: at.numero_nf_registro ? `NF ${at.numero_nf_registro}` : undefined,
+        })
+      }
     }
 
     // 1.3 Contas a Receber (Faturamento / Medições emitidas de Projetos - 1.1.2 Ativo ou 4.1.x Receita)
     for (const cr of contasReceber) {
-      const contaReceita = classificarContaReceber(cr)
-      const val = cr.valor || cr.valor_recebido || 0
-      // Conta a receber pendente alimenta direito a receber (1.1.2) e faturamento (4.1.x)
-      lista.push({
-        id: `cr-${cr.id}`,
-        origem: 'conta_receber',
-        origemLabel: 'Conta a Receber',
-        codigoConta: contaReceita.codigo,
-        nomeConta: contaReceita.nome,
-        natureza: 'receita',
-        descricao: cr.descricao || 'Receita Técnica Operacional',
-        entidade: cr.cliente_nome || cr.expand?.cliente?.razao_social || 'Cliente AEROCAD',
-        data: cr.data_recebimento || cr.data_vencimento || cr.created?.slice(0, 10) || '',
-        valor: val,
-        tipoMovimento: 'credito',
-        status: cr.status || 'pendente',
-        documentoRef: cr.numero_documento,
-        observacoes: cr.observacoes,
-      })
+      const dataCr = cr.data_recebimento || cr.data_vencimento || cr.created?.slice(0, 10) || ''
+      if (correspondeAoAno(dataCr)) {
+        const contaReceita = classificarContaReceber(cr)
+        const val = cr.valor || cr.valor_recebido || 0
+        lista.push({
+          id: `cr-${cr.id}`,
+          origem: 'conta_receber',
+          origemLabel: 'Conta a Receber',
+          codigoConta: contaReceita.codigo,
+          nomeConta: contaReceita.nome,
+          natureza: 'receita',
+          descricao: cr.descricao || 'Receita Técnica Operacional',
+          entidade: cr.cliente_nome || cr.expand?.cliente?.razao_social || 'Cliente AEROCAD',
+          data: dataCr,
+          valor: val,
+          tipoMovimento: 'credito',
+          status: cr.status || 'pendente',
+          documentoRef: cr.numero_documento,
+          observacoes: cr.observacoes,
+        })
+      }
     }
 
     // 1.4 Parcelas de Projetos Aeronáuticos (Receitas - 4.1.x e Ativo - 1.1.2)
     for (const p of parcelas) {
-      const contaReceita = classificarParcela(p)
-      const val = p.valor_recebido || p.valor || 0
-      lista.push({
-        id: `parc-${p.id}`,
-        origem: 'parcela',
-        origemLabel: 'Parcela de Projeto',
-        codigoConta: contaReceita.codigo,
-        nomeConta: contaReceita.nome,
-        natureza: 'receita',
-        descricao: `${p.expand?.projeto?.numero ? `[${p.expand.projeto.numero}] ` : ''}${p.descricao || 'Parcela de Contrato'}`,
-        entidade:
-          p.expand?.cliente?.razao_social || p.expand?.projeto?.nome || 'Cliente do Projeto',
-        data: p.data_pagamento || p.vencimento || p.created?.slice(0, 10) || '',
-        valor: val,
-        tipoMovimento: 'credito',
-        status: p.status || 'pendente',
-        documentoRef: p.nf_numero ? `NFS-e ${p.nf_numero}` : undefined,
-        observacoes: p.observacoes,
-      })
-
-      // Se a parcela está pendente de recebimento, ela também representa direito a receber no Ativo Circulante (1.1.2)
-      if (p.status === 'pendente' || p.status === 'vencida') {
+      const dataP =
+        p.data_pagamento || p.vencimento || p.data_faturamento || p.created?.slice(0, 10) || ''
+      if (correspondeAoAno(dataP)) {
+        const contaReceita = classificarParcela(p)
+        const val = p.valor_recebido || p.valor || 0
         lista.push({
-          id: `parc-ativo-${p.id}`,
+          id: `parc-${p.id}`,
           origem: 'parcela',
-          origemLabel: 'Direito a Receber (Ativo)',
-          codigoConta: '1.1.2',
-          nomeConta: 'Contas a Receber de Clientes (Projetos em Andamento)',
-          natureza: 'ativo',
-          descricao: `Faturamento a Receber: ${p.expand?.projeto?.numero || ''} ${p.descricao || ''}`,
-          entidade: p.expand?.cliente?.razao_social || 'Cliente do Projeto',
-          data: p.vencimento || p.created?.slice(0, 10) || '',
-          valor: p.valor || 0,
-          tipoMovimento: 'debito',
-          status: p.status,
+          origemLabel: 'Parcela de Projeto',
+          codigoConta: contaReceita.codigo,
+          nomeConta: contaReceita.nome,
+          natureza: 'receita',
+          descricao: `${p.expand?.projeto?.numero ? `[${p.expand.projeto.numero}] ` : ''}${p.descricao || 'Parcela de Contrato'}`,
+          entidade:
+            p.expand?.cliente?.razao_social || p.expand?.projeto?.nome || 'Cliente do Projeto',
+          data: dataP,
+          valor: val,
+          tipoMovimento: 'credito',
+          status: p.status || 'pendente',
           documentoRef: p.nf_numero ? `NFS-e ${p.nf_numero}` : undefined,
+          observacoes: p.observacoes,
         })
+
+        // Se a parcela está pendente de recebimento, ela também representa direito a receber no Ativo Circulante (1.1.2)
+        if (p.status === 'pendente' || p.status === 'vencida') {
+          lista.push({
+            id: `parc-ativo-${p.id}`,
+            origem: 'parcela',
+            origemLabel: 'Direito a Receber (Ativo)',
+            codigoConta: '1.1.2',
+            nomeConta: 'Contas a Receber de Clientes (Projetos em Andamento)',
+            natureza: 'ativo',
+            descricao: `Faturamento a Receber: ${p.expand?.projeto?.numero || ''} ${p.descricao || ''}`,
+            entidade: p.expand?.cliente?.razao_social || 'Cliente do Projeto',
+            data: p.vencimento || dataP,
+            valor: p.valor || 0,
+            tipoMovimento: 'debito',
+            status: p.status,
+            documentoRef: p.nf_numero ? `NFS-e ${p.nf_numero}` : undefined,
+          })
+        }
       }
     }
 
     // 1.5 Contas a Pagar (Despesas Operacionais, Tributos, Folha, Terceiros)
     for (const cp of contasPagar) {
-      const contaDespesa = classificarContaPagar(cp)
-      const val = cp.valor || 0
+      const dataCp = cp.data_pagamento || cp.data_vencimento || cp.created?.slice(0, 10) || ''
+      if (correspondeAoAno(dataCp)) {
+        const contaDespesa = classificarContaPagar(cp)
+        const val = cp.valor || 0
 
-      lista.push({
-        id: `cp-${cp.id}`,
-        origem: 'conta_pagar',
-        origemLabel: 'Conta a Pagar',
-        codigoConta: contaDespesa.codigo,
-        nomeConta: contaDespesa.nome,
-        natureza: contaDespesa.natureza,
-        descricao: cp.descricao || 'Despesa Administrativa/Operacional',
-        entidade: cp.fornecedor || cp.expand?.credor?.nome_razao_social || 'Fornecedor/Credor',
-        data: cp.data_pagamento || cp.data_vencimento || cp.created?.slice(0, 10) || '',
-        valor: val,
-        tipoMovimento: 'debito',
-        status: cp.status || 'pendente',
-        documentoRef: cp.numero_documento,
-        observacoes: cp.observacoes,
-      })
+        lista.push({
+          id: `cp-${cp.id}`,
+          origem: 'conta_pagar',
+          origemLabel: 'Conta a Pagar',
+          codigoConta: contaDespesa.codigo,
+          nomeConta: contaDespesa.nome,
+          natureza: contaDespesa.natureza,
+          descricao: cp.descricao || 'Despesa Administrativa/Operacional',
+          entidade: cp.fornecedor || cp.expand?.credor?.nome_razao_social || 'Fornecedor/Credor',
+          data: dataCp,
+          valor: val,
+          tipoMovimento: 'debito',
+          status: cp.status || 'pendente',
+          documentoRef: cp.numero_documento,
+          observacoes: cp.observacoes,
+        })
 
-      // Se estiver pendente, também alimenta obrigações a pagar no Passivo Circulante (2.1.1 ou 2.1.3)
-      if (cp.status === 'pendente') {
-        const codigoPassivo = contaDespesa.codigo.startsWith('3.3')
-          ? '2.1.3'
-          : contaDespesa.codigo.startsWith('3.4')
-            ? '2.1.4'
-            : contaDespesa.codigo === '2.1.5' || cp.categoria === 'despesas_operacionais'
-              ? '2.1.5'
-              : '2.1.1'
-        const itemPassivo = PLANO_CONTAS_AEROCAD.find((i) => i.codigo === codigoPassivo)
-        if (itemPassivo) {
-          lista.push({
-            id: `cp-passivo-${cp.id}`,
-            origem: 'conta_pagar',
-            origemLabel: 'Obrigação a Pagar (Passivo)',
-            codigoConta: itemPassivo.codigo,
-            nomeConta: itemPassivo.nome,
-            natureza: 'passivo',
-            descricao: `Obrigação a Pagar: ${cp.descricao || cp.fornecedor}`,
-            entidade: cp.fornecedor || cp.expand?.credor?.nome_razao_social || 'Credor',
-            data: cp.data_vencimento || cp.created?.slice(0, 10) || '',
-            valor: val,
-            tipoMovimento: 'credito',
-            status: cp.status,
-            documentoRef: cp.numero_documento,
-          })
+        // Se estiver pendente, também alimenta obrigações a pagar no Passivo Circulante (2.1.1 ou 2.1.3)
+        if (cp.status === 'pendente') {
+          const codigoPassivo = contaDespesa.codigo.startsWith('3.3')
+            ? '2.1.3'
+            : contaDespesa.codigo.startsWith('3.4')
+              ? '2.1.4'
+              : contaDespesa.codigo === '2.1.5' || cp.categoria === 'despesas_operacionais'
+                ? '2.1.5'
+                : '2.1.1'
+          const itemPassivo = PLANO_CONTAS_AEROCAD.find((i) => i.codigo === codigoPassivo)
+          if (itemPassivo) {
+            lista.push({
+              id: `cp-passivo-${cp.id}`,
+              origem: 'conta_pagar',
+              origemLabel: 'Obrigação a Pagar (Passivo)',
+              codigoConta: itemPassivo.codigo,
+              nomeConta: itemPassivo.nome,
+              natureza: 'passivo',
+              descricao: `Obrigação a Pagar: ${cp.descricao || cp.fornecedor}`,
+              entidade: cp.fornecedor || cp.expand?.credor?.nome_razao_social || 'Credor',
+              data: cp.data_vencimento || dataCp,
+              valor: val,
+              tipoMovimento: 'credito',
+              status: cp.status,
+              documentoRef: cp.numero_documento,
+            })
+          }
         }
       }
     }
 
     // 1.6 Extratos Bancários (Transações importadas .RET, OFX, PDF, CSV)
     // Se a transação estiver vinculada a uma conta_pagar/parcela já contabilizada, evitamos dupla contagem
-    const contasPagarIdsVinculadas = new Set(
-      extratosTransacoes
-        .filter((tx) => tx.vinculo_tipo === 'conta_pagar' && tx.vinculo_id)
-        .map((tx) => tx.vinculo_id),
-    )
-    const parcelasIdsVinculadas = new Set(
-      extratosTransacoes
-        .filter((tx) => tx.vinculo_tipo === 'parcela' && tx.vinculo_id)
-        .map((tx) => tx.vinculo_id),
-    )
-
     for (const tx of extratosTransacoes) {
-      // Se a transação já tem vínculo formal com conta a pagar ou parcela existente no banco,
-      // a conta já foi lançada acima pelos dados da conta a pagar/parcela.
-      // Caso contrário (transação avulsa de extrato, tarifa, conciliação manual ou débito direto em conta):
+      const dataTx = tx.data || tx.created?.slice(0, 10) || ''
+      if (!correspondeAoAno(dataTx)) continue
+
       const temVinculoDiretoComRegistroExistente =
         (tx.vinculo_tipo === 'conta_pagar' && contasPagar.some((c) => c.id === tx.vinculo_id)) ||
         (tx.vinculo_tipo === 'parcela' && parcelas.some((p) => p.id === tx.vinculo_id))
@@ -371,7 +441,7 @@ export function PlanoContasTab({
           nomeConta: contaAlvo.nome,
           natureza: contaAlvo.natureza,
           descricao: tx.descricao || 'Movimentação em Conta PJ',
-          data: tx.data || tx.created?.slice(0, 10) || '',
+          data: dataTx,
           valor: Math.abs(tx.valor || 0),
           tipoMovimento: tx.tipo === 'entrada' ? 'credito' : 'debito',
           status: tx.status_conciliacao || 'conciliado',
@@ -382,8 +452,16 @@ export function PlanoContasTab({
     }
 
     return lista
-  }, [contasBancarias, ativosPatrimonio, contasReceber, parcelas, contasPagar, extratosTransacoes])
-
+  }, [
+    contasBancarias,
+    ativosPatrimonio,
+    contasReceber,
+    parcelas,
+    contasPagar,
+    extratosTransacoes,
+    filtroAno,
+    anoAtualCorrente,
+  ])
   // 2. Mapa indexado de lançamentos por código da conta
   const mapaLancamentosPorConta = useMemo(() => {
     const mapa = new Map<string, { qtd: number; valor: number; lancamentos: LancamentoMapeado[] }>()
@@ -608,6 +686,7 @@ export function PlanoContasTab({
 
     try {
       const hojeStr = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+      const anoStr = filtroAno !== 'todos' ? `_${filtroAno}` : ''
       const linhas = contasFiltradasPlanas.map((c) => {
         const natFormatada =
           c.natureza === 'ativo'
@@ -651,9 +730,9 @@ export function PlanoContasTab({
       }
 
       await exportarTabelaParaXlsx({
-        nomeArquivo: `plano_contas_aerocad_${hojeStr}`,
+        nomeArquivo: `plano_contas_aerocad${anoStr}_${hojeStr}`,
         tituloRelatorio: 'PLANO DE CONTAS GERENCIAL E CONTÁBIL',
-        subtitulo: `Filtros: Natureza [${filtroNatureza.toUpperCase()}] · ${apenasComLancamentos ? 'Apenas com lançamentos' : 'Todas as contas'} · Total: ${contasFiltradasPlanas.length} contas`,
+        subtitulo: `Ano: ${filtroAno !== 'todos' ? `Exercício ${filtroAno}` : 'Todos os exercícios'} · Natureza [${filtroNatureza.toUpperCase()}] · ${apenasComLancamentos ? 'Apenas com lançamentos' : 'Todas as contas'} · Total: ${contasFiltradasPlanas.length} contas`,
         usuarioNome: user?.name || user?.email || 'Equipe AEROCAD',
         userRole: user?.role,
         colunas: [
@@ -688,6 +767,7 @@ export function PlanoContasTab({
 
     try {
       const hojeStr = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+      const anoStr = filtroAno !== 'todos' ? `_${filtroAno}` : ''
       const cabecalhos = [
         'Código',
         'Nome da Conta',
@@ -751,7 +831,7 @@ export function PlanoContasTab({
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.setAttribute('href', url)
-      link.setAttribute('download', `plano_contas_aerocad_${hojeStr}.csv`)
+      link.setAttribute('download', `plano_contas_aerocad${anoStr}_${hojeStr}.csv`)
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
@@ -947,6 +1027,24 @@ export function PlanoContasTab({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {/* Seletor de Ano */}
+          <div className="w-[130px]">
+            <Select value={filtroAno} onValueChange={setFiltroAno}>
+              <SelectTrigger className="h-9 text-xs font-semibold border-[#FF6A13]/40 bg-orange-50/40 text-neutral-800">
+                <Calendar className="mr-1.5 h-3.5 w-3.5 text-[#FF6A13] shrink-0" />
+                <SelectValue placeholder="Ano" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos os anos</SelectItem>
+                {anosDisponiveis.map((ano) => (
+                  <SelectItem key={ano} value={String(ano)} className="font-medium">
+                    Ano {ano} {ano === anoAtualCorrente ? '(Atual)' : ''}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           <div className="w-[180px]">
             <Select value={filtroNatureza} onValueChange={setFiltroNatureza}>
               <SelectTrigger className="h-9 text-xs">
@@ -976,7 +1074,10 @@ export function PlanoContasTab({
             {apenasComLancamentos ? 'Com Lançamentos' : 'Todas as Contas'}
           </Button>
 
-          {(busca || filtroNatureza !== 'todos' || apenasComLancamentos) && (
+          {(busca ||
+            filtroNatureza !== 'todos' ||
+            apenasComLancamentos ||
+            filtroAno !== String(anoAtualCorrente)) && (
             <Button
               variant="ghost"
               size="sm"
@@ -984,6 +1085,7 @@ export function PlanoContasTab({
                 setBusca('')
                 setFiltroNatureza('todos')
                 setApenasComLancamentos(false)
+                setFiltroAno(String(anoAtualCorrente))
               }}
               className="h-9 text-xs text-neutral-500 hover:text-neutral-800"
             >
@@ -1268,11 +1370,17 @@ export function PlanoContasTab({
               <AerocadRelatorioA4
                 titulo="PLANO DE CONTAS OFICIAL & ESTRUTURA CONTÁBIL"
                 subtitulo={`Árvore Hierárquica · ${
+                  filtroAno !== 'todos' ? `Exercício ${filtroAno}` : 'Todos os exercícios'
+                } · ${
                   filtroNatureza === 'todos'
                     ? 'Todas as naturezas (1 Ativo, 2 Passivo, 3 Despesas, 4 Receitas)'
                     : `Filtro ativo: ${filtroNatureza.toUpperCase()}`
                 } · ${apenasComLancamentos ? 'Apenas contas com lançamentos' : 'Todas as contas'}`}
-                referenciaPeriodo="Exercício 2026 · Padrão AEROCAD"
+                referenciaPeriodo={
+                  filtroAno !== 'todos'
+                    ? `Exercício ${filtroAno} · Padrão AEROCAD`
+                    : 'Exercício Consolidado · Padrão AEROCAD'
+                }
                 responsavelNome={user?.name || user?.email || 'Equipe AEROCAD'}
                 resumoKpis={[
                   {

@@ -31,6 +31,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { formatCurrency, formatDate } from '@/lib/format'
 import { exportarTabelaParaXlsx } from '@/services/aerocadXlsxExporter'
 import { AerocadRelatorioA4 } from '@/components/financeiro/AerocadRelatorioA4'
+import { imprimirElementoA4 } from '@/services/relatorioImpressaoService'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import {
   calcularResumoFinanceiroTodosProjetos,
@@ -949,7 +950,13 @@ export function RelatorioSaldoAFaturarCliente({
               </Button>
               <Button
                 size="sm"
-                onClick={() => window.print()}
+                onClick={() => {
+                  imprimirElementoA4({
+                    elementId: 'print-document',
+                    titulo: 'Relatório de Saldo a Faturar por Cliente AEROCAD',
+                    orientacao: 'portrait',
+                  })
+                }}
                 className="bg-[#FF6A13] hover:bg-[#E85B06] text-white font-bold text-xs h-8"
               >
                 <Printer className="mr-1.5 h-3.5 w-3.5" />

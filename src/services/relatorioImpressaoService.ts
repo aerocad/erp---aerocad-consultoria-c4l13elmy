@@ -108,13 +108,20 @@ export function imprimirElementoA4(opcoes: OpcoesImpressaoA4 = {}): boolean {
     th, td {
       padding: 5px 8px;
     }
-    .print\\:hidden, button, .no-print {
+    /* Blindagem rigorosa de dimensionamento do logotipo oficial AEROCAD */
+    img, .aerocad-logo-header-wrapper img, [alt*="AEROCAD"], header img {
+      max-height: 40px !important;
+      max-width: 200px !important;
+      height: 38px !important;
+      width: auto !important;
+      object-fit: contain !important;
+      display: block !important;
+    }
+    .print:hidden, button, .no-print {
       display: none !important;
     }
   </style>
-  <link rel="stylesheet" href="/src/main.css" />
-</head>
-<body>
+</head><body>
   <div id="print-document">
     ${targetElement.innerHTML}
   </div>

@@ -1605,7 +1605,12 @@ ${emailObj.bodyText}
           >
             {/* Cabeçalho Institucional AEROCAD */}
             <header className="flex items-end justify-between border-b-2 border-[#FF6A13] pb-4">
-              <AerocadLogo className="h-10 w-auto max-w-[240px] object-contain" />
+              <div className="aerocad-logo-header-wrapper shrink-0">
+                <AerocadLogo
+                  className="h-9 w-auto max-w-[200px] object-contain block"
+                  style={{ maxHeight: '38px', maxWidth: '200px', width: 'auto', height: '38px' }}
+                />
+              </div>
               <div className="text-right">
                 <p className="text-[10px] font-bold uppercase tracking-[.18em] text-[#FF6A13]">
                   CONSULTORIA & AEROPORTOS

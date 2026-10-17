@@ -35,6 +35,7 @@ import { formatCurrency, formatCurrencyRaw, formatDate } from '@/lib/format'
 import { CATEGORIA_PAGAR_LABELS } from './ContasPagarTab'
 import { exportarTabelaParaXlsx, ColunaXlsx } from '@/services/aerocadXlsxExporter'
 import { AerocadRelatorioA4 } from '@/components/financeiro/AerocadRelatorioA4'
+import { imprimirElementoA4 } from '@/services/relatorioImpressaoService'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import type {
   ClienteRecord,
@@ -1136,7 +1137,22 @@ export function RelatoriosFinanceirosTab({
               </Button>
               <Button
                 size="sm"
-                onClick={() => window.print()}
+                onClick={() => {
+                  imprimirElementoA4({
+                    elementId: 'print-document',
+                    titulo:
+                      subTipo === 'dre'
+                        ? 'DRE Demonstrativo de Resultado AEROCAD'
+                        : subTipo === 'faturamento_cliente'
+                          ? 'Faturamento por Cliente AEROCAD'
+                          : subTipo === 'custo_projeto'
+                            ? 'Rentabilidade e Margem por Projeto AEROCAD'
+                            : subTipo === 'aging'
+                              ? 'Aging de Títulos AEROCAD'
+                              : 'Resumo de Impostos Retidos AEROCAD',
+                    orientacao: 'portrait',
+                  })
+                }}
                 className="bg-[#FF6A13] hover:bg-[#E85B06] text-white font-bold text-xs h-8"
               >
                 <Printer className="mr-1.5 h-3.5 w-3.5" />

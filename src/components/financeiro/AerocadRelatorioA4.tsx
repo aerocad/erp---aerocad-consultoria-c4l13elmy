@@ -75,15 +75,20 @@ export function AerocadRelatorioA4({
     >
       <div>
         {/* Cabeçalho Oficial AEROCAD */}
-        <header className="border-b-2 border-[#FF6A13] pb-4 mb-6">
+        <header className="border-b-2 border-[#FF6A13] pb-4 mb-6 aerocad-doc-header">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <AerocadLogo className="h-10 w-auto max-w-[200px] object-contain" />
-              <div>
+            <div className="flex items-center gap-3.5">
+              <div className="aerocad-logo-header-wrapper shrink-0">
+                <AerocadLogo
+                  className="h-9 w-auto max-w-[190px] object-contain block"
+                  style={{ maxHeight: '38px', maxWidth: '190px', width: 'auto', height: '38px' }}
+                />
+              </div>
+              <div className="min-w-0">
                 <p className="text-[10px] font-bold tracking-[0.2em] text-[#FF6A13] uppercase">
                   Engenharia & Consultoria Aeroportuária
                 </p>
-                <h1 className="text-lg font-black text-[#2D2D2D] tracking-tight uppercase">
+                <h1 className="text-base sm:text-lg font-black text-[#2D2D2D] tracking-tight uppercase leading-tight">
                   {titulo}
                 </h1>
               </div>

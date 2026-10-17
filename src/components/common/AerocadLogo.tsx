@@ -16,6 +16,7 @@ export interface AerocadLogoProps extends React.ImgHTMLAttributes<HTMLImageEleme
 export function AerocadLogo({
   className = 'h-8 w-auto object-contain',
   alt = 'AEROCAD',
+  style,
   ...props
 }: AerocadLogoProps) {
   return (
@@ -23,6 +24,14 @@ export function AerocadLogo({
       src={logoSrc}
       alt={alt}
       className={className}
+      style={{
+        maxHeight: '44px',
+        maxWidth: '220px',
+        height: 'auto',
+        width: 'auto',
+        objectFit: 'contain',
+        ...style,
+      }}
       loading="eager"
       decoding="async"
       {...props}
