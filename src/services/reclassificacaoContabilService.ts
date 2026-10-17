@@ -1,4 +1,4 @@
-import { pb } from '@/lib/pocketbase/client'
+import pb from '@/lib/pocketbase/client'
 import { invalidateApiCache } from '@/services/api'
 import {
   PLANO_CONTAS_AEROCAD,

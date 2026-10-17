@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import {
   AlertCircle,
   ArrowUpRight,
@@ -57,6 +57,7 @@ import {
   derivarDetalhamentoContasBalancete,
   MESES_NOMES,
 } from '@/services/balanceteMensalDetalhamentoService'
+import { ContaContabilBadgeInline } from '@/components/financeiro/ContaContabilBadgeInline'
 import type {
   BalanceteConsolidadoDados,
   BalanceteContaResumo,
@@ -75,6 +76,7 @@ interface BalancetesTabProps {
   contasReceber: ContaReceberRecord[]
   projetos: ProjetoRecord[]
   extratosTransacoes?: ExtratoTransacaoRecord[]
+  onReload?: () => void
 }
 
 export function BalancetesTab({
@@ -83,6 +85,7 @@ export function BalancetesTab({
   contasReceber,
   projetos,
   extratosTransacoes = [],
+  onReload,
 }: BalancetesTabProps) {
   const { user } = useAuth()
   const { ocultarValores } = useFinanceiroVisibilidade()
@@ -120,6 +123,20 @@ export function BalancetesTab({
   const [balanceteAtivo, setBalanceteAtivo] = useState<BalanceteMensalRecord | null>(null)
   const [gerando, setGerando] = useState(false)
   const [visualizandoModal, setVisualizandoModal] = useState(false)
+  const [referenciasDesatualizadas, setReferenciasDesatualizadas] = useState<string[]>([])
+
+  useEffect(() => {
+    const handleDesatualizado = (e: Event) => {
+      const custom = e as CustomEvent<{ referencia: string }>
+      if (custom.detail?.referencia) {
+        setReferenciasDesatualizadas((prev) =>
+          prev.includes(custom.detail.referencia) ? prev : [...prev, custom.detail.referencia],
+        )
+      }
+    }
+    window.addEventListener('aerocad:balancete_desatualizado', handleDesatualizado)
+    return () => window.removeEventListener('aerocad:balancete_desatualizado', handleDesatualizado)
+  }, [])
 
   // Estado da expansão de balancete na listagem principal
   // Permite expandir múltiplos balancetes (ex: "bal-id")
@@ -150,6 +167,15 @@ export function BalancetesTab({
       }
     >
   >({})
+
+  function handleReclassificacaoSucesso() {
+    // Limpa caches locais
+    setCacheDetalhamento({})
+    // Dispara recarregamento dos dados nas abas superiores
+    if (onReload) {
+      onReload()
+    }
+  }
 
   // Obter ou calcular sob demanda o detalhamento de contas de um balancete
   function obterDetalhamentoBalancete(bal: BalanceteMensalRecord) {
@@ -1734,47 +1760,81 @@ export function BalancetesTab({
                   <th className="px-3 py-2">Favorecido / Tomador</th>
                   <th className="px-3 py-2">Descrição</th>
                   <th className="px-3 py-2 w-28">Doc. / Ref</th>
-                  <th className="px-3 py-2 text-right w-28">Valor (R$)</th>
+                  <th className="px-3 py-2 text-right w-24">Valor (R$)</th>
+                  <th className="px-3 py-2 w-48 text-center">Conta Contábil (Inline)</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-100 bg-white">
                 {(contaSelecionadaModal?.lancamentos ?? []).length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="p-6 text-center text-xs text-neutral-400 italic">
+                    <td colSpan={7} className="p-6 text-center text-xs text-neutral-400 italic">
                       Nenhum lançamento encontrado nesta conta.
                     </td>
                   </tr>
                 ) : (
-                  contaSelecionadaModal?.lancamentos.map((lanc) => (
-                    <tr key={lanc.id} className="hover:bg-neutral-50">
-                      <td className="px-3 py-2 font-mono text-neutral-600">
-                        {lanc.data ? formatDate(lanc.data) : '—'}
-                      </td>
-                      <td className="px-3 py-2">
-                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-neutral-100 text-neutral-700">
-                          {lanc.origemLabel}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2 font-semibold text-neutral-900">{lanc.entidade}</td>
-                      <td
-                        className="px-3 py-2 text-neutral-600 truncate max-w-[200px]"
-                        title={lanc.descricao}
-                      >
-                        {lanc.descricao}
-                      </td>
-                      <td className="px-3 py-2 font-mono text-neutral-600 text-[11px]">
-                        {lanc.documentoRef || '—'}
-                      </td>
-                      <td
-                        className={`px-3 py-2 text-right font-mono font-bold ${
-                          lanc.tipoMovimento === 'credito' ? 'text-emerald-700' : 'text-rose-700'
-                        }`}
-                      >
-                        {lanc.tipoMovimento === 'debito' ? '- ' : ''}
-                        {formatCurrency(lanc.valor)}
-                      </td>
-                    </tr>
-                  ))
+                  contaSelecionadaModal?.lancamentos.map((lanc) => {
+                    const idParaReclassificar =
+                      lanc.registroIdOriginal || lanc.id.replace(/^(parc|cp|cr|tx)-/, '')
+                    const tipoRegistro =
+                      lanc.origem === 'conta_pagar'
+                        ? 'conta_pagar'
+                        : lanc.origem === 'extrato'
+                          ? 'extrato_transacao'
+                          : lanc.origem === 'receita_avulsa'
+                            ? 'conta_receber'
+                            : 'parcela'
+
+                    return (
+                      <tr key={lanc.id} className="hover:bg-neutral-50">
+                        <td className="px-3 py-2 font-mono text-neutral-600">
+                          {lanc.data ? formatDate(lanc.data) : '—'}
+                        </td>
+                        <td className="px-3 py-2">
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-neutral-100 text-neutral-700">
+                            {lanc.origemLabel}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 font-semibold text-neutral-900">
+                          {lanc.entidade}
+                        </td>
+                        <td
+                          className="px-3 py-2 text-neutral-600 truncate max-w-[200px]"
+                          title={lanc.descricao}
+                        >
+                          {lanc.descricao}
+                        </td>
+                        <td className="px-3 py-2 font-mono text-neutral-600 text-[11px]">
+                          {lanc.documentoRef || '—'}
+                        </td>
+                        <td
+                          className={`px-3 py-2 text-right font-mono font-bold ${
+                            lanc.tipoMovimento === 'credito' ? 'text-emerald-700' : 'text-rose-700'
+                          }`}
+                        >
+                          {lanc.tipoMovimento === 'debito' ? '- ' : ''}
+                          {formatCurrency(lanc.valor)}
+                        </td>
+                        <td className="px-3 py-2">
+                          <ContaContabilBadgeInline
+                            tipoRegistro={tipoRegistro}
+                            registroId={idParaReclassificar}
+                            codigoAtual={lanc.codigoConta}
+                            nomeAtual={lanc.nomeConta}
+                            classificacaoManual={lanc.classificacaoManual}
+                            dataRegistro={lanc.data}
+                            descricaoRegistro={lanc.descricao}
+                            compacto={false}
+                            onReclassificado={(novoCod, novoNome) => {
+                              lanc.codigoConta = novoCod
+                              lanc.nomeConta = novoNome
+                              lanc.classificacaoManual = true
+                              handleReclassificacaoSucesso()
+                            }}
+                          />
+                        </td>
+                      </tr>
+                    )
+                  })
                 )}
               </tbody>
             </table>
