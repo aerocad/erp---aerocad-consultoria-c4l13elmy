@@ -348,32 +348,79 @@ export function ExtratosComprovantesTab({
     }
   }
 
-  // Utilitário para inserir transações com pausas para evitar Rate Limiting (HTTP 429)
+  // Utilitário para inserir transações com pausas para evitar Rate Limiting (HTTP 429) e retentativas
   async function inserirTransacoesComThrottle(
     transacoesPayloads: Array<Record<string, unknown>>,
   ): Promise<number> {
     let inseridas = 0
-    const TAMANHO_LOTE = 10
-    const PAUSA_MS = 120
+    const TAMANHO_LOTE = 5
+    const PAUSA_MS = 180
 
     for (let i = 0; i < transacoesPayloads.length; i += TAMANHO_LOTE) {
       const chunk = transacoesPayloads.slice(i, i + TAMANHO_LOTE)
-      const promessas = chunk.map(async (item) => {
-        try {
-          await createOne('extratos_transacoes', item)
-          return 1
-        } catch {
-          return 0
+      for (const item of chunk) {
+        let sucesso = false
+        for (let tentativa = 1; tentativa <= 3; tentativa++) {
+          try {
+            await createOne('extratos_transacoes', item)
+            sucesso = true
+            break
+          } catch (err: unknown) {
+            const errStatus = (err as { status?: number })?.status
+            if (errStatus === 429 && tentativa < 3) {
+              await new Promise((resolve) => setTimeout(resolve, 350 * tentativa))
+            } else if (tentativa === 3) {
+              console.warn('Falha definitiva ao inserir transação do extrato:', item, err)
+            }
+          }
         }
-      })
-      const resultados = await Promise.all(promessas)
-      inseridas += resultados.reduce((a, b) => a + b, 0)
+        if (sucesso) inseridas++
+      }
 
       if (i + TAMANHO_LOTE < transacoesPayloads.length) {
         await new Promise((resolve) => setTimeout(resolve, PAUSA_MS))
       }
     }
     return inseridas
+  }
+
+  // Utilitário resiliente para update com retry automático em caso de 429 / Too Many Requests e filtro de payload nulo/indefinido
+  async function updateComRetry<T extends Record<string, unknown>>(
+    collection: string,
+    id: string,
+    data: Record<string, unknown>,
+    maxRetries = 3,
+  ): Promise<T> {
+    if (!id || typeof id !== 'string') {
+      throw new Error(`ID inválido para atualização na coleção ${collection}`)
+    }
+
+    // Sanitiza payload removendo propriedades undefined para evitar erros 400 no PocketBase
+    const sanitizedData: Record<string, unknown> = {}
+    for (const [key, val] of Object.entries(data)) {
+      if (val !== undefined) {
+        sanitizedData[key] = val
+      }
+    }
+
+    let ultimoErro: unknown = null
+    for (let tentativa = 1; tentativa <= maxRetries; tentativa++) {
+      try {
+        const res = await updateOne(collection, id, sanitizedData)
+        return res as unknown as T
+      } catch (err: unknown) {
+        ultimoErro = err
+        const status = (err as { status?: number })?.status
+        const msg = String((err as { message?: string })?.message || '').toLowerCase()
+        const isRateLimit = status === 429 || msg.includes('too many') || msg.includes('429')
+        if (isRateLimit && tentativa < maxRetries) {
+          await new Promise((resolve) => setTimeout(resolve, 350 * tentativa))
+          continue
+        }
+        throw err
+      }
+    }
+    throw ultimoErro
   }
 
   // Confirma e grava retorno .RET previamente analisado (com deduplicação ativa)
@@ -878,12 +925,15 @@ export function ExtratosComprovantesTab({
     setIsConciliando(true)
 
     try {
-      const dataExtrato = transacaoParaConciliar.data.slice(0, 10)
+      const dataIso = transacaoParaConciliar.data
+        ? String(transacaoParaConciliar.data).slice(0, 10)
+        : new Date().toISOString().slice(0, 10)
+      const dataExtrato = dataIso.length === 10 ? dataIso : new Date().toISOString().slice(0, 10)
 
       if (sugestao.tipo === 'parcela') {
         const parcela = parcelas.find((p) => p.id === sugestao.id)
         if (parcela) {
-          await updateOne('parcelas', parcela.id, {
+          await updateComRetry('parcelas', parcela.id, {
             status: 'paga',
             data_pagamento: `${dataExtrato} 12:00:00.000Z`,
             valor_recebido: transacaoParaConciliar.valor,
@@ -894,7 +944,7 @@ export function ExtratosComprovantesTab({
       } else if (sugestao.tipo === 'conta_pagar') {
         const cp = contasPagar.find((c) => c.id === sugestao.id)
         if (cp) {
-          await updateOne('contas_pagar', cp.id, {
+          await updateComRetry('contas_pagar', cp.id, {
             status: 'pago',
             data_pagamento: `${dataExtrato} 12:00:00.000Z`,
           })
@@ -903,7 +953,7 @@ export function ExtratosComprovantesTab({
       } else if (sugestao.tipo === 'conta_receber') {
         const cr = contasReceber.find((c) => c.id === sugestao.id)
         if (cr) {
-          await updateOne('contas_receber', cr.id, {
+          await updateComRetry('contas_receber', cr.id, {
             status: 'recebido',
             data_recebimento: `${dataExtrato} 12:00:00.000Z`,
             valor_recebido: transacaoParaConciliar.valor,
@@ -913,7 +963,7 @@ export function ExtratosComprovantesTab({
       }
 
       // Atualiza a transação do extrato
-      await updateOne('extratos_transacoes', transacaoParaConciliar.id, {
+      await updateComRetry('extratos_transacoes', transacaoParaConciliar.id, {
         status_conciliacao: 'conciliado',
         vinculo_tipo: sugestao.tipo,
         vinculo_id: sugestao.id,
@@ -937,19 +987,20 @@ export function ExtratosComprovantesTab({
   // Ignorar / Desconciliar
   async function handleIgnorarTransacao(tx: ExtratoTransacaoRecord) {
     try {
-      await updateOne('extratos_transacoes', tx.id, {
+      await updateComRetry('extratos_transacoes', tx.id, {
         status_conciliacao: 'ignorado',
       })
       toast.info('Transação marcada como ignorada.')
       await onReloadTransacoes()
-    } catch {
-      toast.error('Erro ao ignorar transação')
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      toast.error(`Erro ao ignorar transação: ${msg}`)
     }
   }
 
   async function handleDesconciliar(tx: ExtratoTransacaoRecord) {
     try {
-      await updateOne('extratos_transacoes', tx.id, {
+      await updateComRetry('extratos_transacoes', tx.id, {
         status_conciliacao: 'pendente',
         vinculo_tipo: null,
         vinculo_id: null,
@@ -957,8 +1008,9 @@ export function ExtratosComprovantesTab({
       })
       toast.success('Transação reaberta como pendente de conciliação.')
       await onReloadTransacoes()
-    } catch {
-      toast.error('Erro ao reabrir conciliação')
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      toast.error(`Erro ao reabrir conciliação: ${msg}`)
     }
   }
 
@@ -1203,7 +1255,7 @@ export function ExtratosComprovantesTab({
     )
   }
 
-  // Conciliação em lote das transações selecionadas
+  // Conciliação em lote das transações selecionadas com throttle, retentativa para HTTP 429 e tolerância a falhas parciais
   async function handleConfirmarEmLote() {
     if (selectedTxIds.length === 0) return
     setIsConciliandoLote(true)
@@ -1212,84 +1264,140 @@ export function ExtratosComprovantesTab({
       Boolean(t?.id && selectedTxIds.includes(t.id) && t?.status_conciliacao === 'pendente'),
     )
 
+    if (itensParaConciliar.length === 0) {
+      toast.info('Nenhuma transação pendente selecionada para conciliação.')
+      setIsConciliandoLote(false)
+      return
+    }
+
     let totalConciliadas = 0
     let totalContasPagarBaixadas = 0
     let totalParcelasQuitadas = 0
     let totalReceitasQuitadas = 0
+    let totalFalhas = 0
+    const idsConciliadosComSucesso: string[] = []
 
     try {
-      for (const tx of itensParaConciliar) {
-        const sugestoes = encontrarSugestoesConciliacao(
-          tx,
-          {
-            parcelas,
-            contasPagar,
-            contasReceber,
-          },
-          10,
-        )
+      const PAUSA_ENTRE_ITENS_MS = 60
 
-        const melhorSugestao = sugestoes[0]
-        const dataExtrato = tx.data.slice(0, 10)
+      for (let idx = 0; idx < itensParaConciliar.length; idx++) {
+        const tx = itensParaConciliar[idx]
+        if (!tx || !tx.id) continue
 
-        if (melhorSugestao) {
-          if (melhorSugestao.tipo === 'parcela') {
-            const p = parcelas.find((item) => item.id === melhorSugestao.id)
-            if (p) {
-              await updateOne('parcelas', p.id, {
-                status: 'paga',
-                data_pagamento: `${dataExtrato} 12:00:00.000Z`,
-                valor_recebido: tx.valor,
-                status_pagamento: 'Conciliado Extrato Lote',
-              })
-              totalParcelasQuitadas++
+        try {
+          const sugestoes = encontrarSugestoesConciliacao(
+            tx,
+            {
+              parcelas: listaParcelas,
+              contasPagar: listaContasPagar,
+              contasReceber: listaContasReceber,
+            },
+            10,
+          )
+
+          const melhorSugestao = sugestoes[0]
+          const dataIso = tx.data
+            ? String(tx.data).slice(0, 10)
+            : new Date().toISOString().slice(0, 10)
+          const dataExtrato =
+            dataIso.length === 10 ? dataIso : new Date().toISOString().slice(0, 10)
+
+          if (melhorSugestao) {
+            if (melhorSugestao.tipo === 'parcela') {
+              const p = listaParcelas.find((item) => item.id === melhorSugestao.id)
+              if (p) {
+                try {
+                  await updateComRetry('parcelas', p.id, {
+                    status: 'paga',
+                    data_pagamento: `${dataExtrato} 12:00:00.000Z`,
+                    valor_recebido: tx.valor,
+                    status_pagamento: 'Conciliado Extrato Lote',
+                  })
+                  totalParcelasQuitadas++
+                } catch (errP) {
+                  console.warn(`Erro ao baixar parcela ${p.id} no lote:`, errP)
+                }
+              }
+            } else if (melhorSugestao.tipo === 'conta_pagar') {
+              const cp = listaContasPagar.find((item) => item.id === melhorSugestao.id)
+              if (cp) {
+                try {
+                  await updateComRetry('contas_pagar', cp.id, {
+                    status: 'pago',
+                    data_pagamento: `${dataExtrato} 12:00:00.000Z`,
+                  })
+                  totalContasPagarBaixadas++
+                } catch (errCp) {
+                  console.warn(`Erro ao baixar conta a pagar ${cp.id} no lote:`, errCp)
+                }
+              }
+            } else if (melhorSugestao.tipo === 'conta_receber') {
+              const cr = listaContasReceber.find((item) => item.id === melhorSugestao.id)
+              if (cr) {
+                try {
+                  await updateComRetry('contas_receber', cr.id, {
+                    status: 'recebido',
+                    data_recebimento: `${dataExtrato} 12:00:00.000Z`,
+                    valor_recebido: tx.valor,
+                  })
+                  totalReceitasQuitadas++
+                } catch (errCr) {
+                  console.warn(`Erro ao baixar conta a receber ${cr.id} no lote:`, errCr)
+                }
+              }
             }
-          } else if (melhorSugestao.tipo === 'conta_pagar') {
-            const cp = contasPagar.find((item) => item.id === melhorSugestao.id)
-            if (cp) {
-              await updateOne('contas_pagar', cp.id, {
-                status: 'pago',
-                data_pagamento: `${dataExtrato} 12:00:00.000Z`,
-              })
-              totalContasPagarBaixadas++
-            }
-          } else if (melhorSugestao.tipo === 'conta_receber') {
-            const cr = contasReceber.find((item) => item.id === melhorSugestao.id)
-            if (cr) {
-              await updateOne('contas_receber', cr.id, {
-                status: 'recebido',
-                data_recebimento: `${dataExtrato} 12:00:00.000Z`,
-                valor_recebido: tx.valor,
-              })
-              totalReceitasQuitadas++
-            }
+
+            await updateComRetry('extratos_transacoes', tx.id, {
+              status_conciliacao: 'conciliado',
+              vinculo_tipo: melhorSugestao.tipo,
+              vinculo_id: melhorSugestao.id,
+              data_conciliacao: new Date().toISOString(),
+              observacoes: `Conciliado em lote com ${melhorSugestao.titulo} (${melhorSugestao.tipo})`,
+            })
+          } else {
+            // Sem sugestão direta: marca como conciliada diretamente no extrato
+            await updateComRetry('extratos_transacoes', tx.id, {
+              status_conciliacao: 'conciliado',
+              data_conciliacao: new Date().toISOString(),
+              observacoes: 'Conciliado em lote pelo operador',
+            })
           }
 
-          await updateOne('extratos_transacoes', tx.id, {
-            status_conciliacao: 'conciliado',
-            vinculo_tipo: melhorSugestao.tipo,
-            vinculo_id: melhorSugestao.id,
-            data_conciliacao: new Date().toISOString(),
-            observacoes: `Conciliado em lote com ${melhorSugestao.titulo} (${melhorSugestao.tipo})`,
-          })
-        } else {
-          // Sem sugestão direta: marca como conciliada diretamente no extrato
-          await updateOne('extratos_transacoes', tx.id, {
-            status_conciliacao: 'conciliado',
-            data_conciliacao: new Date().toISOString(),
-            observacoes: 'Conciliado em lote pelo operador',
-          })
+          totalConciliadas++
+          idsConciliadosComSucesso.push(tx.id)
+        } catch (itemErr: unknown) {
+          totalFalhas++
+          console.error(`Erro ao conciliar transação ${tx.id} no lote:`, itemErr)
         }
 
-        totalConciliadas++
+        // Pausa entre transações do lote para evitar throttling do PocketBase (429)
+        if (idx < itensParaConciliar.length - 1) {
+          await new Promise((resolve) => setTimeout(resolve, PAUSA_ENTRE_ITENS_MS))
+        }
       }
 
-      toast.success(
-        `Lote concluído: ${totalConciliadas} movimentações conciliadas! ` +
-          `(${totalContasPagarBaixadas} despesas pagas, ${totalParcelasQuitadas} parcelas e ${totalReceitasQuitadas} recebíveis quitados).`,
-      )
+      // Feedback amigável para o operador
+      if (totalConciliadas > 0 && totalFalhas === 0) {
+        toast.success(
+          `Lote concluído com sucesso: ${totalConciliadas} movimentações conciliadas! ` +
+            `(${totalContasPagarBaixadas} despesas pagas, ${totalParcelasQuitadas} parcelas e ${totalReceitasQuitadas} recebíveis quitados).`,
+        )
+      } else if (totalConciliadas > 0 && totalFalhas > 0) {
+        toast.warning(
+          `Conciliação parcial: ${totalConciliadas} de ${itensParaConciliar.length} movimentações foram conciliadas. ` +
+            `${totalFalhas} item(ns) falharam devido à instabilidade temporária na rede e continuam pendentes para nova tentativa.`,
+        )
+      } else {
+        toast.error(
+          'Não foi possível concluir a conciliação em lote. Por favor, verifique a conexão e tente novamente.',
+        )
+      }
 
-      setSelectedTxIds([])
+      // Remove da seleção os itens processados com sucesso
+      const idsSucessoSet = new Set(idsConciliadosComSucesso)
+      setSelectedTxIds((prev) => prev.filter((id) => !idsSucessoSet.has(id)))
+
+      // Recarrega coleções atualizadas
       await Promise.all([
         onReloadTransacoes(),
         onReloadParcelas(),

@@ -58,7 +58,7 @@ export function verificarDuplicidadeLancamento(
     descricao?: string
   }>,
 ): AlertaDuplicidade {
-  const dataAlvo = dados.data.slice(0, 10)
+  const dataAlvo = dados.data ? String(dados.data).slice(0, 10) : ''
   const docAlvo = dados.numeroDocumento?.trim().toLowerCase()
 
   for (const c of contasExistentes) {
@@ -80,7 +80,7 @@ export function verificarDuplicidadeLancamento(
 
     // 2. Mesmo valor exato + mesma data (tolerância 0 dias) + mesmo favorecido
     const diffValor = Math.abs(c.valor - dados.valor)
-    const mesmaData = c.data.slice(0, 10) === dataAlvo
+    const mesmaData = c.data && dataAlvo ? String(c.data).slice(0, 10) === dataAlvo : false
     if (diffValor < 0.01 && mesmaData) {
       if (
         dados.fornecedorOuCliente &&
@@ -105,12 +105,19 @@ export function verificarDuplicidadeLancamento(
   return { detectada: false, motivo: '' }
 }
 
-function calcularDiferencaDias(data1Str: string, data2Str: string): number {
+function calcularDiferencaDias(data1Str?: string | null, data2Str?: string | null): number {
   if (!data1Str || !data2Str) return 999
-  const d1 = new Date(data1Str.slice(0, 10))
-  const d2 = new Date(data2Str.slice(0, 10))
-  const diffMs = Math.abs(d1.getTime() - d2.getTime())
-  return Math.round(diffMs / (1000 * 60 * 60 * 24))
+  try {
+    const s1 = String(data1Str).slice(0, 10)
+    const s2 = String(data2Str).slice(0, 10)
+    const d1 = new Date(s1)
+    const d2 = new Date(s2)
+    if (isNaN(d1.getTime()) || isNaN(d2.getTime())) return 999
+    const diffMs = Math.abs(d1.getTime() - d2.getTime())
+    return Math.round(diffMs / (1000 * 60 * 60 * 24))
+  } catch {
+    return 999
+  }
 }
 
 export function encontrarSugestoesConciliacao(
@@ -162,13 +169,16 @@ export function encontrarSugestoesConciliacao(
                 ? 'media'
                 : 'baixa'
 
+          const dataVencStr = cp.data_vencimento
+            ? String(cp.data_vencimento).slice(0, 10)
+            : 'Sem data'
           sugestoes.push({
             tipo: 'conta_pagar',
             id: cp.id,
-            titulo: `${cp.fornecedor} — ${cp.descricao}`,
-            detalhe: `Vencimento: ${cp.data_vencimento.slice(0, 10)}${cp.status === 'pago' ? ' (Já quitado)' : ''}${matchDoc ? ' · Número de documento idêntico' : matchBeneficiario ? ' · Beneficiário coincide' : ''}`,
-            valor: cp.valor,
-            dataReferencia: dataRef,
+            titulo: `${cp.fornecedor || 'Fornecedor não identificado'} — ${cp.descricao || 'Despesa'}`,
+            detalhe: `Vencimento: ${dataVencStr}${cp.status === 'pago' ? ' (Já quitado)' : ''}${matchDoc ? ' · Número de documento idêntico' : matchBeneficiario ? ' · Beneficiário coincide' : ''}`,
+            valor: cp.valor || 0,
+            dataReferencia: dataRef || '',
             diferencaDias: diffDias,
             confianca,
           })
@@ -229,13 +239,14 @@ export function encontrarSugestoesConciliacao(
           else if (matchNf) motivoMatch = ' · Número NFS-e coincide'
           else if (matchCliente) motivoMatch = ' · Cliente coincide'
 
+          const dataRefStr = dataRef ? String(dataRef).slice(0, 10) : 'Sem data'
           sugestoes.push({
             tipo: 'parcela',
             id: p.id,
-            titulo: `${rotuloNf || p.descricao} ${proj ? `· ${proj}` : ''}`,
-            detalhe: `${cli ? `Cliente: ${cli} · ` : ''}Venc/Fat: ${dataRef.slice(0, 10)}${p.status === 'paga' ? ' (Quitada)' : ''}${motivoMatch}`,
+            titulo: `${rotuloNf || p.descricao || 'Parcela'} ${proj ? `· ${proj}` : ''}`,
+            detalhe: `${cli ? `Cliente: ${cli} · ` : ''}Venc/Fat: ${dataRefStr}${p.status === 'paga' ? ' (Quitada)' : ''}${motivoMatch}`,
             valor: valorComp,
-            dataReferencia: dataRef,
+            dataReferencia: dataRef || '',
             diferencaDias: diffDias,
             confianca,
           })
@@ -263,13 +274,16 @@ export function encontrarSugestoesConciliacao(
           const confianca: 'alta' | 'media' | 'baixa' =
             matchDoc || (diffDias <= 1 && matchCli) ? 'alta' : diffDias <= 3 ? 'media' : 'baixa'
 
+          const dataVencCrStr = cr.data_vencimento
+            ? String(cr.data_vencimento).slice(0, 10)
+            : 'Sem data'
           sugestoes.push({
             tipo: 'conta_receber',
             id: cr.id,
-            titulo: `${cr.cliente_nome} — ${cr.descricao}`,
-            detalhe: `Vencimento: ${cr.data_vencimento.slice(0, 10)}${cr.status === 'recebido' ? ' (Já recebido)' : ''}${matchDoc ? ' · Doc coincide' : matchCli ? ' · Cliente coincide' : ''}`,
-            valor: cr.valor,
-            dataReferencia: dataRef,
+            titulo: `${cr.cliente_nome || 'Cliente'} — ${cr.descricao || 'Receita avulsa'}`,
+            detalhe: `Vencimento: ${dataVencCrStr}${cr.status === 'recebido' ? ' (Já recebido)' : ''}${matchDoc ? ' · Doc coincide' : matchCli ? ' · Cliente coincide' : ''}`,
+            valor: cr.valor || 0,
+            dataReferencia: dataRef || '',
             diferencaDias: diffDias,
             confianca,
           })
