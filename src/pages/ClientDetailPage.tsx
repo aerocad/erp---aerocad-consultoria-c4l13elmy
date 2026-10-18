@@ -27,6 +27,8 @@ import { ClienteDialog } from '@/components/forms/ClienteDialog'
 import { OportunidadeDialog } from '@/components/forms/OportunidadeDialog'
 import { ProjetoDialog } from '@/components/forms/ProjetoDialog'
 import { ExcluirClienteModal } from '@/components/clientes/ExcluirClienteModal'
+import { GeradorMinutaEmailModal } from '@/components/common/GeradorMinutaEmailModal'
+import type { MinutaEmailContexto, ModeloMinutaTipo } from '@/lib/minutasEmail'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
@@ -71,6 +73,14 @@ export default function ClientDetailPage() {
   const [projectOpen, setProjectOpen] = useState(false)
   const [anexoOpen, setAnexoOpen] = useState(false)
   const [excluirModalOpen, setExcluirModalOpen] = useState(false)
+  const [minutaEmailOpen, setMinutaEmailOpen] = useState(false)
+  const [minutaContexto, setMinutaContexto] = useState<MinutaEmailContexto>({
+    tipo: 'proposta',
+  })
+  const [minutaModelosPermitidos, setMinutaModelosPermitidos] = useState<
+    ModeloMinutaTipo[] | undefined
+  >(undefined)
+  const [minutaLockModel, setMinutaLockModel] = useState(false)
   const canWrite = user?.role === 'admin' || user?.role === 'comercial'
   const isAdmin = user?.role === 'admin'
   const load = async () => {
@@ -189,6 +199,27 @@ export default function ClientDetailPage() {
             </Button>
             <Button
               variant="outline"
+              onClick={() => {
+                setMinutaContexto({
+                  tipo: 'proposta',
+                  cliente: client,
+                  contatoNome: client.razao_social,
+                  contatoEmail: client.email,
+                  proposta: proposals[0] || null,
+                  projeto: projects[0] || null,
+                })
+                setMinutaLockModel(false)
+                setMinutaModelosPermitidos(undefined)
+                setMinutaEmailOpen(true)
+              }}
+              className="border-orange-300 text-[#D65100] hover:bg-orange-50"
+              title="Gerar minuta de e-mail pronta com dados do cliente (editável, copiar e mailto)"
+            >
+              <Mail className="mr-2 h-4 w-4 text-[#FF6A13]" />
+              Gerar e-mail
+            </Button>
+            <Button
+              variant="outline"
               onClick={() => setAnexoOpen(true)}
               className="border-[#FF6A13] text-[#FF6A13] hover:bg-orange-50"
             >
@@ -289,14 +320,58 @@ export default function ClientDetailPage() {
           />
         </TabsContent>
         <TabsContent value="propostas">
-          <List
-            items={proposals.map((i) => ({
-              id: i.id,
-              title: i.numero || 'Proposta em rascunho',
-              meta: `${i.revisao} · ${formatCurrency(i.valor_total)}`,
-              badge: i.status,
-            }))}
-          />
+          {proposals.length > 0 ? (
+            <div className="crm-card divide-y overflow-hidden">
+              {proposals.map((prop) => (
+                <div
+                  key={prop.id}
+                  className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-[#FFF6EC]/50 transition"
+                >
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="mono-value font-bold text-[#D65100]">
+                        {prop.numero || 'Proposta em rascunho'}
+                      </span>
+                      <CrmBadge tone="gray">{prop.status || 'rascunho'}</CrmBadge>
+                    </div>
+                    <p className="mono-value mt-1 text-xs text-[#737373]">
+                      {prop.revisao || 'REV000'} · {formatCurrency(prop.valor_total)}
+                      {prop.data_envio ? ` · Envio: ${formatDate(prop.data_envio)}` : ''}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setMinutaContexto({
+                          tipo: 'proposta',
+                          cliente: client,
+                          contatoNome: client.razao_social,
+                          contatoEmail: client.email,
+                          proposta: prop,
+                          projeto: projects[0] || null,
+                          linkDriveArquivo: prop.link_drive,
+                        })
+                        setMinutaLockModel(true)
+                        setMinutaModelosPermitidos(['proposta'])
+                        setMinutaEmailOpen(true)
+                      }}
+                      className="border-orange-200 text-[#D65100] hover:bg-orange-50 text-xs h-8"
+                      title="Gerar e-mail de envio desta proposta comercial"
+                    >
+                      <Mail className="mr-1.5 h-3.5 w-3.5 text-[#FF6A13]" />
+                      Gerar e-mail de envio
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="crm-card p-8 text-center text-sm text-[#8A8A8A]">
+              Nenhuma proposta comercial cadastrada para este cliente.
+            </div>
+          )}
         </TabsContent>
         <TabsContent value="contratos">
           <List
@@ -518,6 +593,15 @@ export default function ClientDetailPage() {
         open={excluirModalOpen}
         onOpenChange={setExcluirModalOpen}
         cliente={client}
+      />
+
+      {/* Modal do Gerador de Minutas de E-mail AEROCAD */}
+      <GeradorMinutaEmailModal
+        open={minutaEmailOpen}
+        onOpenChange={setMinutaEmailOpen}
+        initialContexto={minutaContexto}
+        lockModel={minutaLockModel}
+        modelosPermitidos={minutaModelosPermitidos}
       />
     </div>
   )

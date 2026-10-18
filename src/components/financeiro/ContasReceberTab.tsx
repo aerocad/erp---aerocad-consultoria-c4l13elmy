@@ -19,6 +19,9 @@ import { toast } from 'sonner'
 import { CrmBadge } from '@/components/common/CrmBadge'
 import { EmptyState } from '@/components/common/States'
 import { EditarVencimentoParcelaModal } from '@/components/financeiro/EditarVencimentoParcelaModal'
+import { GeradorMinutaEmailModal } from '@/components/common/GeradorMinutaEmailModal'
+import type { MinutaEmailContexto, ModeloMinutaTipo } from '@/lib/minutasEmail'
+import { Mail } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -119,6 +122,14 @@ export function ContasReceberTab({
   const [parcelaParaEditarVencimento, setParcelaParaEditarVencimento] =
     useState<ParcelaRecord | null>(null)
   const [editarVencimentoOpen, setEditarVencimentoOpen] = useState(false)
+  const [minutaEmailOpen, setMinutaEmailOpen] = useState(false)
+  const [minutaContexto, setMinutaContexto] = useState<MinutaEmailContexto>({
+    tipo: 'cobranca_medicao',
+  })
+  const [minutaLockModel, setMinutaLockModel] = useState(false)
+  const [minutaModelosPermitidos, setMinutaModelosPermitidos] = useState<
+    ModeloMinutaTipo[] | undefined
+  >(undefined)
 
   // Form avulso
   const [formAvulso, setFormAvulso] = useState<{
@@ -734,19 +745,51 @@ export function ContasReceberTab({
                               )}
 
                               {item.origemTipo === 'parcela' && (
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => {
-                                    setParcelaParaEditarVencimento(item.rawItem as ParcelaRecord)
-                                    setEditarVencimentoOpen(true)
-                                  }}
-                                  className="h-7 w-7 p-0 text-neutral-400 hover:text-[#D65100] hover:bg-orange-50"
-                                  title="Editar data de vencimento da parcela"
-                                  aria-label={`Editar vencimento de ${item.descricao}`}
-                                >
-                                  <Calendar className="h-3.5 w-3.5" />
-                                </Button>
+                                <>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => {
+                                      const pRecord = item.rawItem as ParcelaRecord
+                                      const proj = projetos.find((p) => p.id === pRecord.projeto)
+                                      const cl = clientes.find(
+                                        (c) => c.id === (item.clienteId || pRecord.cliente),
+                                      )
+                                      setMinutaContexto({
+                                        tipo: item.nfNumero ? 'cobranca_nfse' : 'cobranca_medicao',
+                                        projeto: proj || pRecord.expand?.projeto || null,
+                                        cliente: cl || pRecord.expand?.cliente || null,
+                                        contatoNome: item.clienteNome,
+                                        contatoEmail: cl?.email,
+                                        parcela: pRecord,
+                                      })
+                                      setMinutaLockModel(false)
+                                      setMinutaModelosPermitidos([
+                                        'cobranca_medicao',
+                                        'cobranca_nfse',
+                                      ])
+                                      setMinutaEmailOpen(true)
+                                    }}
+                                    className="h-7 px-2 text-xs text-[#D65100] hover:bg-orange-50 font-medium"
+                                    title="Gerar e-mail de cobrança de medição ou NFS-e"
+                                  >
+                                    <Mail className="mr-1 h-3.5 w-3.5 text-[#FF6A13]" />
+                                    Cobrar
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => {
+                                      setParcelaParaEditarVencimento(item.rawItem as ParcelaRecord)
+                                      setEditarVencimentoOpen(true)
+                                    }}
+                                    className="h-7 w-7 p-0 text-neutral-400 hover:text-[#D65100] hover:bg-orange-50"
+                                    title="Editar data de vencimento da parcela"
+                                    aria-label={`Editar vencimento de ${item.descricao}`}
+                                  >
+                                    <Calendar className="h-3.5 w-3.5" />
+                                  </Button>
+                                </>
                               )}
 
                               {item.origemTipo === 'avulsa' && (
@@ -1099,6 +1142,15 @@ export function ContasReceberTab({
         onSuccess={async () => {
           await onReloadParcelas()
         }}
+      />
+
+      {/* Modal do Gerador de Minutas de E-mail AEROCAD */}
+      <GeradorMinutaEmailModal
+        open={minutaEmailOpen}
+        onOpenChange={setMinutaEmailOpen}
+        initialContexto={minutaContexto}
+        lockModel={minutaLockModel}
+        modelosPermitidos={minutaModelosPermitidos}
       />
 
       {/* Modal Excluir Avulso */}

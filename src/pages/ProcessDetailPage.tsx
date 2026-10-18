@@ -41,11 +41,13 @@ import { Textarea } from '@/components/ui/textarea'
 import { useAuth } from '@/contexts/AuthContext'
 import { useFinanceiroVisibilidade } from '@/contexts/FinanceiroVisibilidadeContext'
 import { processStatusLabels } from '@/lib/crm'
-import { Award, ShieldCheck, Users } from 'lucide-react'
+import { Award, Mail, ShieldCheck, Users } from 'lucide-react'
 import {
   EquipeTecnicaSelector,
   type EquipeTecnicaValue,
 } from '@/components/projetos/EquipeTecnicaSection'
+import { GeradorMinutaEmailModal } from '@/components/common/GeradorMinutaEmailModal'
+import type { MinutaEmailContexto } from '@/lib/minutasEmail'
 import { formatDate, toInputDate } from '@/lib/format'
 import { createOne, getOne, listAll, updateOne } from '@/services/api'
 import type {
@@ -77,6 +79,7 @@ export default function ProcessDetailPage() {
   const [salvandoEquipe, setSalvandoEquipe] = useState(false)
   const [loading, setLoading] = useState(true)
   const [failed, setFailed] = useState(false)
+  const [minutaEmailOpen, setMinutaEmailOpen] = useState(false)
   const [newOpen, setNewOpen] = useState(false)
   const [anexoOpen, setAnexoOpen] = useState(false)
   const [form, setForm] = useState({ descricao: '', prazo: '', responsavel: '', resposta: '' })
@@ -251,12 +254,34 @@ export default function ProcessDetailPage() {
   if (loading) return <PageLoading />
   if (failed || !process) return <ErrorState onRetry={() => void load()} />
   const pending = requirements.filter((i) => i.status === 'pendente')
+
+  const minutaContexto: MinutaEmailContexto = {
+    tipo: 'followup_processo',
+    processo: process,
+    projeto: process?.expand?.projeto,
+    cliente: process?.expand?.projeto?.expand?.cliente,
+    contatoNome: process?.expand?.projeto?.expand?.cliente?.razao_social,
+    contatoEmail: process?.expand?.projeto?.expand?.cliente?.email,
+    exigencias: requirements,
+  }
+
   return (
     <div>
-      <Button variant="ghost" onClick={() => navigate('/processos')} className="mb-4 -ml-3">
-        <ArrowLeft className="mr-2 h-4 w-4" />
-        Voltar aos processos
-      </Button>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <Button variant="ghost" onClick={() => navigate('/processos')} className="-ml-3">
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Voltar aos processos
+        </Button>
+        <Button
+          variant="outline"
+          onClick={() => setMinutaEmailOpen(true)}
+          className="border-orange-300 text-[#D65100] hover:bg-orange-50 font-medium text-xs h-9"
+          title="Gerar e-mail formal de follow-up perante o órgão regulador com dados do processo"
+        >
+          <Mail className="mr-1.5 h-4 w-4 text-[#FF6A13]" />
+          Gerar follow-up ao órgão
+        </Button>
+      </div>
       <header className="crm-card p-5 sm:p-6">
         <div className="flex flex-col justify-between gap-4 md:flex-row">
           <div>
@@ -688,6 +713,15 @@ export default function ProcessDetailPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Modal do Gerador de Minutas de E-mail AEROCAD */}
+      <GeradorMinutaEmailModal
+        open={minutaEmailOpen}
+        onOpenChange={setMinutaEmailOpen}
+        initialContexto={minutaContexto}
+        lockModel={true}
+        modelosPermitidos={['followup_processo']}
+      />
     </div>
   )
 }

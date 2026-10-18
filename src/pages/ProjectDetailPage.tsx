@@ -20,6 +20,7 @@ import {
   Layers,
   TrendingUp,
   ArrowUpRight,
+  Mail,
 } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -40,6 +41,8 @@ import { GerenciarParcelamentoModal } from '@/components/projetos/GerenciarParce
 import { VincularNfseProjetoModal } from '@/components/financeiro/VincularNfseProjetoModal'
 import { ConfirmarExcluirNotaModal } from '@/components/financeiro/ConfirmarExcluirNotaModal'
 import { EditarVencimentoParcelaModal } from '@/components/financeiro/EditarVencimentoParcelaModal'
+import { GeradorMinutaEmailModal } from '@/components/common/GeradorMinutaEmailModal'
+import type { MinutaEmailContexto, ModeloMinutaTipo } from '@/lib/minutasEmail'
 import { NotaExclusaoAlvo } from '@/services/exclusaoService'
 import { Button } from '@/components/ui/button'
 import { Archive, ArchiveRestore } from 'lucide-react'
@@ -124,6 +127,14 @@ export default function ProjectDetailPage() {
   const [parcelaParaEditarVencimento, setParcelaParaEditarVencimento] =
     useState<ParcelaRecord | null>(null)
   const [editarVencimentoOpen, setEditarVencimentoOpen] = useState(false)
+  const [minutaEmailOpen, setMinutaEmailOpen] = useState(false)
+  const [minutaContexto, setMinutaContexto] = useState<MinutaEmailContexto>({
+    tipo: 'cobranca_medicao',
+  })
+  const [minutaLockModel, setMinutaLockModel] = useState(false)
+  const [minutaModelosPermitidos, setMinutaModelosPermitidos] = useState<
+    ModeloMinutaTipo[] | undefined
+  >(undefined)
   const [parcelamentoModalOpen, setParcelamentoModalOpen] = useState(false)
   const [note, setNote] = useState('')
   const [excluirModalOpen, setExcluirModalOpen] = useState(false)
@@ -142,6 +153,7 @@ export default function ProjectDetailPage() {
   const canEditProject = ['admin', 'tecnico', 'financeiro'].includes(user?.role || '')
   const canArchive = ['admin', 'tecnico'].includes(user?.role || '')
   const canManageFinanceiro = ['admin', 'financeiro'].includes(user?.role || '')
+  const canGerarMinutaCobranca = ['admin', 'financeiro', 'comercial'].includes(user?.role || '')
   const userCanViewFinancials = canViewFinancials(user?.role)
   const userCanViewNfseRole = canViewNfse(user?.role)
   const canAnexarNfse = userCanViewNfseRole && ['admin', 'financeiro'].includes(user?.role || '')
@@ -1262,6 +1274,35 @@ export default function ProjectDetailPage() {
                         Anexar NFS-e
                       </Button>
                     )}
+                    {canGerarMinutaCobranca && installments.length > 0 && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const parcelaAlvo = parcelasEmAberto[0] || installments[0]
+                          setMinutaContexto({
+                            tipo: 'cobranca_medicao',
+                            projeto: project,
+                            cliente: project.expand?.cliente,
+                            contatoNome: project.expand?.cliente?.razao_social,
+                            contatoEmail: project.expand?.cliente?.email,
+                            parcela: parcelaAlvo,
+                          })
+                          setMinutaLockModel(false)
+                          setMinutaModelosPermitidos([
+                            'cobranca_medicao',
+                            'cobranca_nfse',
+                            'proposta',
+                          ])
+                          setMinutaEmailOpen(true)
+                        }}
+                        className="h-6 text-[11px] border-orange-300 text-[#D65100] hover:bg-orange-50 px-2 font-semibold"
+                        title="Gerar e-mail de cobrança de medição ou NFS-e com dados do projeto"
+                      >
+                        <Mail className="mr-1 h-3 w-3 text-[#FF6A13]" />
+                        Cobrar medição
+                      </Button>
+                    )}
                   </div>
                 </div>
 
@@ -1323,6 +1364,53 @@ export default function ProjectDetailPage() {
                               <p className="text-[10px] text-emerald-600 font-semibold">Quitada</p>
                             )}
                           </div>
+                          {canGerarMinutaCobranca && (
+                            <div className="flex items-center gap-0.5">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  setMinutaContexto({
+                                    tipo: 'cobranca_medicao',
+                                    projeto: project,
+                                    cliente: project.expand?.cliente,
+                                    contatoNome: project.expand?.cliente?.razao_social,
+                                    contatoEmail: project.expand?.cliente?.email,
+                                    parcela: inst,
+                                  })
+                                  setMinutaLockModel(true)
+                                  setMinutaModelosPermitidos(['cobranca_medicao'])
+                                  setMinutaEmailOpen(true)
+                                }}
+                                className="h-7 px-1.5 text-neutral-500 hover:text-[#D65100] hover:bg-orange-50 text-[10px] font-medium"
+                                title="Gerar e-mail: Cobrança de Medição"
+                              >
+                                <Mail className="h-3 w-3 mr-1 text-[#FF6A13]" />
+                                Medição
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  setMinutaContexto({
+                                    tipo: 'cobranca_nfse',
+                                    projeto: project,
+                                    cliente: project.expand?.cliente,
+                                    contatoNome: project.expand?.cliente?.razao_social,
+                                    contatoEmail: project.expand?.cliente?.email,
+                                    parcela: inst,
+                                  })
+                                  setMinutaLockModel(true)
+                                  setMinutaModelosPermitidos(['cobranca_nfse'])
+                                  setMinutaEmailOpen(true)
+                                }}
+                                className="h-7 px-1.5 text-neutral-500 hover:text-[#D65100] hover:bg-orange-50 text-[10px] font-medium"
+                                title="Gerar e-mail: Solicitação de NFS-e"
+                              >
+                                NFS-e
+                              </Button>
+                            </div>
+                          )}
                           {canEditVencimento && (
                             <Button
                               variant="ghost"
@@ -1950,6 +2038,15 @@ export default function ProjectDetailPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Modal do Gerador de Minutas de E-mail AEROCAD */}
+      <GeradorMinutaEmailModal
+        open={minutaEmailOpen}
+        onOpenChange={setMinutaEmailOpen}
+        initialContexto={minutaContexto}
+        lockModel={minutaLockModel}
+        modelosPermitidos={minutaModelosPermitidos}
+      />
     </div>
   )
 }
