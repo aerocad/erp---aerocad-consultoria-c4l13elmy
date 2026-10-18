@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-18T02:28:19.325Z",
+  "generatedAt": "2026-10-18T02:43:32.527Z",
   "collections": [
     {
       "name": "users",
@@ -4424,6 +4424,111 @@
         }
       ],
       "indexes": ["CREATE UNIQUE INDEX idx_empresa_chave ON empresa (chave)"]
+    },
+    {
+      "name": "valuations",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && (@request.auth.role = 'admin' || @request.auth.role = 'financeiro')",
+        "view": "@request.auth.id != '' && (@request.auth.role = 'admin' || @request.auth.role = 'financeiro')",
+        "create": "@request.auth.id != '' && (@request.auth.role = 'admin' || @request.auth.role = 'financeiro')",
+        "update": "@request.auth.id != '' && (@request.auth.role = 'admin' || @request.auth.role = 'financeiro')",
+        "delete": "@request.auth.id != '' && @request.auth.role = 'admin'"
+      },
+      "fields": [
+        {
+          "name": "titulo",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "data_avaliacao",
+          "type": "date",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "periodo_referencia",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "metodo_principal",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["multiplos_ebitda", "multiplos_receita", "patrimonial", "combinado"]
+        },
+        {
+          "name": "multiplos_usados",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ajustes_subjetivos",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "resultado_consolidado",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "indicadores_apoio",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "confiabilidade_dados",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "usuario_criador",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "usuario_nome",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "observacoes",
+          "type": "editor",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_valuations_data ON valuations (data_avaliacao DESC)",
+        "CREATE INDEX idx_valuations_criador ON valuations (usuario_criador)"
+      ]
     }
   ]
 }

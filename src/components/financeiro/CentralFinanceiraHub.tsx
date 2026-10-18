@@ -14,6 +14,7 @@ import {
   CheckCircle2,
   Building2,
   BookOpen,
+  Calculator,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/lib/format'
@@ -29,6 +30,7 @@ export type FinanceTabKey =
   | 'ativos_patrimonio'
   | 'relatorios'
   | 'relatorios_avancados'
+  | 'valuation'
   | 'plano_contas'
   | 'parcelas'
   | 'orfas'
@@ -59,6 +61,7 @@ export interface CentralFinanceiraHubProps {
   // Dados adicionais
   totalParcelasProjetos: number
   totalNotasOrfas: number
+  podeAcessarValuation?: boolean
 }
 
 interface HubCardConfig {
@@ -94,6 +97,7 @@ export function CentralFinanceiraHub({
   totalBalancetesEmitidos,
   totalParcelasProjetos,
   totalNotasOrfas,
+  podeAcessarValuation = true,
 }: CentralFinanceiraHubProps) {
   const cards: HubCardConfig[] = [
     {
@@ -304,6 +308,26 @@ export function CentralFinanceiraHub({
       ),
       statSubtext: 'Débitos, créditos, saldos e contas PJ',
       visible: true,
+    },
+    {
+      id: 'valuation',
+      title: 'Valuation da AEROCAD',
+      subtitle: 'Avaliação econômica por Patrimônio Líquido, EBITDA & Múltiplos',
+      icon: Calculator,
+      accentColor: '#FF6A13',
+      iconBg: 'bg-[#FFF0E6] border-[#FFD2B3] text-[#FF6A13]',
+      iconColor: 'text-[#FF6A13]',
+      badge: (
+        <span className="inline-flex items-center gap-1 rounded-full bg-[#FFF0E6] px-2 py-0.5 text-[10px] font-bold text-[#D65100] border border-[#FFD2B3]">
+          Diretoria
+        </span>
+      ),
+      statLabel: 'Avaliação Econômica',
+      statValue: (
+        <span className="font-bold text-[#D65100] text-xs sm:text-sm">Cenários & Múltiplos</span>
+      ),
+      statSubtext: 'Patrimonial + EBITDA + Intangíveis',
+      visible: podeAcessarValuation,
     },
     {
       id: 'plano_contas',

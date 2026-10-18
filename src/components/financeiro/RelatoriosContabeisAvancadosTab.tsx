@@ -2383,9 +2383,21 @@ export function RelatoriosContabeisAvancadosTab({
                 <Sparkles className="h-4 w-4 text-[#FF6A13]" />
                 Insights Contábeis & Ações Recomendadas
               </h3>
-              <span className="text-[11px] text-neutral-400">
-                {indicadoresData.insights.length} regras disparadas sobre os lançamentos
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-neutral-400">
+                  {indicadoresData.insights.length} regras disparadas sobre os lançamentos
+                </span>
+                {onNavigateTab && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onNavigateTab('valuation')}
+                    className="h-7 text-xs border-[#FFD2B3] bg-[#FFF0E6] text-[#D65100] hover:bg-[#FFE0CC] font-bold"
+                  >
+                    Abrir Valuation da Empresa →
+                  </Button>
+                )}
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">

@@ -28,6 +28,7 @@ import {
   Trash2,
   TriangleAlert,
   Scale,
+  Calculator,
 } from 'lucide-react'
 
 class TabErrorBoundary extends Component<
@@ -143,6 +144,7 @@ import { RelatoriosFinanceirosTab } from '@/components/financeiro/RelatoriosFina
 import { RelatoriosContabeisAvancadosTab } from '@/components/financeiro/RelatoriosContabeisAvancadosTab'
 import { AtivosPatrimonioTab } from '@/components/financeiro/AtivosPatrimonioTab'
 import { PlanoContasTab } from '@/components/financeiro/PlanoContasTab'
+import { ValuationTab } from '@/components/financeiro/ValuationTab'
 import { AssistenteFinanceiroChatDrawer } from '@/components/financeiro/AssistenteFinanceiroChatDrawer'
 import {
   CentralFinanceiraHub,
@@ -1287,6 +1289,7 @@ export function FinancePage() {
         totalBalancetesEmitidos={balancetesList.data.length}
         totalParcelasProjetos={installments.data.length}
         totalNotasOrfas={notasOrfas.length}
+        podeAcessarValuation={canWrite}
       />
 
       {/* Indicador de filtro ativo no cabeçalho do resumo quando um ano específico estiver selecionado */}
@@ -1513,6 +1516,23 @@ export function FinancePage() {
 
         {canWrite && (
           <button
+            onClick={() => setActiveTab('valuation')}
+            className={`pb-3 px-3 text-xs sm:text-sm font-bold border-b-2 transition flex items-center gap-1.5 ${
+              activeTab === 'valuation'
+                ? 'border-[#FF6A13] text-[#FF6A13]'
+                : 'border-transparent text-[#737373] hover:text-[#333]'
+            }`}
+          >
+            <Calculator className="h-4 w-4" />
+            Valuation
+            <span className="ml-1 rounded-full bg-[#FFF0E6] text-[#D65100] text-[10px] px-1.5 py-0.2 font-bold border border-[#FFD2B3]">
+              AEROCAD
+            </span>
+          </button>
+        )}
+
+        {canWrite && (
+          <button
             onClick={() => setActiveTab('plano_contas')}
             className={`pb-3 px-3 text-xs sm:text-sm font-bold border-b-2 transition flex items-center gap-1.5 ${
               activeTab === 'plano_contas'
@@ -1705,6 +1725,7 @@ export function FinancePage() {
                 tab === 'balancetes' ||
                 tab === 'ativos_patrimonio' ||
                 tab === 'relatorios' ||
+                tab === 'valuation' ||
                 tab === 'parcelas' ||
                 tab === 'orfas'
               ) {
@@ -1712,6 +1733,42 @@ export function FinancePage() {
               }
             }}
           />
+        </div>
+      ) : activeTab === 'valuation' && canWrite ? (
+        <div className="mt-5">
+          <TabErrorBoundary tabName="Valuation">
+            <ValuationTab
+              parcelas={installments.data}
+              contasPagar={contasPagar.data}
+              contasReceber={contasReceber.data}
+              contasBancarias={contasBancarias.data}
+              ativosPatrimonio={ativosPatrimonio.data}
+              extratosTransacoes={extratosTransacoes.data}
+              balancetes={balancetesList.data}
+              canWrite={canWrite}
+              canDelete={user?.role === 'admin'}
+              userRole={user?.role}
+              usuarioNome={user?.name || user?.email || 'Diretoria AEROCAD'}
+              usuarioId={user?.id}
+              onNavigateTab={(tab) => {
+                if (
+                  tab === 'contas_pagar' ||
+                  tab === 'contas_receber' ||
+                  tab === 'fluxo_caixa' ||
+                  tab === 'extratos' ||
+                  tab === 'balancetes' ||
+                  tab === 'ativos_patrimonio' ||
+                  tab === 'relatorios' ||
+                  tab === 'relatorios_avancados' ||
+                  tab === 'plano_contas' ||
+                  tab === 'parcelas' ||
+                  tab === 'orfas'
+                ) {
+                  setActiveTab(tab)
+                }
+              }}
+            />
+          </TabErrorBoundary>
         </div>
       ) : activeTab === 'plano_contas' ? (
         <div className="mt-5">
