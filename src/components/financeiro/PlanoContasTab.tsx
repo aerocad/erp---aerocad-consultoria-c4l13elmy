@@ -1691,6 +1691,15 @@ export function PlanoContasTab({
                                   )}
                                 </div>
                               )}
+                              {item.observacoes && (
+                                <div
+                                  className="text-[10px] text-neutral-500 mt-0.5 line-clamp-2"
+                                  title={item.observacoes}
+                                >
+                                  <span className="font-semibold text-neutral-600">Obs:</span>{' '}
+                                  {item.observacoes}
+                                </div>
+                              )}
                             </td>
                             <td className="py-2.5 px-3">
                               {targetColecao && targetId ? (
@@ -1701,9 +1710,10 @@ export function PlanoContasTab({
                                   nomeAtual={item.nomeConta}
                                   descricaoRegistro={item.descricao}
                                   dataRegistro={item.data}
+                                  observacoesAtual={item.observacoes}
                                   classificacaoManual={item.classificacaoManual}
                                   compacto
-                                  onReclassificado={(novoCod, novoNom) => {
+                                  onReclassificado={(novoCod, novoNom, novasObs) => {
                                     // Atualiza o lançamento na visualização do modal imediatamente
                                     setContaSelecionadaModal((prev) => {
                                       if (!prev) return null
@@ -1714,6 +1724,8 @@ export function PlanoContasTab({
                                               codigoConta: novoCod,
                                               nomeConta: novoNom,
                                               classificacaoManual: true,
+                                              observacoes:
+                                                novasObs !== undefined ? novasObs : l.observacoes,
                                             }
                                           : l,
                                       )

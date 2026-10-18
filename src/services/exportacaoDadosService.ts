@@ -958,6 +958,47 @@ function obterMapeamentoColecao(colecao: string): MapeamentoXlsxColecao | null {
         }),
       }
 
+    case 'extratos_transacoes':
+      return {
+        titulo: 'TRANSAÇÕES DE EXTRATOS BANCÁRIOS',
+        subtitulo: 'Movimentações bancárias, conciliações e classificações contábeis',
+        colunas: [
+          { header: 'Data', key: 'data', width: 14, tipo: 'data' },
+          { header: 'Descrição', key: 'descricao', width: 36 },
+          { header: 'Observações / Despesa', key: 'observacoes', width: 32 },
+          { header: 'Tipo', key: 'tipo', width: 12 },
+          { header: 'Valor (R$)', key: 'valor', width: 18, tipo: 'moeda' },
+          { header: 'Conta Contábil (Cód.)', key: 'plano_contas_codigo', width: 22 },
+          { header: 'Conta Contábil (Nome)', key: 'plano_contas_nome', width: 30 },
+          { header: 'Classificação Manual', key: 'classificacao_manual', width: 20 },
+          { header: 'Doc. / Ref.', key: 'documento_ref', width: 20 },
+          { header: 'Status Conciliação', key: 'status_conciliacao', width: 18 },
+          { header: 'Data Cadastro', key: 'created', width: 14, tipo: 'data' },
+        ],
+        transformarLinha: (item) => ({
+          data: formatarDataCelula(item.data),
+          descricao: item.descricao || '',
+          observacoes: item.observacoes
+            ? String(item.observacoes)
+                .replace(/<[^>]*>/g, '')
+                .trim()
+            : '',
+          tipo:
+            item.tipo === 'credito'
+              ? 'Crédito'
+              : item.tipo === 'debito'
+                ? 'Débito'
+                : String(item.tipo || ''),
+          valor: typeof item.valor === 'number' ? item.valor : Number(item.valor) || 0,
+          plano_contas_codigo: item.plano_contas_codigo || '',
+          plano_contas_nome: item.plano_contas_nome || '',
+          classificacao_manual: item.classificacao_manual ? 'Sim' : 'Não',
+          documento_ref: item.documento_ref || '',
+          status_conciliacao: item.status_conciliacao || '',
+          created: formatarDataCelula(item.created),
+        }),
+      }
+
     // Exportação especializada de NFS-e (Notas Fiscais): são parcelas com vínculo NFS-e
     case 'nfse':
       return {

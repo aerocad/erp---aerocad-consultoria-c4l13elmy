@@ -33,7 +33,9 @@ export interface ReclassificarParametros {
   nomeAnterior?: string
   descricaoRegistro?: string
   dataRegistro?: string
+  observacoes?: string
   user: UserRecord | null
+  aplicarEmBlocoMesmaDescricao?: boolean
 }
 
 export interface ReclassificarResultado {
@@ -45,6 +47,16 @@ export interface ReclassificarResultado {
   balanceteReferencia?: string
   balanceteReferenciaFormatada?: string
   balanceteErro?: string
+  totalAfetados?: number
+  competenciasAfetadas?: string[]
+}
+
+export interface DetalhesTransacoesMesmaDescricao {
+  total: number
+  outrosIds: string[]
+  competencias: string[] // ex: ['2025-01', '2025-02']
+  competenciasFormatadas: string[] // ex: ['01/2025', '02/2025']
+  amostraRegistros: Array<{ id: string; data?: string; descricao: string; valor?: number }>
 }
 
 /**
@@ -219,6 +231,129 @@ export async function regenerarBalanceteCompetencia({
  * Invalida o cache da API
  * Regenera automaticamente o balancete arquivado daquela competência com auditoria dedicada
  */
+/**
+ * Normaliza o texto de descrição para comparação exata case-insensitive e trim de espaços duplicados
+ */
+export function normalizarDescricaoComparacao(texto: string | null | undefined): string {
+  if (!texto) return ''
+  return texto.trim().replace(/\s+/g, ' ').toLowerCase()
+}
+
+/**
+ * Busca outras transações na mesma coleção (extratos_transacoes ou contas_pagar)
+ * que possuam a mesma descrição normalizada (exato trim + lowercase).
+ */
+export async function buscarTransacoesMesmaDescricao({
+  colecao,
+  idAtual,
+  descricao,
+}: {
+  colecao: ColecaoReclassificavel
+  idAtual: string
+  descricao: string
+}): Promise<DetalhesTransacoesMesmaDescricao> {
+  const norm = normalizarDescricaoComparacao(descricao)
+  if (!norm || (colecao !== 'extratos_transacoes' && colecao !== 'contas_pagar')) {
+    return {
+      total: 0,
+      outrosIds: [],
+      competencias: [],
+      competenciasFormatadas: [],
+      amostraRegistros: [],
+    }
+  }
+
+  try {
+    // Buscar registros da coleção. Para limitar volume mas ser seguro, pegamos até 500 registros
+    // usando busca ou filtro quando possível, ou comparando em memória
+    // No PocketBase podemos filtrar por colecao com limite seguro
+    const registros = await pb.collection(colecao).getFullList<{
+      id: string
+      descricao?: string
+      data?: string
+      data_vencimento?: string
+      data_pagamento?: string
+      valor?: number
+    }>({
+      fields: 'id,descricao,data,data_vencimento,data_pagamento,valor',
+    })
+
+    const outros: Array<{ id: string; data?: string; descricao: string; valor?: number }> = []
+    const competenciasSet = new Set<string>()
+
+    for (const r of registros) {
+      if (r.id === idAtual) continue
+      const rDescNorm = normalizarDescricaoComparacao(r.descricao)
+      if (rDescNorm === norm) {
+        const dataReg = r.data || r.data_pagamento || r.data_vencimento || ''
+        if (dataReg && dataReg.length >= 7) {
+          competenciasSet.add(dataReg.slice(0, 7))
+        }
+        outros.push({
+          id: r.id,
+          data: dataReg,
+          descricao: r.descricao || '',
+          valor: r.valor,
+        })
+      }
+    }
+
+    const competencias = Array.from(competenciasSet).sort()
+    const competenciasFormatadas = competencias.map((c) => {
+      const [ano, mes] = c.split('-')
+      return `${mes}/${ano}`
+    })
+
+    return {
+      total: outros.length,
+      outrosIds: outros.map((o) => o.id),
+      competencias,
+      competenciasFormatadas,
+      amostraRegistros: outros.slice(0, 5),
+    }
+  } catch (err) {
+    console.warn('Erro ao buscar transações com a mesma descrição:', err)
+    return {
+      total: 0,
+      outrosIds: [],
+      competencias: [],
+      competenciasFormatadas: [],
+      amostraRegistros: [],
+    }
+  }
+}
+
+/**
+ * Atualiza apenas o campo de observações de uma transação ou conta a pagar
+ */
+export async function salvarObservacoesLancamento({
+  colecao,
+  id,
+  observacoes,
+}: {
+  colecao: ColecaoReclassificavel
+  id: string
+  observacoes: string
+}): Promise<{ sucesso: boolean; erro?: string }> {
+  try {
+    await pb.collection(colecao).update(id, {
+      observacoes: observacoes.trim(),
+    })
+    invalidateApiCache(colecao)
+    return { sucesso: true }
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return { sucesso: false, erro: msg }
+  }
+}
+
+/**
+ * Persiste a reclassificação contábil de um lançamento (extrato, conta_pagar, parcela, conta_receber)
+ * Registra a auditoria na coleção auditoria_operacoes_bloco
+ * Invalida o cache da API
+ * Se solicitado (aplicarEmBlocoMesmaDescricao), reclassifica também em lote todas as outras transações com a mesma descrição
+ * Regenera automaticamente os balancetes arquivados de TODAS as competências afetadas
+ */
 export async function reclassificarLancamentoContabil({
   colecao,
   id,
@@ -228,33 +363,108 @@ export async function reclassificarLancamentoContabil({
   nomeAnterior,
   descricaoRegistro,
   dataRegistro,
+  observacoes,
   user,
+  aplicarEmBlocoMesmaDescricao = false,
 }: ReclassificarParametros): Promise<ReclassificarResultado> {
   const conta = obterItemPlanoContasPorCodigo(codigoNovo)
   const nomeFinal = nomeNovo || conta?.nome || 'Conta Contábil Personalizada'
 
-  // 1. Atualizar registro no PocketBase
+  // 1. Atualizar registro principal no PocketBase
   const payloadUpdate: Record<string, unknown> = {
     plano_contas_codigo: codigoNovo,
     plano_contas_nome: nomeFinal,
     classificacao_manual: true,
   }
 
+  if (observacoes !== undefined) {
+    payloadUpdate.observacoes = observacoes.trim()
+  }
+
   await pb.collection(colecao).update(id, payloadUpdate)
+
+  const competenciasAfetadasSet = new Set<string>()
+  if (dataRegistro && dataRegistro.length >= 7) {
+    competenciasAfetadasSet.add(dataRegistro.slice(0, 7))
+  }
+
+  let totalAfetados = 1
+  let idsAfetados: string[] = [id]
+
+  // Se aplicar em bloco para a mesma descrição
+  if (
+    aplicarEmBlocoMesmaDescricao &&
+    descricaoRegistro &&
+    (colecao === 'extratos_transacoes' || colecao === 'contas_pagar')
+  ) {
+    try {
+      const mesmaDesc = await buscarTransacoesMesmaDescricao({
+        colecao,
+        idAtual: id,
+        descricao: descricaoRegistro,
+      })
+
+      if (mesmaDesc.total > 0) {
+        for (const outId of mesmaDesc.outrosIds) {
+          try {
+            const payloadOutro: Record<string, unknown> = {
+              plano_contas_codigo: codigoNovo,
+              plano_contas_nome: nomeFinal,
+              classificacao_manual: true,
+            }
+            await pb.collection(colecao).update(outId, payloadOutro)
+            idsAfetados.push(outId)
+            totalAfetados++
+          } catch (errUpdateOutro) {
+            console.warn(`Falha ao reclassificar item ${outId} em bloco:`, errUpdateOutro)
+          }
+        }
+
+        // Adiciona as competências dos itens em bloco
+        for (const c of mesmaDesc.competencias) {
+          competenciasAfetadasSet.add(c)
+        }
+      }
+    } catch (errBloco) {
+      console.warn('Erro ao processar reclassificação em bloco:', errBloco)
+    }
+  }
 
   // Invalida o cache da coleção
   invalidateApiCache(colecao)
 
   // 2. Registrar na auditoria_operacoes_bloco
   try {
+    const isBloco = totalAfetados > 1
     const auditoriaPayload = {
       usuario: user?.id || null,
       usuario_nome: user?.name || user?.email || 'Usuário AEROCAD',
-      tipo_operacao: 'reclassificacao_contabil',
-      descricao: `Reclassificação contábil de "${descricaoRegistro || id}" de [${codigoAnterior || 'Sem conta'} - ${nomeAnterior || 'Automático'}] para [${codigoNovo} - ${nomeFinal}]`,
+      tipo_operacao: isBloco ? 'reclassificacao_por_descricao' : 'reclassificacao_contabil',
+      colecao_alvo: colecao,
+      descricao: isBloco
+        ? `Reclassificação contábil em bloco por descrição ("${descricaoRegistro}") para ${totalAfetados} lançamentos com código [${codigoNovo} - ${nomeFinal}]`
+        : `Reclassificação contábil de "${descricaoRegistro || id}" de [${codigoAnterior || 'Sem conta'} - ${nomeAnterior || 'Automático'}] para [${codigoNovo} - ${nomeFinal}]`,
       entidade: colecao,
       entidade_id: id,
       bloco_nome: 'plano_contas',
+      total_registros_afetados: totalAfetados,
+      total_falhas: 0,
+      criterio_filtro: isBloco
+        ? {
+            descricao_normalizada: normalizarDescricaoComparacao(descricaoRegistro),
+            descricao_original: descricaoRegistro,
+            ids_afetados: idsAfetados,
+          }
+        : {
+            id,
+          },
+      alteracoes_solicitadas: {
+        colecao,
+        codigo_novo: codigoNovo,
+        nome_novo: nomeFinal,
+        observacoes: observacoes?.trim() || null,
+        total_afetados: totalAfetados,
+      },
       detalhes_json: {
         colecao,
         registro_id: id,
@@ -263,6 +473,9 @@ export async function reclassificarLancamentoContabil({
         codigo_novo: codigoNovo,
         nome_novo: nomeFinal,
         data_registro: dataRegistro || null,
+        observacoes: observacoes?.trim() || null,
+        total_afetados: totalAfetados,
+        ids_afetados: idsAfetados,
       },
       dados_anteriores: {
         plano_contas_codigo: codigoAnterior || null,
@@ -272,9 +485,11 @@ export async function reclassificarLancamentoContabil({
         plano_contas_codigo: codigoNovo,
         plano_contas_nome: nomeFinal,
         classificacao_manual: true,
+        observacoes: observacoes?.trim() || null,
       },
       data_hora: new Date().toISOString(),
       sucesso: true,
+      desfeito: false,
     }
 
     await pb.collection('auditoria_operacoes_bloco').create(auditoriaPayload)
@@ -282,17 +497,18 @@ export async function reclassificarLancamentoContabil({
     console.warn('Aviso: Falha ao registrar log de auditoria da reclassificação:', errAudit)
   }
 
-  // 3. Verificar se existe balancete oficial arquivado para o período deste registro
+  // 3. Regenerar balancetes de TODAS as competências afetadas
   let balanceteRegenerado = false
   let balanceteReferencia: string | undefined
   let balanceteReferenciaFormatada: string | undefined
   let balanceteErro: string | undefined
   let balanceteDesatualizadoReferencia: string | undefined
 
-  if (dataRegistro && dataRegistro.length >= 7) {
-    const ref = dataRegistro.slice(0, 7) // YYYY-MM
-    balanceteReferencia = ref
+  const compsArray = Array.from(competenciasAfetadasSet).sort()
+
+  for (const ref of compsArray) {
     const [anoStr, mesStr] = ref.split('-')
+    balanceteReferencia = ref
     balanceteReferenciaFormatada = `${mesStr}/${anoStr}`
 
     try {
@@ -301,7 +517,6 @@ export async function reclassificarLancamentoContabil({
       })
 
       if (balancetes.items.length > 0) {
-        // Balancete arquivado encontrado -> regenerar AQUELE balancete na sequência
         const regRes = await regenerarBalanceteCompetencia({
           referencia: ref,
           user,
@@ -345,5 +560,7 @@ export async function reclassificarLancamentoContabil({
     balanceteReferenciaFormatada,
     balanceteErro,
     balanceteDesatualizadoReferencia,
+    totalAfetados,
+    competenciasAfetadas: compsArray,
   }
 }

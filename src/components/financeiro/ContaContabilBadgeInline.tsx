@@ -34,7 +34,13 @@ import {
 import {
   ColecaoReclassificavel,
   reclassificarLancamentoContabil,
+  buscarTransacoesMesmaDescricao,
+  DetalhesTransacoesMesmaDescricao,
 } from '@/services/reclassificacaoContabilService'
+import { Textarea } from '@/components/ui/textarea'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Label } from '@/components/ui/label'
+import { Layers } from 'lucide-react'
 
 export interface ContaContabilBadgeInlineProps {
   /** Coleção do registro alvo */
@@ -45,14 +51,16 @@ export interface ContaContabilBadgeInlineProps {
   codigoAtual?: string | null
   /** Nome descritivo da conta contábil atual (opcional) */
   nomeAtual?: string | null
-  /** Descrição do registro para log de auditoria */
+  /** Descrição do registro para log de auditoria e correspondência em bloco */
   descricaoRegistro?: string
   /** Data do lançamento (para checagem de balancete arquivado) */
   dataRegistro?: string
+  /** Observações atuais do lançamento (qual a exata despesa?) */
+  observacoesAtual?: string | null
   /** Se o registro já foi marcado como classificação manual */
   classificacaoManual?: boolean
   /** Callback executado após salvar com sucesso a reclassificação */
-  onReclassificado?: (novoCodigo: string, novoNome: string) => void
+  onReclassificado?: (novoCodigo: string, novoNome: string, observacoes?: string) => void
   /** Modo de exibição compacto (apenas código ou reduzido) */
   compacto?: boolean
   /** Desabilitar edição mesmo se tiver permissão */
@@ -112,6 +120,7 @@ export function ContaContabilBadgeInline({
   nomeAtual,
   descricaoRegistro,
   dataRegistro,
+  observacoesAtual,
   classificacaoManual = false,
   onReclassificado,
   compacto = false,
@@ -132,6 +141,38 @@ export function ContaContabilBadgeInline({
     '4': true,
   })
   const [salvando, setSalvando] = useState(false)
+  const [observacoesTexto, setObservacoesTexto] = useState(observacoesAtual || '')
+  const [aplicarEmBloco, setAplicarEmBloco] = useState(true)
+  const [mesmaDescricaoInfo, setMesmaDescricaoInfo] =
+    useState<DetalhesTransacoesMesmaDescricao | null>(null)
+  const [buscandoMesmaDescricao, setBuscandoMesmaDescricao] = useState(false)
+
+  // Ao abrir o modal, sincroniza o texto de observações e busca outras transações iguais
+  React.useEffect(() => {
+    if (aberto) {
+      setObservacoesTexto(observacoesAtual || '')
+      setAplicarEmBloco(true)
+      if (descricaoRegistro && (colecao === 'extratos_transacoes' || colecao === 'contas_pagar')) {
+        setBuscandoMesmaDescricao(true)
+        buscarTransacoesMesmaDescricao({
+          colecao,
+          idAtual: id,
+          descricao: descricaoRegistro,
+        })
+          .then((info) => {
+            setMesmaDescricaoInfo(info)
+          })
+          .catch(() => {
+            setMesmaDescricaoInfo(null)
+          })
+          .finally(() => {
+            setBuscandoMesmaDescricao(false)
+          })
+      } else {
+        setMesmaDescricaoInfo(null)
+      }
+    }
+  }, [aberto, observacoesAtual, descricaoRegistro, colecao, id])
 
   // Permissão: editável apenas para perfis admin e financeiro
   const podeEditar = !disabled && (user?.role === 'admin' || user?.role === 'financeiro')
@@ -190,13 +231,19 @@ export function ContaContabilBadgeInline({
 
   // Ação de selecionar e persistir
   const handleSelecionarConta = async (contaEscolhida: ItemPlanoContas) => {
-    if (contaEscolhida.codigo === codigoAtual) {
+    // Permitir salvar mesmo se o código for igual caso as observações tenham mudado
+    const observacoesMudaram = (observacoesTexto || '').trim() !== (observacoesAtual || '').trim()
+    if (contaEscolhida.codigo === codigoAtual && !observacoesMudaram) {
       setAberto(false)
       return
     }
 
     try {
       setSalvando(true)
+      const aplicarEmBlocoFinal = Boolean(
+        aplicarEmBloco && mesmaDescricaoInfo && mesmaDescricaoInfo.total > 0,
+      )
+
       const res = await reclassificarLancamentoContabil({
         colecao,
         id,
@@ -206,10 +253,26 @@ export function ContaContabilBadgeInline({
         nomeAnterior: nomeAtual || undefined,
         descricaoRegistro,
         dataRegistro,
+        observacoes: observacoesTexto,
         user,
+        aplicarEmBlocoMesmaDescricao: aplicarEmBlocoFinal,
       })
 
-      if (res.balanceteRegenerado && res.balanceteReferenciaFormatada) {
+      const totalAfetados = res.totalAfetados || 1
+
+      if (totalAfetados > 1) {
+        const compsTexto = (res.competenciasAfetadas || [])
+          .map((c) => {
+            const [ano, mes] = c.split('-')
+            return `${mes}/${ano}`
+          })
+          .join(', ')
+
+        toast({
+          title: `Classificação aplicada a ${totalAfetados} lançamentos com a mesma descrição!`,
+          description: `${contaEscolhida.codigo} · ${contaEscolhida.nome}${compsTexto ? ` · Competências: ${compsTexto}` : ''}`,
+        })
+      } else if (res.balanceteRegenerado && res.balanceteReferenciaFormatada) {
         toast({
           title: `Conta reclassificada — balancete de ${res.balanceteReferenciaFormatada} regenerado automaticamente`,
           description: `${contaEscolhida.codigo} · ${contaEscolhida.nome}`,
@@ -232,7 +295,7 @@ export function ContaContabilBadgeInline({
       }
 
       if (onReclassificado) {
-        onReclassificado(contaEscolhida.codigo, contaEscolhida.nome)
+        onReclassificado(contaEscolhida.codigo, contaEscolhida.nome, observacoesTexto.trim())
       }
       setAberto(false)
     } catch (err: unknown) {
@@ -332,6 +395,61 @@ export function ContaContabilBadgeInline({
             Lançamento: <span className="font-medium text-neutral-700">{descricaoRegistro}</span>
           </p>
         )}
+
+        {/* REQUISITO 2: Campo de Observações por lançamento */}
+        <div className="mb-2.5 p-2 rounded-md bg-white border border-neutral-200 space-y-1">
+          <Label className="text-[10px] font-semibold text-neutral-700 block">
+            Observações (qual a exata despesa envolvida?)
+          </Label>
+          <Textarea
+            value={observacoesTexto}
+            onChange={(e) => setObservacoesTexto(e.target.value)}
+            placeholder="Especifique a exata despesa (ex: tarifa transferência PIX fornecedor X, compra suprimentos...)"
+            rows={2}
+            className="text-[11px] min-h-[46px] resize-none bg-neutral-50/50"
+          />
+        </div>
+
+        {/* REQUISITO 1: Opção em bloco para mesma descrição */}
+        {buscandoMesmaDescricao ? (
+          <div className="mb-2 p-2 rounded-md bg-neutral-100 text-[10px] text-neutral-500 flex items-center gap-1.5 animate-pulse">
+            <Loader2 className="w-3 h-3 animate-spin text-[#FF6A13]" />
+            Verificando outras transações com esta mesma descrição...
+          </div>
+        ) : mesmaDescricaoInfo && mesmaDescricaoInfo.total > 0 ? (
+          <div className="mb-2.5 p-2.5 rounded-md bg-orange-50 border border-orange-200 text-neutral-800 space-y-1.5">
+            <div className="flex items-start gap-2">
+              <Checkbox
+                id={`em-bloco-${id}`}
+                checked={aplicarEmBloco}
+                onCheckedChange={(checked) => setAplicarEmBloco(Boolean(checked))}
+                className="mt-0.5 border-orange-400 data-[state=checked]:bg-[#FF6A13] data-[state=checked]:border-[#FF6A13]"
+              />
+              <div className="flex-1 text-[11px]">
+                <label
+                  htmlFor={`em-bloco-${id}`}
+                  className="font-bold text-[#D65100] cursor-pointer flex items-center gap-1"
+                >
+                  <Layers className="w-3 h-3 text-[#FF6A13] shrink-0" />
+                  Aplicar também às {mesmaDescricaoInfo.total} outras transações com a mesma
+                  descrição
+                </label>
+                <p className="text-[10px] text-neutral-600 mt-0.5">
+                  Descrição exata: &ldquo;<span className="font-semibold">{descricaoRegistro}</span>
+                  &rdquo;
+                </p>
+                {mesmaDescricaoInfo.competenciasFormatadas.length > 0 && (
+                  <p className="text-[10px] text-neutral-500 mt-0.5">
+                    Períodos afetados ({mesmaDescricaoInfo.competenciasFormatadas.length}):{' '}
+                    <span className="font-mono font-medium text-neutral-700">
+                      {mesmaDescricaoInfo.competenciasFormatadas.join(', ')}
+                    </span>
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         {/* Campo de Busca em tempo real */}
         <div className="relative">
@@ -478,16 +596,40 @@ export function ContaContabilBadgeInline({
       </div>
 
       {/* Rodapé explicativo */}
-      <div className="p-2.5 border-t border-neutral-200 bg-neutral-50 text-[11px] text-neutral-500 flex items-center justify-between">
-        <span>A reclassificação é auditada e atualiza os relatórios.</span>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => setAberto(false)}
-          className="h-6 text-xs px-2"
-        >
-          Fechar
-        </Button>
+      <div className="p-2.5 border-t border-neutral-200 bg-neutral-50 text-[11px] text-neutral-500 flex items-center justify-between gap-2">
+        <span className="truncate">A reclassificação é auditada e atualiza os relatórios.</span>
+        <div className="flex items-center gap-1.5 shrink-0">
+          {(observacoesTexto || '').trim() !== (observacoesAtual || '').trim() && (
+            <Button
+              size="sm"
+              disabled={salvando}
+              onClick={() => {
+                if (contaCadastrada) {
+                  handleSelecionarConta(contaCadastrada)
+                } else if (codigoAtual) {
+                  handleSelecionarConta({
+                    codigo: codigoAtual,
+                    nome: nomeAtual || 'Conta Atual',
+                    grupo: '',
+                    natureza: 'despesa',
+                    descricao: '',
+                  })
+                }
+              }}
+              className="h-6 text-xs px-2.5 bg-[#FF6A13] hover:bg-[#E85B06] text-white"
+            >
+              Salvar Observação
+            </Button>
+          )}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setAberto(false)}
+            className="h-6 text-xs px-2"
+          >
+            Fechar
+          </Button>
+        </div>
       </div>
     </div>
   )

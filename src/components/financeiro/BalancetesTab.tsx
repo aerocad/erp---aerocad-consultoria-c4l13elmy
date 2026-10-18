@@ -1875,10 +1875,19 @@ export function BalancetesTab({
                           {lanc.entidade}
                         </td>
                         <td
-                          className="px-3 py-2 text-neutral-600 truncate max-w-[200px]"
+                          className="px-3 py-2 text-neutral-600 max-w-[220px]"
                           title={lanc.descricao}
                         >
-                          {lanc.descricao}
+                          <p className="truncate font-medium text-neutral-900">{lanc.descricao}</p>
+                          {lanc.observacoes && (
+                            <p
+                              className="text-[10px] text-neutral-500 truncate"
+                              title={lanc.observacoes}
+                            >
+                              <span className="font-semibold text-neutral-600">Obs:</span>{' '}
+                              {lanc.observacoes}
+                            </p>
+                          )}
                         </td>
                         <td className="px-3 py-2 font-mono text-neutral-600 text-[11px]">
                           {lanc.documentoRef || '—'}
@@ -1901,11 +1910,15 @@ export function BalancetesTab({
                               classificacaoManual={lanc.classificacaoManual}
                               dataRegistro={lanc.data}
                               descricaoRegistro={lanc.descricao}
+                              observacoesAtual={lanc.observacoes}
                               compacto={false}
-                              onReclassificado={(novoCod, novoNome) => {
+                              onReclassificado={(novoCod, novoNome, novasObs) => {
                                 lanc.codigoConta = novoCod
                                 lanc.nomeConta = novoNome
                                 lanc.classificacaoManual = true
+                                if (novasObs !== undefined) {
+                                  lanc.observacoes = novasObs
+                                }
                                 handleReclassificacaoSucesso()
                               }}
                             />

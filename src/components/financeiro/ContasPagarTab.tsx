@@ -751,7 +751,7 @@ export function ContasPagarTab({
                       </td>
 
                       <td className="px-4 py-3">
-                        <div className="space-y-0.5 max-w-[280px]">
+                        <div className="space-y-1 max-w-[280px]">
                           <p className="font-semibold text-neutral-900 line-clamp-1">
                             {conta.descricao}
                           </p>
@@ -763,6 +763,16 @@ export function ContasPagarTab({
                               </span>
                             )}
                           </p>
+                          {/* REQUISITO 2: Observações da exata despesa visíveis na linha */}
+                          {conta.observacoes ? (
+                            <p
+                              className="text-[11px] text-neutral-600 bg-neutral-50 px-1.5 py-0.5 rounded border border-neutral-200 line-clamp-2"
+                              title={conta.observacoes.replace(/<[^>]*>/g, '')}
+                            >
+                              <span className="font-semibold text-neutral-700">Obs:</span>{' '}
+                              {conta.observacoes.replace(/<[^>]*>/g, '')}
+                            </p>
+                          ) : null}
                         </div>
                       </td>
 
@@ -827,11 +837,17 @@ export function ContasPagarTab({
                               classificacaoManual={Boolean(conta.classificacao_manual)}
                               dataRegistro={conta.data_vencimento || conta.data_pagamento}
                               descricaoRegistro={conta.descricao}
+                              observacoesAtual={
+                                conta.observacoes ? conta.observacoes.replace(/<[^>]*>/g, '') : ''
+                              }
                               compacto={true}
-                              onReclassificado={async (novoCod, novoNom) => {
+                              onReclassificado={async (novoCod, novoNom, novasObs) => {
                                 conta.plano_contas_codigo = novoCod
                                 conta.plano_contas_nome = novoNom
                                 conta.classificacao_manual = true
+                                if (novasObs !== undefined) {
+                                  conta.observacoes = novasObs
+                                }
                                 try {
                                   await onReload()
                                 } catch (_) {

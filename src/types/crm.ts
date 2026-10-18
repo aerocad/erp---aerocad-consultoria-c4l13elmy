@@ -740,6 +740,7 @@ export interface BalanceteLancamentoAnalitico {
   status?: string
   registroIdOriginal?: string
   classificacaoManual?: boolean
+  observacoes?: string
 }
 
 export interface BalanceteContaResumo {
@@ -772,6 +773,7 @@ export interface BalanceteConsolidadoDados {
       nfNumero?: string
       codigoConta?: string
       nomeConta?: string
+      observacoes?: string
     }>
   }
   despesas: {
@@ -789,6 +791,7 @@ export interface BalanceteConsolidadoDados {
       numeroDocumento?: string
       codigoConta?: string
       nomeConta?: string
+      observacoes?: string
     }>
   }
   acumuladoAno: {

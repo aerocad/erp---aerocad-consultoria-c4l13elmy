@@ -1738,12 +1738,23 @@ export function ExtratosComprovantesTab({
                       </td>
 
                       <td className="px-4 py-3">
-                        <div className="space-y-0.5 max-w-[340px]">
+                        <div className="space-y-1 max-w-[340px]">
                           <p className="font-semibold text-neutral-900 line-clamp-1">
                             {tx?.descricao || '—'}
                           </p>
-                          {tx?.observacoes && (
-                            <p className="text-[11px] text-emerald-700 italic">{tx.observacoes}</p>
+                          {/* REQUISITO 2: Observações visíveis diretamente na linha com indicação clara */}
+                          {tx?.observacoes ? (
+                            <p
+                              className="text-[11px] text-neutral-600 bg-neutral-50 px-1.5 py-0.5 rounded border border-neutral-200 line-clamp-2"
+                              title={tx.observacoes}
+                            >
+                              <span className="font-semibold text-neutral-700">Obs:</span>{' '}
+                              {tx.observacoes}
+                            </p>
+                          ) : (
+                            <p className="text-[10px] text-neutral-400 italic">
+                              Sem observações de despesa
+                            </p>
                           )}
                         </div>
                       </td>
@@ -1758,11 +1769,15 @@ export function ExtratosComprovantesTab({
                             classificacaoManual={Boolean(tx.classificacao_manual)}
                             dataRegistro={tx.data}
                             descricaoRegistro={tx.descricao}
+                            observacoesAtual={tx.observacoes}
                             compacto={true}
-                            onReclassificado={async (novoCod, novoNom) => {
+                            onReclassificado={async (novoCod, novoNom, novasObs) => {
                               tx.plano_contas_codigo = novoCod
                               tx.plano_contas_nome = novoNom
                               tx.classificacao_manual = true
+                              if (novasObs !== undefined) {
+                                tx.observacoes = novasObs
+                              }
                               try {
                                 await onReloadTransacoes()
                               } catch (_) {

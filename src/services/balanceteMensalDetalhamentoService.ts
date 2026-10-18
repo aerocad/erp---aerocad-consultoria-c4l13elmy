@@ -152,6 +152,7 @@ export function consolidarBalanceteMensal(
     const dataLanc = (p.data_pagamento || p.vencimento || '').slice(0, 10)
     const docRef = p.nf_numero ? `NFS-e ${p.nf_numero}` : undefined
 
+    const projNumero = p.expand?.projeto?.numero || p.projeto || ''
     const lancamentoAnalitico: BalanceteLancamentoAnalitico = {
       id: `parc-${p.id}`,
       registroIdOriginal: p.id,
@@ -161,12 +162,15 @@ export function consolidarBalanceteMensal(
       origemLabel: 'Parcela de Projeto',
       codigoConta: conta.codigo,
       nomeConta: conta.nome,
-      descricao: p.descricao || `Parcela Contratual ${p.expand?.projeto?.numero || ''}`,
+      descricao:
+        p.descricao ||
+        `Parcela ${p.numero_parcela || 1}${projNumero ? ` do projeto ${projNumero}` : ''}`,
       entidade: cliNome,
-      documentoRef: docRef,
+      documentoRef: p.nfse_numero ? `NFS-e ${p.nfse_numero}` : undefined,
       valor: val,
       tipoMovimento: 'credito',
       status: p.status,
+      observacoes: p.observacoes,
     }
 
     registrarLancamentoReceita(conta.codigo, conta.nome, conta.grupo, lancamentoAnalitico)
@@ -174,14 +178,15 @@ export function consolidarBalanceteMensal(
     itensReceita.push({
       id: p.id,
       data: dataLanc,
-      descricao: p.descricao,
+      descricao: p.descricao || `Parcela ${p.numero_parcela || 1}`,
       clienteNome: cliNome,
-      projetoNumero: p.expand?.projeto?.numero,
+      projetoNumero: projNumero,
       valor: val,
       origem: 'parcela',
-      nfNumero: p.nf_numero,
+      nfNumero: p.nfse_numero,
       codigoConta: conta.codigo,
       nomeConta: conta.nome,
+      observacoes: p.observacoes,
     })
   }
 
@@ -208,15 +213,16 @@ export function consolidarBalanceteMensal(
       classificacaoManual: c.classificacao_manual,
       data: dataLanc,
       origem: 'receita_avulsa',
-      origemLabel: 'Receita Avulsa',
+      origemLabel: 'Conta a Receber',
       codigoConta: conta.codigo,
       nomeConta: conta.nome,
-      descricao: c.descricao || 'Receita Técnica Operacional',
+      descricao: c.descricao || 'Receita Avulsa / Consultoria',
       entidade: cliNome,
       documentoRef: c.numero_documento,
       valor: val,
       tipoMovimento: 'credito',
       status: c.status,
+      observacoes: c.observacoes,
     }
 
     registrarLancamentoReceita(conta.codigo, conta.nome, conta.grupo, lancamentoAnalitico)
@@ -231,6 +237,7 @@ export function consolidarBalanceteMensal(
       nfNumero: c.numero_documento,
       codigoConta: conta.codigo,
       nomeConta: conta.nome,
+      observacoes: c.observacoes,
     })
   }
 
@@ -263,10 +270,11 @@ export function consolidarBalanceteMensal(
         nomeConta: conta.nome,
         descricao: tx.descricao || 'Entrada em conta corrente PJ',
         entidade: contraparte,
-        documentoRef: tx.documento_ref,
+        documentoRef: tx.document_ref || tx.documento_ref,
         valor: val,
         tipoMovimento: 'credito',
         status: tx.status_conciliacao || 'conciliado',
+        observacoes: tx.observacoes,
       }
 
       registrarLancamentoReceita(conta.codigo, conta.nome, conta.grupo, lancamentoAnalitico)
@@ -281,6 +289,7 @@ export function consolidarBalanceteMensal(
         nfNumero: tx.documento_ref,
         codigoConta: conta.codigo,
         nomeConta: conta.nome,
+        observacoes: tx.observacoes,
       })
     }
   }
@@ -363,6 +372,7 @@ export function consolidarBalanceteMensal(
       valor: val,
       tipoMovimento: 'debito',
       status: c.status,
+      observacoes: c.observacoes ? c.observacoes.replace(/<[^>]*>/g, '') : undefined,
     }
 
     registrarLancamentoDespesa(conta.codigo, conta.nome, conta.grupo, lancamentoAnalitico)
@@ -377,6 +387,7 @@ export function consolidarBalanceteMensal(
       numeroDocumento: c.numero_documento,
       codigoConta: conta.codigo,
       nomeConta: conta.nome,
+      observacoes: c.observacoes ? c.observacoes.replace(/<[^>]*>/g, '') : undefined,
     })
   }
 
@@ -413,6 +424,7 @@ export function consolidarBalanceteMensal(
         valor: val,
         tipoMovimento: 'debito',
         status: tx.status_conciliacao || 'conciliado',
+        observacoes: tx.observacoes,
       }
 
       registrarLancamentoDespesa(conta.codigo, conta.nome, conta.grupo, lancamentoAnalitico)
@@ -427,6 +439,7 @@ export function consolidarBalanceteMensal(
         numeroDocumento: tx.documento_ref,
         codigoConta: conta.codigo,
         nomeConta: conta.nome,
+        observacoes: tx.observacoes,
       })
     }
   }
