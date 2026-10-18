@@ -13,8 +13,11 @@ export default function LoginPage() {
   const { user, login } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
-  const [email, setEmail] = useState('cleytonsaraiva@aerocad.com.br')
-  const [password, setPassword] = useState('Skip@Pass')
+  const [email, setEmail] = useState(() => {
+    const navState = location.state as { email?: string; from?: string } | null
+    return navState?.email?.trim() || ''
+  })
+  const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -60,15 +63,16 @@ export default function LoginPage() {
             </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="mt-7 space-y-5">
+          <form onSubmit={handleSubmit} className="mt-7 space-y-5" autoComplete="off">
             <div className="space-y-2">
               <Label htmlFor="email">E-mail profissional</Label>
               <div className="relative">
                 <Mail className="absolute left-3 top-3.5 h-4 w-4 text-[#9A9A9A]" />
                 <Input
                   id="email"
+                  name="email"
                   type="email"
-                  autoComplete="email"
+                  autoComplete="off"
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
                   className="h-11 pl-10"
@@ -90,11 +94,13 @@ export default function LoginPage() {
                 <LockKeyhole className="absolute left-3 top-3.5 h-4 w-4 text-[#9A9A9A]" />
                 <Input
                   id="password"
+                  name="password"
                   type={showPassword ? 'text' : 'password'}
-                  autoComplete="current-password"
+                  autoComplete="new-password"
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   className="h-11 px-10"
+                  placeholder="••••••••"
                 />
                 <button
                   type="button"
