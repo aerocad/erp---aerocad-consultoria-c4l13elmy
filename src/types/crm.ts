@@ -8,6 +8,7 @@ export interface UserRecord extends RecordModel {
   email: string
   avatar: string
   role: Role
+  roles?: Role[]
   ativo?: boolean
 }
 

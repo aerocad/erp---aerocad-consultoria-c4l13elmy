@@ -145,6 +145,7 @@ import { RelatoriosContabeisAvancadosTab } from '@/components/financeiro/Relator
 import { AtivosPatrimonioTab } from '@/components/financeiro/AtivosPatrimonioTab'
 import { PlanoContasTab } from '@/components/financeiro/PlanoContasTab'
 import { ValuationTab } from '@/components/financeiro/ValuationTab'
+import { SensitiveAreaGate } from '@/components/auth/SensitiveAreaGate'
 import { AssistenteFinanceiroChatDrawer } from '@/components/financeiro/AssistenteFinanceiroChatDrawer'
 import {
   CentralFinanceiraHub,
@@ -1666,37 +1667,46 @@ export function FinancePage() {
       ) : activeTab === 'valuation' && canWrite ? (
         <div className="mt-5">
           <TabErrorBoundary tabName="Valuation">
-            <ValuationTab
-              parcelas={installments.data}
-              contasPagar={contasPagar.data}
-              contasReceber={contasReceber.data}
-              contasBancarias={contasBancarias.data}
-              ativosPatrimonio={ativosPatrimonio.data}
-              extratosTransacoes={extratosTransacoes.data}
-              balancetes={balancetesList.data}
-              canWrite={canWrite}
-              canDelete={user?.role === 'admin'}
-              userRole={user?.role}
-              usuarioNome={user?.name || user?.email || 'Diretoria AEROCAD'}
-              usuarioId={user?.id}
-              onNavigateTab={(tab) => {
-                if (
-                  tab === 'contas_pagar' ||
-                  tab === 'contas_receber' ||
-                  tab === 'fluxo_caixa' ||
-                  tab === 'extratos' ||
-                  tab === 'balancetes' ||
-                  tab === 'ativos_patrimonio' ||
-                  tab === 'relatorios' ||
-                  tab === 'relatorios_avancados' ||
-                  tab === 'plano_contas' ||
-                  tab === 'parcelas' ||
-                  tab === 'orfas'
-                ) {
-                  setActiveTab(tab)
+            <SensitiveAreaGate
+              areaKey="valuation"
+              areaTitle="Valuation da AEROCAD"
+              areaDescription="O Valuation contém projeções econômicas, valor patrimonial e múltiplos confidenciais da empresa. Confirme sua senha de acesso para visualizar."
+            >
+              <ValuationTab
+                parcelas={installments.data}
+                contasPagar={contasPagar.data}
+                contasReceber={contasReceber.data}
+                contasBancarias={contasBancarias.data}
+                ativosPatrimonio={ativosPatrimonio.data}
+                extratosTransacoes={extratosTransacoes.data}
+                balancetes={balancetesList.data}
+                canWrite={canWrite}
+                canDelete={
+                  user?.role === 'admin' ||
+                  (Array.isArray(user?.roles) && user.roles.includes('admin'))
                 }
-              }}
-            />
+                userRole={user?.role}
+                usuarioNome={user?.name || user?.email || 'Diretoria AEROCAD'}
+                usuarioId={user?.id}
+                onNavigateTab={(tab) => {
+                  if (
+                    tab === 'contas_pagar' ||
+                    tab === 'contas_receber' ||
+                    tab === 'fluxo_caixa' ||
+                    tab === 'extratos' ||
+                    tab === 'balancetes' ||
+                    tab === 'ativos_patrimonio' ||
+                    tab === 'relatorios' ||
+                    tab === 'relatorios_avancados' ||
+                    tab === 'plano_contas' ||
+                    tab === 'parcelas' ||
+                    tab === 'orfas'
+                  ) {
+                    setActiveTab(tab)
+                  }
+                }}
+              />
+            </SensitiveAreaGate>
           </TabErrorBoundary>
         </div>
       ) : activeTab === 'plano_contas' ? (

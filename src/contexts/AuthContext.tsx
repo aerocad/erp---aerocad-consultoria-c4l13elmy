@@ -60,8 +60,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const fresh = await pb.collection<UserRecord>('users').authRefresh({ requestKey: null })
       setRawUser(fresh.record)
+      const isActualAdmin =
+        fresh.record.role === 'admin' ||
+        (Array.isArray(fresh.record.roles) && fresh.record.roles.includes('admin'))
       // Se o usuário real não for admin, cancelar simulação se houver
-      if (fresh.record.role !== 'admin') {
+      if (!isActualAdmin) {
         setSimulatedRole(null)
         try {
           sessionStorage.removeItem('aerocad_simulated_role')
@@ -87,7 +90,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return pb.authStore.onChange((_, record) => {
       const rec = record as UserRecord | null
       setRawUser(rec)
-      if (!rec || rec.role !== 'admin') {
+      const isActualAdmin =
+        rec && (rec.role === 'admin' || (Array.isArray(rec.roles) && rec.roles.includes('admin')))
+      if (!isActualAdmin) {
         setSimulatedRole(null)
         try {
           sessionStorage.removeItem('aerocad_simulated_role')
@@ -118,7 +123,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const startSimulation = useCallback(
     (role: Role) => {
-      if (rawUser?.role !== 'admin') return
+      const isActualAdmin =
+        rawUser?.role === 'admin' ||
+        (Array.isArray(rawUser?.roles) && rawUser?.roles.includes('admin'))
+      if (!isActualAdmin) return
       setSimulatedRole(role)
       try {
         sessionStorage.setItem('aerocad_simulated_role', role)
@@ -151,19 +159,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     navigate('/login', { replace: true })
   }, [navigate])
 
+  const isRealAdmin = Boolean(
+    rawUser &&
+    (rawUser.role === 'admin' || (Array.isArray(rawUser.roles) && rawUser.roles.includes('admin'))),
+  )
+
   // O usuário efetivo para navegação e renderização
   const user = useMemo(() => {
     if (!rawUser) return null
-    if (rawUser.role === 'admin' && simulatedRole) {
+    if (isRealAdmin && simulatedRole) {
       return {
         ...rawUser,
         role: simulatedRole,
+        roles: [simulatedRole],
       }
     }
     return rawUser
-  }, [rawUser, simulatedRole])
+  }, [rawUser, simulatedRole, isRealAdmin])
 
-  const isSimulating = Boolean(rawUser?.role === 'admin' && simulatedRole)
+  const isSimulating = Boolean(isRealAdmin && simulatedRole)
 
   const value = useMemo(
     () => ({

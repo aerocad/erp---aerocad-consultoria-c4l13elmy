@@ -3,10 +3,8 @@ import {
   Users,
   UserPlus,
   Shield,
-  KeyRound,
   UserCheck,
   UserX,
-  AlertTriangle,
   Eye,
   Info,
   CheckCircle2,
@@ -17,6 +15,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
@@ -36,7 +35,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { CrmBadge } from '@/components/common/CrmBadge'
 import { initials } from '@/lib/format'
-import { roleLabels } from '@/lib/crm'
+import { roleLabels, getUserRoles } from '@/lib/crm'
 import pb from '@/lib/pocketbase/client'
 import { updateOne } from '@/services/api'
 import type { UserRecord, Role } from '@/types/crm'
@@ -71,18 +70,34 @@ export function GestaoUsuariosAdminSection({
   const totalAtivos = ativos.length
   const limiteAtingido = totalAtivos >= LIMITE_MAXIMO_USUARIOS_ATIVOS
 
+  const perfisDisponiveis: Array<{ role: Role; label: string; desc: string }> = [
+    {
+      role: 'admin',
+      label: 'Administrador',
+      desc: 'Acesso total a todas as áreas e configurações',
+    },
+    { role: 'comercial', label: 'Comercial', desc: 'Painel, Funil de Vendas, Clientes, Propostas' },
+    { role: 'tecnico', label: 'Técnico', desc: 'Projetos, Processos regulatórios, Documentos' },
+    { role: 'financeiro', label: 'Financeiro', desc: 'Contas, Extratos, Conciliação, Balancetes' },
+    {
+      role: 'terceiro',
+      label: 'Prestador Terceiro',
+      desc: 'Portal exclusivo de Ordens de Serviço',
+    },
+  ]
+
   // Modal Novo Usuário
   const [createOpen, setCreateOpen] = useState(false)
   const [novoNome, setNovoNome] = useState('')
   const [novoEmail, setNovoEmail] = useState('')
   const [novaSenha, setNovaSenha] = useState('')
-  const [novoPerfil, setNovoPerfil] = useState<Role>('comercial')
+  const [novosPerfis, setNovosPerfis] = useState<Role[]>(['comercial'])
   const [isSubmittingCreate, setIsSubmittingCreate] = useState(false)
 
   // Modal Editar Perfil / Status / Senha
   const [editTarget, setEditTarget] = useState<UserRecord | null>(null)
   const [editNome, setEditNome] = useState('')
-  const [editPerfil, setEditPerfil] = useState<Role>('comercial')
+  const [editPerfis, setEditPerfis] = useState<Role[]>(['comercial'])
   const [editAtivo, setEditAtivo] = useState(true)
   const [editNovaSenha, setEditNovaSenha] = useState('')
   const [isSubmittingEdit, setIsSubmittingEdit] = useState(false)
@@ -97,8 +112,34 @@ export function GestaoUsuariosAdminSection({
     setNovoNome('')
     setNovoEmail('')
     setNovaSenha('')
-    setNovoPerfil('comercial')
+    setNovosPerfis(['comercial'])
     setCreateOpen(true)
+  }
+
+  const toggleNovoPerfil = (role: Role) => {
+    setNovosPerfis((prev) => {
+      if (prev.includes(role)) {
+        if (prev.length <= 1) {
+          toast.error('O usuário deve possuir ao menos um perfil de acesso.')
+          return prev
+        }
+        return prev.filter((r) => r !== role)
+      }
+      return [...prev, role]
+    })
+  }
+
+  const toggleEditPerfil = (role: Role) => {
+    setEditPerfis((prev) => {
+      if (prev.includes(role)) {
+        if (prev.length <= 1) {
+          toast.error('O usuário deve possuir ao menos um perfil de acesso.')
+          return prev
+        }
+        return prev.filter((r) => r !== role)
+      }
+      return [...prev, role]
+    })
   }
 
   const handleCreateUser = async (e: FormEvent) => {
@@ -115,6 +156,10 @@ export function GestaoUsuariosAdminSection({
       toast.error('A senha inicial deve conter pelo menos 8 caracteres.')
       return
     }
+    if (novosPerfis.length === 0) {
+      toast.error('Selecione ao menos um perfil de acesso.')
+      return
+    }
 
     if (totalAtivos >= LIMITE_MAXIMO_USUARIOS_ATIVOS) {
       toast.error(
@@ -125,25 +170,35 @@ export function GestaoUsuariosAdminSection({
 
     setIsSubmittingCreate(true)
     try {
+      const emailLimpo = novoEmail.trim().toLowerCase()
+      const primaryRole = novosPerfis[0]
+
       await pb.collection('users').create({
         name: novoNome.trim(),
-        email: novoEmail.trim().toLowerCase(),
+        email: emailLimpo,
         password: novaSenha,
         passwordConfirm: novaSenha,
-        role: novoPerfil,
+        role: primaryRole,
+        roles: novosPerfis,
         ativo: true,
         emailVisibility: false,
-        verified: true, // Pré-verificado para permitir login direto conforme regras do app
       })
 
       toast.success(`Usuário "${novoNome.trim()}" criado com sucesso!`)
       setCreateOpen(false)
       await onReload()
     } catch (err: any) {
-      const msg =
-        err?.data?.message ||
-        err?.message ||
-        'Não foi possível criar o usuário. Verifique se o e-mail já existe.'
+      let msg = 'Não foi possível criar o usuário.'
+      const dataErrors = err?.data?.data || {}
+      if (dataErrors.email) {
+        msg = 'O e-mail informado já está em uso por outro usuário.'
+      } else if (dataErrors.password) {
+        msg = `Erro na senha: ${dataErrors.password.message || 'Mínimo de 8 caracteres.'}`
+      } else if (err?.data?.message) {
+        msg = err.data.message
+      } else if (err?.message) {
+        msg = err.message
+      }
       toast.error(`Erro ao criar usuário: ${msg}`)
     } finally {
       setIsSubmittingCreate(false)
@@ -153,7 +208,8 @@ export function GestaoUsuariosAdminSection({
   const handleOpenEdit = (target: UserRecord) => {
     setEditTarget(target)
     setEditNome(target.name || '')
-    setEditPerfil(target.role || 'comercial')
+    const roles = getUserRoles(target)
+    setEditPerfis(roles.length > 0 ? roles : ['comercial'])
     setEditAtivo(target.ativo !== false)
     setEditNovaSenha('')
   }
@@ -161,6 +217,11 @@ export function GestaoUsuariosAdminSection({
   const handleSaveEdit = async (e: FormEvent) => {
     e.preventDefault()
     if (!editTarget) return
+
+    if (editPerfis.length === 0) {
+      toast.error('O usuário deve possuir ao menos um perfil de acesso.')
+      return
+    }
 
     // Se estiver reativando e já tiver 10 ativos
     if (editTarget.ativo === false && editAtivo && totalAtivos >= LIMITE_MAXIMO_USUARIOS_ATIVOS) {
@@ -174,7 +235,8 @@ export function GestaoUsuariosAdminSection({
     try {
       const payload: Record<string, any> = {
         name: editNome.trim() || editTarget.name,
-        role: editPerfil,
+        role: editPerfis[0],
+        roles: editPerfis,
         ativo: editAtivo,
       }
 
@@ -350,11 +412,31 @@ export function GestaoUsuariosAdminSection({
               </div>
 
               <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-                {/* Perfil Exibido */}
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-semibold px-2 py-1 rounded-md bg-neutral-100 text-neutral-700 border border-neutral-200">
-                    {roleLabels[item.role] || item.role}
-                  </span>
+                {/* Perfis Exibidos (Múltiplos Badges) */}
+                <div className="flex flex-wrap items-center gap-1.5 max-w-xs justify-end">
+                  {getUserRoles(item).map((r) => (
+                    <span
+                      key={r}
+                      className={`text-[11px] font-semibold px-2 py-0.5 rounded-md border ${
+                        r === 'admin'
+                          ? 'bg-rose-50 text-rose-700 border-rose-200 font-bold'
+                          : r === 'financeiro'
+                            ? 'bg-blue-50 text-blue-700 border-blue-200'
+                            : r === 'comercial'
+                              ? 'bg-amber-50 text-amber-800 border-amber-200'
+                              : r === 'tecnico'
+                                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                : 'bg-neutral-100 text-neutral-700 border-neutral-200'
+                      }`}
+                    >
+                      {roleLabels[r] || r}
+                    </span>
+                  ))}
+                  {getUserRoles(item).length === 0 && (
+                    <span className="text-xs font-semibold px-2 py-1 rounded-md bg-neutral-100 text-neutral-700 border border-neutral-200">
+                      {roleLabels[item.role] || item.role}
+                    </span>
+                  )}
                 </div>
 
                 {isSelf ? (
@@ -500,21 +582,33 @@ export function GestaoUsuariosAdminSection({
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-xs font-semibold">Perfil de Acesso</Label>
-              <Select value={novoPerfil} onValueChange={(val) => setNovoPerfil(val as Role)}>
-                <SelectTrigger className="h-9 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="admin">Administrador (Acesso total)</SelectItem>
-                  <SelectItem value="comercial">Comercial (Funil, Clientes, Propostas)</SelectItem>
-                  <SelectItem value="tecnico">Técnico (Projetos, Processos, Modelos)</SelectItem>
-                  <SelectItem value="financeiro">
-                    Financeiro (Contas, Extratos, Balancetes)
-                  </SelectItem>
-                  <SelectItem value="terceiro">Prestador Terceiro (Portal exclusivo OS)</SelectItem>
-                </SelectContent>
-              </Select>
+              <Label className="text-xs font-semibold">
+                Perfis de Acesso (selecione uma ou mais atribuições)
+              </Label>
+              <div className="space-y-2 rounded-lg border border-neutral-200 bg-neutral-50/50 p-2.5">
+                {perfisDisponiveis.map((p) => {
+                  const checked = novosPerfis.includes(p.role)
+                  return (
+                    <label
+                      key={p.role}
+                      className="flex items-start gap-2.5 cursor-pointer hover:bg-white/80 p-1.5 rounded transition-colors"
+                    >
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={() => toggleNovoPerfil(p.role)}
+                        className="mt-0.5"
+                      />
+                      <div className="flex-1 text-xs">
+                        <span className="font-semibold text-neutral-900">{p.label}</span>
+                        <p className="text-[11px] text-neutral-500">{p.desc}</p>
+                      </div>
+                    </label>
+                  )
+                })}
+              </div>
+              <p className="text-[10px] text-neutral-400">
+                O operador terá acesso unificado a todas as áreas dos perfis marcados.
+              </p>
             </div>
 
             <div className="space-y-1.5">
@@ -592,19 +686,30 @@ export function GestaoUsuariosAdminSection({
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-xs font-semibold">Perfil de Acesso</Label>
-              <Select value={editPerfil} onValueChange={(val) => setEditPerfil(val as Role)}>
-                <SelectTrigger className="h-9 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="admin">Administrador</SelectItem>
-                  <SelectItem value="comercial">Comercial</SelectItem>
-                  <SelectItem value="tecnico">Técnico</SelectItem>
-                  <SelectItem value="financeiro">Financeiro</SelectItem>
-                  <SelectItem value="terceiro">Prestador Terceiro</SelectItem>
-                </SelectContent>
-              </Select>
+              <Label className="text-xs font-semibold">
+                Perfis de Acesso (selecione uma ou mais atribuições)
+              </Label>
+              <div className="space-y-2 rounded-lg border border-neutral-200 bg-neutral-50/50 p-2.5">
+                {perfisDisponiveis.map((p) => {
+                  const checked = editPerfis.includes(p.role)
+                  return (
+                    <label
+                      key={p.role}
+                      className="flex items-start gap-2.5 cursor-pointer hover:bg-white/80 p-1.5 rounded transition-colors"
+                    >
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={() => toggleEditPerfil(p.role)}
+                        className="mt-0.5"
+                      />
+                      <div className="flex-1 text-xs">
+                        <span className="font-semibold text-neutral-900">{p.label}</span>
+                        <p className="text-[11px] text-neutral-500">{p.desc}</p>
+                      </div>
+                    </label>
+                  )
+                })}
+              </div>
             </div>
 
             <div className="space-y-1.5">

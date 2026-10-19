@@ -141,8 +141,55 @@ export const permissions: Record<Role, string[]> = {
   terceiro: ['terceiro-portal', 'mensagens'],
 }
 
-export function canAccess(role: Role, area: string) {
-  return permissions[role]?.includes(area) ?? false
+/**
+ * Normaliza perfil único ou lista de perfis para uma lista de roles válidos.
+ */
+export function getUserRoles(userOrRole?: UserRecord | Role | Role[] | string | null): Role[] {
+  if (!userOrRole) return []
+  if (Array.isArray(userOrRole)) {
+    return userOrRole.filter(Boolean) as Role[]
+  }
+  if (typeof userOrRole === 'object') {
+    const list =
+      Array.isArray(userOrRole.roles) && userOrRole.roles.length > 0
+        ? userOrRole.roles
+        : userOrRole.role
+          ? [userOrRole.role]
+          : []
+    return list.filter(Boolean) as Role[]
+  }
+  return [userOrRole as Role]
+}
+
+/**
+ * Verifica se o usuário possui determinado perfil (ou se é admin).
+ */
+export function userHasRole(
+  userOrRole: UserRecord | Role | Role[] | string | null | undefined,
+  targetRole: Role,
+): boolean {
+  const roles = getUserRoles(userOrRole)
+  return roles.includes(targetRole)
+}
+
+/**
+ * Verifica se o usuário é administrador (possui admin entre seus perfis).
+ */
+export function isUserAdmin(userOrRole?: UserRecord | Role | Role[] | string | null): boolean {
+  return userHasRole(userOrRole, 'admin')
+}
+
+/**
+ * Verifica se o usuário (ou conjunto de perfis) tem acesso à área indicada.
+ * Acesso é a UNIÃO de todas as permissões dos perfis atribuídos.
+ */
+export function canAccess(
+  userOrRole: UserRecord | Role | Role[] | string | null | undefined,
+  area: string,
+): boolean {
+  const roles = getUserRoles(userOrRole)
+  if (roles.length === 0) return false
+  return roles.some((r) => permissions[r]?.includes(area) ?? false)
 }
 
 /**
@@ -151,9 +198,12 @@ export function canAccess(role: Role, area: string) {
  * - admin, comercial e financeiro: PODEM exibir valores em R$ (true).
  * - tecnico e terceiro (prestador): valores SEMPRE mascarados como "R$ •••••" (false).
  */
-export function canViewFinancials(role?: Role | string | null): boolean {
-  if (!role) return false
-  return role === 'admin' || role === 'comercial' || role === 'financeiro'
+export function canViewFinancials(
+  userOrRole?: UserRecord | Role | Role[] | string | null,
+): boolean {
+  const roles = getUserRoles(userOrRole)
+  if (roles.length === 0) return false
+  return roles.some((r) => r === 'admin' || r === 'comercial' || r === 'financeiro')
 }
 
 /**
@@ -162,9 +212,10 @@ export function canViewFinancials(role?: Role | string | null): boolean {
  * - admin, comercial e financeiro: PODEM visualizar e gerenciar NFS-e (true).
  * - tecnico e terceiro (prestador de serviço): NÃO têm acesso a NFS-e em nenhum lugar (false).
  */
-export function canViewNfse(role?: Role | string | null): boolean {
-  if (!role) return false
-  return role === 'admin' || role === 'comercial' || role === 'financeiro'
+export function canViewNfse(userOrRole?: UserRecord | Role | Role[] | string | null): boolean {
+  const roles = getUserRoles(userOrRole)
+  if (roles.length === 0) return false
+  return roles.some((r) => r === 'admin' || r === 'comercial' || r === 'financeiro')
 }
 
 /**
