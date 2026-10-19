@@ -114,10 +114,20 @@ export const permissions: Record<Role, string[]> = {
     'fornecedores',
     'relatorios',
     'documentos',
+    'mensagens',
     'configuracoes',
   ],
-  comercial: ['painel', 'funil', 'clientes', 'projetos', 'processos', 'financeiro', 'documentos'],
-  tecnico: ['painel', 'projetos', 'processos', 'documentos'],
+  comercial: [
+    'painel',
+    'funil',
+    'clientes',
+    'projetos',
+    'processos',
+    'financeiro',
+    'documentos',
+    'mensagens',
+  ],
+  tecnico: ['painel', 'projetos', 'processos', 'documentos', 'mensagens'],
   financeiro: [
     'painel',
     'clientes',
@@ -126,8 +136,9 @@ export const permissions: Record<Role, string[]> = {
     'pessoal',
     'fornecedores',
     'relatorios',
+    'mensagens',
   ],
-  terceiro: ['terceiro-portal'],
+  terceiro: ['terceiro-portal', 'mensagens'],
 }
 
 export function canAccess(role: Role, area: string) {

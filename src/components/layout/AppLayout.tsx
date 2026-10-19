@@ -15,6 +15,7 @@ import {
   FolderKanban,
   LogOut,
   Menu,
+  MessageSquare,
   Plus,
   Search,
   Settings,
@@ -41,6 +42,7 @@ import { AlertasDrawer } from '@/components/common/AlertasDrawer'
 import { useAlertas } from '@/contexts/AlertasContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { useFinanceiroVisibilidade } from '@/contexts/FinanceiroVisibilidadeContext'
+import { useMensagens } from '@/contexts/MensagensContext'
 import { canAccess, roleLabels } from '@/lib/crm'
 import { escapeFilter, initials } from '@/lib/format'
 import pb from '@/lib/pocketbase/client'
@@ -58,6 +60,7 @@ const navItems = [
   { key: 'fornecedores', label: 'Fornecedores', path: '/fornecedores', icon: BriefcaseBusiness },
   { key: 'relatorios', label: 'Relatórios', path: '/relatorios', icon: BarChart3 },
   { key: 'documentos', label: 'Documentos', path: '/documentos', icon: FileText },
+  { key: 'mensagens', label: 'Mensagens', path: '/mensagens', icon: MessageSquare },
   { key: 'configuracoes', label: 'Configurações', path: '/configuracoes', icon: Settings },
 ]
 
@@ -72,6 +75,7 @@ const titleMap: Record<string, string> = {
   fornecedores: 'Fornecedores & Terceiros',
   relatorios: 'Relatórios & Indicadores',
   documentos: 'Documentos',
+  mensagens: 'Mensagens & Chat Interno',
   configuracoes: 'Configurações',
   importacao: 'Importação de Base Histórica',
 }
@@ -80,6 +84,7 @@ type SearchResult = { id: string; label: string; meta: string; path: string; typ
 
 export default function AppLayout() {
   const { user, rawUser, isSimulating, simulatedRole, stopSimulation, logout } = useAuth()
+  const { naoLidasCount } = useMensagens()
   const { ocultarValores, toggleOcultarValores, podeVerValores, tooltipBloqueado } =
     useFinanceiroVisibilidade()
   const {
@@ -259,6 +264,12 @@ export default function AppLayout() {
                         />
                       </span>
                     )}
+                    {item.key === 'mensagens' && naoLidasCount > 0 && collapsed && !mobile && (
+                      <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#FF6A13] opacity-75" />
+                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#FF6A13]" />
+                      </span>
+                    )}
                   </div>
                   {(!collapsed || mobile) && <span className="flex-1 truncate">{item.label}</span>}
                   {item.key === 'painel' && urgentesCount > 0 && (!collapsed || mobile) && (
@@ -272,6 +283,14 @@ export default function AppLayout() {
                       title={`${criticosCount} crítico(s), ${atencaoCount} atenção`}
                     >
                       {urgentesCount}
+                    </span>
+                  )}
+                  {item.key === 'mensagens' && naoLidasCount > 0 && (!collapsed || mobile) && (
+                    <span
+                      className="ml-auto rounded-full px-2 py-0.5 text-[10px] font-bold tracking-tight bg-[#FF6A13] text-white"
+                      title={`${naoLidasCount} mensagem(ns) não lida(s)`}
+                    >
+                      {naoLidasCount}
                     </span>
                   )}
                 </>
@@ -458,6 +477,22 @@ export default function AppLayout() {
                 </p>
               </TooltipContent>
             </Tooltip>
+
+            {/* Botão de Mensagens Internas com Badge */}
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => navigate('/mensagens')}
+              className="relative border-[#DEDEDE] text-[#555] hover:border-[#FF6A13] hover:text-[#FF6A13]"
+              title={`Mensagens Internas (${naoLidasCount} não lidas)`}
+            >
+              <MessageSquare className="h-4 w-4" />
+              {naoLidasCount > 0 && (
+                <span className="absolute -top-1 -right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[9px] font-bold text-white bg-[#FF6A13] shadow-xs">
+                  {naoLidasCount > 9 ? '9+' : naoLidasCount}
+                </span>
+              )}
+            </Button>
 
             {/* Sininho de Notificações / Alertas por Prazo */}
             {role !== 'terceiro' && (

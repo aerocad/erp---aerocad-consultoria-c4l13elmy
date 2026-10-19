@@ -8,6 +8,18 @@ export interface UserRecord extends RecordModel {
   email: string
   avatar: string
   role: Role
+  ativo?: boolean
+}
+
+export interface MensagemRecord extends RecordModel {
+  remetente: string
+  destinatario: string
+  texto: string
+  lido: boolean
+  expand?: {
+    remetente?: UserRecord
+    destinatario?: UserRecord
+  }
 }
 
 export type OrdemServicoStatus =

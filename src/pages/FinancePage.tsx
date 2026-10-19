@@ -150,6 +150,12 @@ import {
   CentralFinanceiraHub,
   type FinanceTabKey,
 } from '@/components/financeiro/CentralFinanceiraHub'
+import {
+  ALL_FINANCE_TABS,
+  useFinanceiroAbasPersonalizadas,
+} from '@/components/financeiro/FinanceiroAbasConfig'
+import { PersonalizarAbasFinanceiroModal } from '@/components/financeiro/PersonalizarAbasFinanceiroModal'
+import { ExternalLink } from 'lucide-react'
 
 export default FinancePage
 
@@ -203,6 +209,17 @@ export function FinancePage() {
   const [projectFilter, setProjectFilter] = useState(params.get('projeto') || 'todos')
   const isMobile = useIsMobile()
   const [activeTab, setActiveTab] = useState<FinanceTabKey>('contas_pagar')
+
+  // Personalização e persistência de abas por usuário
+  const { allowedTabs, visibleTabs, visibilityMap, isTabVisible, toggleTab, restoreAll } =
+    useFinanceiroAbasPersonalizadas(user?.id, user?.role, activeTab, (tab) => setActiveTab(tab))
+
+  const handleAbrirEmNovaJanela = (tab: FinanceTabKey) => {
+    const slug = tab.replace(/_/g, '-')
+    const url = `/financeiro/modulo/${slug}`
+    window.open(url, '_blank', 'noopener,noreferrer')
+  }
+
   const [capturaMobileOpen, setCapturaMobileOpen] = useState(false)
   const [capturaRapidaMobileOpen, setCapturaRapidaMobileOpen] = useState(false)
   const [arquivoParaConferenciaCompleta, setArquivoParaConferenciaCompleta] = useState<File | null>(
@@ -1290,6 +1307,7 @@ export function FinancePage() {
         totalParcelasProjetos={installments.data.length}
         totalNotasOrfas={notasOrfas.length}
         podeAcessarValuation={canWrite}
+        onAbrirEmNovaJanela={handleAbrirEmNovaJanela}
       />
 
       {/* Indicador de filtro ativo no cabeçalho do resumo quando um ano específico estiver selecionado */}
@@ -1376,217 +1394,128 @@ export function FinancePage() {
       {/* Navegação das Abas Principais do Módulo Financeiro */}
       <div
         id="financeiro-abas-conteudo"
-        className="mt-6 flex flex-wrap items-center gap-2 border-b border-neutral-200 scroll-mt-6"
+        className="mt-6 flex flex-wrap items-center justify-between gap-2 border-b border-neutral-200 scroll-mt-6 pb-1"
       >
-        <button
-          onClick={() => setActiveTab('contas_pagar')}
-          className={`pb-3 px-3 text-xs sm:text-sm font-bold border-b-2 transition flex items-center gap-1.5 ${
-            activeTab === 'contas_pagar'
-              ? 'border-[#FF6A13] text-[#FF6A13]'
-              : 'border-transparent text-[#737373] hover:text-[#333]'
-          }`}
-        >
-          <CreditCard className="h-4 w-4" />
-          Contas a Pagar
-          {contasPagar.data.length > 0 && (
-            <span className="ml-1 rounded-full bg-neutral-100 text-neutral-700 text-[10px] px-1.5 py-0.2">
-              {contasPagar.data.length}
-            </span>
-          )}
-        </button>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {visibleTabs.map((tab) => {
+            const isActive = activeTab === tab.id
+            const Icon = tab.icon
 
-        <button
-          onClick={() => setActiveTab('credores')}
-          className={`pb-3 px-3 text-xs sm:text-sm font-bold border-b-2 transition flex items-center gap-1.5 ${
-            activeTab === 'credores'
-              ? 'border-[#FF6A13] text-[#FF6A13]'
-              : 'border-transparent text-[#737373] hover:text-[#333]'
-          }`}
-        >
-          <Building2 className="h-4 w-4" />
-          Credores
-          {credores.data.length > 0 && (
-            <span className="ml-1 rounded-full bg-orange-100 text-[#D65100] text-[10px] px-1.5 py-0.2 font-bold">
-              {credores.data.length}
-            </span>
-          )}
-        </button>
+            // Badge específica para contagens
+            let countBadge: React.ReactNode = null
+            if (tab.id === 'contas_pagar' && contasPagar.data.length > 0) {
+              countBadge = (
+                <span className="ml-1 rounded-full bg-neutral-100 text-neutral-700 text-[10px] px-1.5 py-0.2">
+                  {contasPagar.data.length}
+                </span>
+              )
+            } else if (tab.id === 'credores' && credores.data.length > 0) {
+              countBadge = (
+                <span className="ml-1 rounded-full bg-orange-100 text-[#D65100] text-[10px] px-1.5 py-0.2 font-bold">
+                  {credores.data.length}
+                </span>
+              )
+            } else if (tab.id === 'contas_bancarias' && contasBancarias.data.length > 0) {
+              countBadge = (
+                <span className="ml-1 rounded-full bg-orange-100 text-[#D65100] text-[10px] px-1.5 py-0.2 font-bold">
+                  {contasBancarias.data.filter((c: any) => c.ativo !== false).length}
+                </span>
+              )
+            } else if (tab.id === 'contas_receber') {
+              countBadge = (
+                <span className="ml-1 rounded-full bg-neutral-100 text-neutral-700 text-[10px] px-1.5 py-0.2">
+                  {installments.data.length + contasReceber.data.length}
+                </span>
+              )
+            } else if (tab.id === 'extratos' && extratos.data.length > 0) {
+              countBadge = (
+                <span className="ml-1 rounded-full bg-orange-100 text-[#D65100] text-[10px] px-1.5 py-0.2 font-bold">
+                  {extratos.data.length}
+                </span>
+              )
+            } else if (tab.id === 'ativos_patrimonio' && ativosPatrimonio.data.length > 0) {
+              countBadge = (
+                <span className="ml-1 rounded-full bg-orange-100 text-[#D65100] text-[10px] px-2 py-0.5 font-bold">
+                  {ativosPatrimonio.data.length}
+                </span>
+              )
+            } else if (tab.id === 'valuation') {
+              countBadge = (
+                <span className="ml-1 rounded-full bg-[#FFF0E6] text-[#D65100] text-[10px] px-1.5 py-0.2 font-bold border border-[#FFD2B3]">
+                  AEROCAD
+                </span>
+              )
+            } else if (tab.id === 'parcelas') {
+              countBadge = (
+                <span className="ml-1 rounded-full bg-neutral-100 text-neutral-700 text-[10px] px-1.5 py-0.2">
+                  {installments.data.length}
+                </span>
+              )
+            } else if (tab.id === 'orfas' && notasOrfas.length > 0) {
+              countBadge = (
+                <span className="ml-1 rounded-full bg-amber-100 text-amber-800 text-[10px] px-2 py-0.5">
+                  {notasOrfas.length}
+                </span>
+              )
+            }
 
-        <button
-          onClick={() => setActiveTab('contas_bancarias')}
-          className={`pb-3 px-3 text-xs sm:text-sm font-bold border-b-2 transition flex items-center gap-1.5 ${
-            activeTab === 'contas_bancarias'
-              ? 'border-[#FF6A13] text-[#FF6A13]'
-              : 'border-transparent text-[#737373] hover:text-[#333]'
-          }`}
-        >
-          <Landmark className="h-4 w-4" />
-          Contas Bancárias
-          {contasBancarias.data.length > 0 && (
-            <span className="ml-1 rounded-full bg-orange-100 text-[#D65100] text-[10px] px-1.5 py-0.2 font-bold">
-              {contasBancarias.data.filter((c: any) => c.ativo !== false).length}
-            </span>
-          )}
-        </button>
+            return (
+              <div key={tab.id} className="inline-flex items-center group">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`pb-2.5 px-2.5 text-xs sm:text-sm font-bold border-b-2 transition flex items-center gap-1.5 ${
+                    isActive
+                      ? 'border-[#FF6A13] text-[#FF6A13]'
+                      : 'border-transparent text-[#737373] hover:text-[#333]'
+                  }`}
+                >
+                  <Icon className="h-4 w-4" />
+                  <span>{tab.label}</span>
+                  {countBadge}
+                </button>
 
-        <button
-          onClick={() => setActiveTab('contas_receber')}
-          className={`pb-3 px-3 text-xs sm:text-sm font-bold border-b-2 transition flex items-center gap-1.5 ${
-            activeTab === 'contas_receber'
-              ? 'border-[#FF6A13] text-[#FF6A13]'
-              : 'border-transparent text-[#737373] hover:text-[#333]'
-          }`}
-        >
-          <Receipt className="h-4 w-4" />
-          Contas a Receber
-          <span className="ml-1 rounded-full bg-neutral-100 text-neutral-700 text-[10px] px-1.5 py-0.2">
-            {installments.data.length + contasReceber.data.length}
-          </span>
-        </button>
+                {/* Botão sutil para abrir aba em nova janela (2º monitor) */}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    handleAbrirEmNovaJanela(tab.id)
+                  }}
+                  className={`pb-2.5 px-1 text-neutral-300 hover:text-[#FF6A13] transition-colors opacity-0 group-hover:opacity-100 ${
+                    isActive ? 'opacity-80 text-[#FF6A13]/60' : ''
+                  }`}
+                  title={`Abrir "${tab.label}" em nova janela isolada (2º monitor)`}
+                >
+                  <ExternalLink className="h-3 w-3" />
+                </button>
+              </div>
+            )
+          })}
+        </div>
 
-        <button
-          onClick={() => setActiveTab('fluxo_caixa')}
-          className={`pb-3 px-3 text-xs sm:text-sm font-bold border-b-2 transition flex items-center gap-1.5 ${
-            activeTab === 'fluxo_caixa'
-              ? 'border-[#FF6A13] text-[#FF6A13]'
-              : 'border-transparent text-[#737373] hover:text-[#333]'
-          }`}
-        >
-          <BarChart3 className="h-4 w-4" />
-          Fluxo de Caixa
-        </button>
+        {/* Controles de Personalização das Abas */}
+        <div className="flex items-center gap-2 pb-2">
+          <PersonalizarAbasFinanceiroModal
+            allowedTabs={allowedTabs}
+            visibleTabs={visibleTabs}
+            visibilityMap={visibilityMap}
+            onToggleTab={toggleTab}
+            onRestoreAll={restoreAll}
+            activeTab={activeTab}
+          />
 
-        <button
-          onClick={() => setActiveTab('extratos')}
-          className={`pb-3 px-3 text-xs sm:text-sm font-bold border-b-2 transition flex items-center gap-1.5 ${
-            activeTab === 'extratos'
-              ? 'border-[#FF6A13] text-[#FF6A13]'
-              : 'border-transparent text-[#737373] hover:text-[#333]'
-          }`}
-        >
-          <FileSpreadsheet className="h-4 w-4" />
-          Extratos & Comprovantes
-          {extratos.data.length > 0 && (
-            <span className="ml-1 rounded-full bg-orange-100 text-[#D65100] text-[10px] px-1.5 py-0.2 font-bold">
-              {extratos.data.length}
-            </span>
-          )}
-        </button>
-
-        <button
-          onClick={() => setActiveTab('balancetes')}
-          className={`pb-3 px-3 text-xs sm:text-sm font-bold border-b-2 transition flex items-center gap-1.5 ${
-            activeTab === 'balancetes'
-              ? 'border-[#FF6A13] text-[#FF6A13]'
-              : 'border-transparent text-[#737373] hover:text-[#333]'
-          }`}
-        >
-          <Scale className="h-4 w-4" />
-          Balancetes Mensais
-        </button>
-
-        <button
-          onClick={() => setActiveTab('ativos_patrimonio')}
-          className={`pb-3 px-3 text-xs sm:text-sm font-bold border-b-2 transition flex items-center gap-1.5 ${
-            activeTab === 'ativos_patrimonio'
-              ? 'border-[#FF6A13] text-[#FF6A13]'
-              : 'border-transparent text-[#737373] hover:text-[#333]'
-          }`}
-        >
-          <Laptop className="h-4 w-4" />
-          Ativos & Patrimônio
-          {ativosPatrimonio.data.length > 0 && (
-            <span className="ml-1 rounded-full bg-orange-100 text-[#D65100] text-[10px] px-2 py-0.5 font-bold">
-              {ativosPatrimonio.data.length}
-            </span>
-          )}
-        </button>
-
-        <button
-          onClick={() => setActiveTab('relatorios_avancados')}
-          className={`pb-3 px-3 text-xs sm:text-sm font-bold border-b-2 transition flex items-center gap-1.5 ${
-            activeTab === 'relatorios_avancados'
-              ? 'border-[#FF6A13] text-[#FF6A13]'
-              : 'border-transparent text-[#737373] hover:text-[#333]'
-          }`}
-        >
-          <BarChart3 className="h-4 w-4" />
-          Balancete, Balanço & DRE
-        </button>
-
-        {canWrite && (
-          <button
-            onClick={() => setActiveTab('valuation')}
-            className={`pb-3 px-3 text-xs sm:text-sm font-bold border-b-2 transition flex items-center gap-1.5 ${
-              activeTab === 'valuation'
-                ? 'border-[#FF6A13] text-[#FF6A13]'
-                : 'border-transparent text-[#737373] hover:text-[#333]'
-            }`}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => handleAbrirEmNovaJanela(activeTab)}
+            className="h-8 px-2 text-xs text-neutral-600 hover:text-[#D65100] hover:bg-[#FFF0E6] gap-1"
+            title="Abrir aba atual em nova janela / monitor isolado"
           >
-            <Calculator className="h-4 w-4" />
-            Valuation
-            <span className="ml-1 rounded-full bg-[#FFF0E6] text-[#D65100] text-[10px] px-1.5 py-0.2 font-bold border border-[#FFD2B3]">
-              AEROCAD
-            </span>
-          </button>
-        )}
-
-        {canWrite && (
-          <button
-            onClick={() => setActiveTab('plano_contas')}
-            className={`pb-3 px-3 text-xs sm:text-sm font-bold border-b-2 transition flex items-center gap-1.5 ${
-              activeTab === 'plano_contas'
-                ? 'border-[#FF6A13] text-[#FF6A13]'
-                : 'border-transparent text-[#737373] hover:text-[#333]'
-            }`}
-          >
-            <BookOpen className="h-4 w-4" />
-            Plano de Contas
-          </button>
-        )}
-
-        <button
-          onClick={() => setActiveTab('relatorios')}
-          className={`pb-3 px-3 text-xs sm:text-sm font-bold border-b-2 transition flex items-center gap-1.5 ${
-            activeTab === 'relatorios'
-              ? 'border-[#FF6A13] text-[#FF6A13]'
-              : 'border-transparent text-[#737373] hover:text-[#333]'
-          }`}
-        >
-          <FileText className="h-4 w-4" />
-          Relatórios Gerenciais & Contábeis
-        </button>
-
-        <button
-          onClick={() => setActiveTab('parcelas')}
-          className={`pb-3 px-3 text-xs sm:text-sm font-bold border-b-2 transition flex items-center gap-1.5 ${
-            activeTab === 'parcelas'
-              ? 'border-[#FF6A13] text-[#FF6A13]'
-              : 'border-transparent text-[#737373] hover:text-[#333]'
-          }`}
-        >
-          <Layers className="h-4 w-4" />
-          Parcelas de Projetos ({installments.data.length})
-        </button>
-
-        {canWrite && (
-          <button
-            onClick={() => setActiveTab('orfas')}
-            className={`pb-3 px-3 text-xs sm:text-sm font-bold border-b-2 flex items-center gap-1.5 transition ${
-              activeTab === 'orfas'
-                ? 'border-[#FF6A13] text-[#FF6A13]'
-                : 'border-transparent text-[#737373] hover:text-[#333]'
-            }`}
-          >
-            <Sparkles className="h-4 w-4" />
-            Notas Órfãs
-            {notasOrfas.length > 0 && (
-              <span className="ml-1 rounded-full bg-amber-100 text-amber-800 text-[10px] px-2 py-0.5">
-                {notasOrfas.length}
-              </span>
-            )}
-          </button>
-        )}
+            <ExternalLink className="h-3.5 w-3.5 text-[#FF6A13]" />
+            <span className="hidden sm:inline">Abrir em nova janela</span>
+          </Button>
+        </div>
       </div>
 
       {activeTab === 'contas_pagar' ? (

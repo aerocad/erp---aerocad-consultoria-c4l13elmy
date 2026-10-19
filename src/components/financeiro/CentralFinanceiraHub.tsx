@@ -15,6 +15,7 @@ import {
   Building2,
   BookOpen,
   Calculator,
+  ExternalLink,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/lib/format'
@@ -98,7 +99,10 @@ export function CentralFinanceiraHub({
   totalParcelasProjetos,
   totalNotasOrfas,
   podeAcessarValuation = true,
-}: CentralFinanceiraHubProps) {
+  onAbrirEmNovaJanela,
+}: CentralFinanceiraHubProps & {
+  onAbrirEmNovaJanela?: (tab: FinanceTabKey) => void
+}) {
   const cards: HubCardConfig[] = [
     {
       id: 'credores',
@@ -525,7 +529,7 @@ export function CentralFinanceiraHub({
 
               {/* Rodapé do cartão: Estatística Viva */}
               <div className="mt-3 sm:mt-4 pt-2.5 border-t border-neutral-100 flex items-end justify-between gap-1">
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <span className="block technical-label truncate">{card.statLabel}</span>
                   <div className="mt-0.5 text-xs sm:text-sm truncate">{card.statValue}</div>
                   {card.statSubtext && (
@@ -535,15 +539,31 @@ export function CentralFinanceiraHub({
                   )}
                 </div>
 
-                <div
-                  className={cn(
-                    'flex h-6 w-6 shrink-0 items-center justify-center rounded-lg transition-all',
-                    isActive
-                      ? 'bg-[#FF6A13] text-white'
-                      : 'text-neutral-400 group-hover:bg-[#FFF6EC] group-hover:text-[#FF6A13]',
+                <div className="flex items-center gap-1 shrink-0">
+                  {onAbrirEmNovaJanela && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onAbrirEmNovaJanela(card.id)
+                      }}
+                      title={`Abrir ${card.title} em nova janela (ideal para 2º monitor)`}
+                      className="flex h-6 w-6 items-center justify-center rounded-md text-neutral-400 hover:bg-[#FFF0E6] hover:text-[#D65100] transition-colors"
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </button>
                   )}
-                >
-                  <ArrowRight className="h-3.5 w-3.5" />
+
+                  <div
+                    className={cn(
+                      'flex h-6 w-6 items-center justify-center rounded-lg transition-all',
+                      isActive
+                        ? 'bg-[#FF6A13] text-white'
+                        : 'text-neutral-400 group-hover:bg-[#FFF6EC] group-hover:text-[#FF6A13]',
+                    )}
+                  >
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </div>
                 </div>
               </div>
             </button>

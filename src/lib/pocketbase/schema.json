@@ -1,14 +1,14 @@
 {
-  "generatedAt": "2026-10-19T17:36:56.455Z",
+  "generatedAt": "2026-10-19T17:56:23.861Z",
   "collections": [
     {
       "name": "users",
       "type": "auth",
       "apiRules": {
-        "list": "@request.auth.id != '' && (id = @request.auth.id || @request.auth.role = 'admin')",
-        "view": "@request.auth.id != '' && (id = @request.auth.id || @request.auth.role = 'admin')",
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
         "create": "@request.auth.role = 'admin'",
-        "update": "@request.auth.id != '' && (@request.auth.role = 'admin' || (id = @request.auth.id && @request.body.role:changed = false))",
+        "update": "@request.auth.id != '' && (@request.auth.role = 'admin' || (id = @request.auth.id && @request.body.role:changed = false && @request.body.ativo:changed = false))",
         "delete": "@request.auth.role = 'admin'"
       },
       "fields": [
@@ -44,6 +44,12 @@
           "required": true,
           "system": false,
           "selectValues": ["admin", "comercial", "tecnico", "financeiro", "terceiro"]
+        },
+        {
+          "name": "ativo",
+          "type": "bool",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
@@ -4528,6 +4534,65 @@
       "indexes": [
         "CREATE INDEX idx_valuations_data ON valuations (data_avaliacao DESC)",
         "CREATE INDEX idx_valuations_criador ON valuations (usuario_criador)"
+      ]
+    },
+    {
+      "name": "mensagens",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && (remetente = @request.auth.id || destinatario = @request.auth.id)",
+        "view": "@request.auth.id != '' && (remetente = @request.auth.id || destinatario = @request.auth.id)",
+        "create": "@request.auth.id != '' && @request.body.remetente = @request.auth.id",
+        "update": "@request.auth.id != '' && (destinatario = @request.auth.id || remetente = @request.auth.id)",
+        "delete": "@request.auth.id != '' && (remetente = @request.auth.id || @request.auth.role = 'admin')"
+      },
+      "fields": [
+        {
+          "name": "remetente",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "destinatario",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "texto",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "lido",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_mensagens_remetente ON mensagens (remetente)",
+        "CREATE INDEX idx_mensagens_destinatario ON mensagens (destinatario)",
+        "CREATE INDEX idx_mensagens_lido ON mensagens (lido)",
+        "CREATE INDEX idx_mensagens_created ON mensagens (created)"
       ]
     }
   ]
