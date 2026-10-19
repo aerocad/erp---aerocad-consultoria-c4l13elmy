@@ -164,6 +164,7 @@ export default function ProjectDetailPage() {
     userCanViewNfseRole && (isUserAdmin(user) || userHasRole(user, 'financeiro'))
   const canEditVencimento =
     userCanViewNfseRole && (isUserAdmin(user) || userHasRole(user, 'financeiro'))
+  const canAnexarNfse = canManageFinanceiro || userCanViewNfseRole
   const canAccessClients = canAccess(user, 'clientes')
 
   const load = async () => {

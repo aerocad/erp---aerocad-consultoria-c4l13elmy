@@ -40,7 +40,7 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { useAuth } from '@/contexts/AuthContext'
 import { useFinanceiroVisibilidade } from '@/contexts/FinanceiroVisibilidadeContext'
-import { canViewFinancials, canViewNfse } from '@/lib/crm'
+import { canViewFinancials, canViewNfse, userHasAnyRole } from '@/lib/crm'
 import { formatCurrency, formatDate } from '@/lib/format'
 import { createOne, deleteOne, updateOne } from '@/services/api'
 import type { ParcelaRecord, ProjetoRecord } from '@/types/crm'
