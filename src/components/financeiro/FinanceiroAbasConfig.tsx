@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import pb from '@/lib/pocketbase/client'
 import type { FinanceTabKey } from './CentralFinanceiraHub'
 import {
   CreditCard,
@@ -161,12 +162,24 @@ export function useFinanceiroAbasPersonalizadas(
 ) {
   const canWrite = userRole === 'admin' || userRole === 'financeiro'
 
-  // Abas que o perfil do usuário pode ver
+  // Abas que o perfil do usuário pode ver (e restritas se o admin configurou menus_visiveis com prefixo fin_)
   const allowedTabs = useMemo(() => {
-    return ALL_FINANCE_TABS.filter((tab) => {
+    let list = ALL_FINANCE_TABS.filter((tab) => {
       if (tab.requiresWrite && !canWrite) return false
       return true
     })
+    // Se o usuário atual possuir restrição explícita de abas financeiras (fin_*) em menus_visiveis:
+    const currentUser = pb.authStore.record as any
+    const isAdmin =
+      currentUser?.role === 'admin' ||
+      (Array.isArray(currentUser?.roles) && currentUser?.roles.includes('admin'))
+    if (!isAdmin && currentUser?.menus_visiveis && Array.isArray(currentUser.menus_visiveis)) {
+      const finRestrictions = currentUser.menus_visiveis.filter((m: string) => m.startsWith('fin_'))
+      if (finRestrictions.length > 0) {
+        list = list.filter((tab) => finRestrictions.includes(`fin_${tab.id}`))
+      }
+    }
+    return list
   }, [canWrite])
 
   // Preferência salva de visibilidade (mapa { tabId: boolean })

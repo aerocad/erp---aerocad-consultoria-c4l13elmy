@@ -1,6 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 
 import { AreaGuard, ProtectedRoute } from '@/components/auth/RouteGuards'
+import { PrimeiroAcessoModal } from '@/components/auth/PrimeiroAcessoModal'
 import AppLayout from '@/components/layout/AppLayout'
 import { Toaster } from '@/components/ui/toaster'
 import { Toaster as Sonner } from '@/components/ui/sonner'
@@ -51,6 +52,7 @@ const App = () => (
           <MensagensProvider>
             <FinanceiroVisibilidadeProvider>
               <AlertasProvider>
+                <PrimeiroAcessoModal />
                 <Suspense fallback={<PageLoading />}>
                   <Routes>
                     <Route path="/login" element={<LoginPage />} />

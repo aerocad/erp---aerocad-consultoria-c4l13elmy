@@ -30,7 +30,9 @@ import { RelatoriosContabeisAvancadosTab } from '@/components/financeiro/Relator
 import { SensitiveAreaGate } from '@/components/auth/SensitiveAreaGate'
 import { CentralFinanceiraHub } from '@/components/financeiro/CentralFinanceiraHub'
 import { PlanoContasTab } from '@/components/financeiro/PlanoContasTab'
-import { ValuationTab } from '@/components/financeiro/ValuationTab'import { PageLoading } from '@/components/common/States'
+import { ValuationTab } from '@/components/financeiro/ValuationTab'
+import { AtivosPatrimonioTab } from '@/components/financeiro/AtivosPatrimonioTab'
+import { PageLoading } from '@/components/common/States'
 import { toast } from 'sonner'
 
 export function FinanceiroModuloFocoPage() {

@@ -236,13 +236,18 @@ export default function AppLayout() {
             <NavLink
               key={item.key}
               to={item.path}
-              className={({ isActive }) =>
-                cn(
+              className={({ isActive }) => {
+                // Correspondência precisa: para /painel apenas exatamente /painel ou /, não outros como /clientes
+                const isItemActive =
+                  item.path === '/painel'
+                    ? location.pathname === '/painel' || location.pathname === '/'
+                    : location.pathname.startsWith(item.path)
+                return cn(
                   'group relative flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-medium text-white/70 transition-colors hover:bg-white/8 hover:text-white',
-                  isActive && 'bg-white/10 text-white',
+                  isItemActive && 'bg-white/10 text-white',
                   collapsed && !mobile && 'justify-center px-2',
                 )
-              }
+              }}
               title={collapsed && !mobile ? item.label : undefined}
             >
               {({ isActive }) => (

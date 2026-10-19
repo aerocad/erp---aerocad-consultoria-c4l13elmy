@@ -203,11 +203,19 @@ export function canAccess(
   const roles = getUserRoles(userOrRole)
   if (roles.length === 0) return false
 
+  // Admin sempre vê tudo (sem restrição de menus_visiveis)
+  const isAdmin = roles.includes('admin')
+
   // Se for objeto UserRecord e possuir personalização de menus_visiveis definida pelo admin:
-  // A personalização NUNCA dá acesso além dos perfis (só restringe).
-  if (typeof userOrRole === 'object' && userOrRole !== null && 'menus_visiveis' in userOrRole) {
+  // A personalização NUNCA dá acesso além dos perfis (só restringe), e admin tem bypass total.
+  if (
+    !isAdmin &&
+    typeof userOrRole === 'object' &&
+    userOrRole !== null &&
+    'menus_visiveis' in userOrRole
+  ) {
     const custom = userOrRole.menus_visiveis
-    if (Array.isArray(custom)) {
+    if (Array.isArray(custom) && custom.length > 0) {
       if (!custom.includes(area)) {
         return false
       }

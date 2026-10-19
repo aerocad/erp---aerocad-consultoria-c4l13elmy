@@ -15,6 +15,7 @@ import {
   Trash2,
   AlertTriangle,
   UserCheck2,
+  SlidersHorizontal,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -138,12 +139,59 @@ export function GestaoUsuariosAdminSection({
     void carregarColaboradoresVinculados()
   }, [users])
 
-  // Modal Editar Perfil / Status / Senha
+  // Lista de telas/menus disponíveis no sistema AEROCAD para controle oculto
+  const MENUS_DISPONIVEIS_CONFIG: Array<{ key: string; label: string; desc: string }> = [
+    { key: 'painel', label: 'Painel Executivo', desc: 'Métricas, KPIs e alertas por prazo' },
+    { key: 'funil', label: 'Funil Comercial', desc: 'Oportunidades e propostas em negociação' },
+    { key: 'clientes', label: 'Clientes', desc: 'Cadastro de contratantes e contatos' },
+    { key: 'projetos', label: 'Projetos', desc: 'Projetos ativos, cronogramas e entregas' },
+    { key: 'processos', label: 'Processos Regulatórios', desc: 'DECEA, ANAC, COMAER e CINDACTA' },
+    {
+      key: 'financeiro',
+      label: 'Financeiro',
+      desc: 'Contas a pagar/receber, conciliação e balancetes',
+    },
+    {
+      key: 'pessoal',
+      label: 'Pessoal & Colaboradores',
+      desc: 'Equipe interna, sócios e prestadores PJ',
+    },
+    {
+      key: 'fornecedores',
+      label: 'Fornecedores & Terceiros',
+      desc: 'Cadastro de fornecedores de insumos/serviços',
+    },
+    {
+      key: 'relatorios',
+      label: 'Relatórios & Indicadores',
+      desc: 'Demonstrativos e indicadores executivos',
+    },
+    { key: 'documentos', label: 'Documentos', desc: 'Gerador e repositório de documentos' },
+    { key: 'mensagens', label: 'Mensagens Internas', desc: 'Chat direto e avisos operacionais' },
+    { key: 'configuracoes', label: 'Configurações', desc: 'Parâmetros cadastrais e configurações' },
+  ]
+
+  // Sub-abas do Financeiro para controle refinado opcional
+  const ABAS_FINANCEIRAS_CONFIG: Array<{ key: string; label: string }> = [
+    { key: 'fin_contas_pagar', label: 'Contas a Pagar' },
+    { key: 'fin_contas_receber', label: 'Contas a Receber' },
+    { key: 'fin_fluxo_caixa', label: 'Fluxo de Caixa' },
+    { key: 'fin_extratos', label: 'Extratos & Conciliação' },
+    { key: 'fin_balancetes', label: 'Balancetes Mensais' },
+    { key: 'fin_ativos_patrimonio', label: 'Ativos & Patrimônio' },
+    { key: 'fin_relatorios_avancados', label: 'Balancete/Balanço/DRE' },
+    { key: 'fin_valuation', label: 'Valuation da AEROCAD' },
+    { key: 'fin_plano_contas', label: 'Plano de Contas' },
+    { key: 'fin_relatorios', label: 'Relatórios Gerenciais' },
+  ]
+
+  // Modal Editar Perfil / Status / Senha / Menus Visíveis
   const [editTarget, setEditTarget] = useState<UserRecord | null>(null)
   const [editNome, setEditNome] = useState('')
   const [editPerfis, setEditPerfis] = useState<Role[]>(['comercial'])
   const [editAtivo, setEditAtivo] = useState(true)
   const [editNovaSenha, setEditNovaSenha] = useState('')
+  const [editMenusVisiveis, setEditMenusVisiveis] = useState<string[]>([])
   const [isSubmittingEdit, setIsSubmittingEdit] = useState(false)
 
   // Modal Exclusão Permanente de Usuário
@@ -154,6 +202,11 @@ export function GestaoUsuariosAdminSection({
   const [isDeleting, setIsDeleting] = useState(false)
 
   const handleOpenDelete = async (target: UserRecord) => {
+    if (!isRealAdmin) {
+      toast.error('Apenas administradores reais possuem permissão para excluir usuários.')
+      return
+    }
+
     if (rawUser?.id === target.id) {
       toast.error('Você não pode excluir sua própria conta de usuário logada.')
       return
@@ -176,6 +229,10 @@ export function GestaoUsuariosAdminSection({
 
   const handleConfirmDelete = async () => {
     if (!deleteTarget) return
+    if (!isRealAdmin) {
+      toast.error('Apenas administradores possuem autorização para excluir usuários.')
+      return
+    }
     if (confirmacaoDigitada.trim().toUpperCase() !== 'EXCLUIR') {
       toast.error('Digite a palavra EXCLUIR para confirmar a exclusão permanente.')
       return
@@ -351,6 +408,29 @@ export function GestaoUsuariosAdminSection({
     setEditPerfis(roles.length > 0 ? roles : ['comercial'])
     setEditAtivo(target.ativo !== false)
     setEditNovaSenha('')
+    // Carrega menus_visiveis existente ou padrão completo
+    if (Array.isArray(target.menus_visiveis) && target.menus_visiveis.length > 0) {
+      setEditMenusVisiveis([...target.menus_visiveis])
+    } else {
+      // Se ainda não configurado, inicia com todos os menus marcados como visíveis
+      setEditMenusVisiveis(MENUS_DISPONIVEIS_CONFIG.map((m) => m.key))
+    }
+  }
+
+  const toggleMenuVisivel = (key: string) => {
+    setEditMenusVisiveis((prev) => {
+      if (prev.includes(key)) {
+        return prev.filter((k) => k !== key)
+      }
+      return [...prev, key]
+    })
+  }
+
+  const marcarTodosMenus = () => {
+    setEditMenusVisiveis([
+      ...MENUS_DISPONIVEIS_CONFIG.map((m) => m.key),
+      ...ABAS_FINANCEIRAS_CONFIG.map((f) => f.key),
+    ])
   }
 
   const handleSaveEdit = async (e: FormEvent) => {
@@ -377,6 +457,7 @@ export function GestaoUsuariosAdminSection({
         role: editPerfis[0],
         roles: editPerfis,
         ativo: editAtivo,
+        menus_visiveis: editMenusVisiveis,
       }
 
       if (editNovaSenha.trim()) {
@@ -926,6 +1007,89 @@ export function GestaoUsuariosAdminSection({
                   <SelectItem value="inativo">Inativo (Acesso bloqueado)</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+
+            {/* Seção: Definição Oculta de Menus / Telas Visíveis */}
+            <div className="space-y-2 border-t pt-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-xs font-bold text-neutral-900 flex items-center gap-1.5">
+                    <SlidersHorizontal className="h-3.5 w-3.5 text-[#FF6A13]" />
+                    Visibilidade de Telas e Menus
+                  </Label>
+                  <p className="text-[11px] text-neutral-500 mt-0.5">
+                    Marque as áreas visíveis para este operador. Telas desmarcadas não aparecem na
+                    barra lateral (sem aviso de oculto). A regra é somada às permissões do perfil.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={marcarTodosMenus}
+                  className="text-[11px] h-7 text-[#FF6A13] hover:text-[#E85B06] hover:bg-orange-50 font-semibold"
+                >
+                  Marcar todos
+                </Button>
+              </div>
+
+              {/* Grid de Telas Principais */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto p-2 rounded-lg border border-neutral-200 bg-neutral-50/70">
+                {MENUS_DISPONIVEIS_CONFIG.map((m) => {
+                  const checked = editMenusVisiveis.includes(m.key)
+                  return (
+                    <label
+                      key={m.key}
+                      className={`flex items-start gap-2 p-1.5 rounded cursor-pointer transition-colors border ${
+                        checked
+                          ? 'bg-white border-orange-200 shadow-2xs'
+                          : 'bg-transparent border-transparent hover:bg-white/50 opacity-60'
+                      }`}
+                    >
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={() => toggleMenuVisivel(m.key)}
+                        className="mt-0.5 data-[state=checked]:bg-[#FF6A13] data-[state=checked]:border-[#FF6A13]"
+                      />
+                      <div className="min-w-0">
+                        <span className="text-xs font-semibold text-neutral-900 block leading-tight">
+                          {m.label}
+                        </span>
+                        <span className="text-[10px] text-neutral-500 block leading-tight truncate">
+                          {m.desc}
+                        </span>
+                      </div>
+                    </label>
+                  )
+                })}
+              </div>
+
+              {/* Sub-abas do Financeiro */}
+              {editMenusVisiveis.includes('financeiro') && (
+                <div className="mt-2 space-y-1.5 rounded-lg border border-dashed border-orange-200 bg-orange-50/30 p-2.5">
+                  <span className="text-[11px] font-bold text-neutral-800 block">
+                    Abas do Financeiro Permitidas (Refinamento)
+                  </span>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {ABAS_FINANCEIRAS_CONFIG.map((aba) => {
+                      const checked = editMenusVisiveis.includes(aba.key)
+                      return (
+                        <label
+                          key={aba.key}
+                          className="flex items-center gap-1.5 text-[11px] cursor-pointer text-neutral-700 hover:text-neutral-900"
+                        >
+                          <Checkbox
+                            checked={checked}
+                            onCheckedChange={() => toggleMenuVisivel(aba.key)}
+                            className="h-3.5 w-3.5 data-[state=checked]:bg-[#FF6A13] data-[state=checked]:border-[#FF6A13]"
+                          />
+                          <span className="truncate">{aba.label}</span>
+                        </label>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="space-y-1.5 border-t pt-3">
