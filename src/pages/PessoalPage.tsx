@@ -21,6 +21,8 @@ import {
   UserPlus,
   Users,
   XCircle,
+  UserCheck2,
+  X,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { exportarTabelaParaXlsx, ColunaXlsx } from '@/services/aerocadXlsxExporter'
@@ -368,11 +370,33 @@ export default function PessoalPage() {
     setModalOpen(true)
   }
 
+  // Mapa de colaboradores que já têm cada usuário_sistema (para validação de unicidade 1:1)
+  const mapaUsuarioJaVinculado = useMemo(() => {
+    const mapa: Record<string, ColaboradorRecord> = {}
+    colaboradores.forEach((c) => {
+      if (c.usuario_sistema) {
+        mapa[c.usuario_sistema] = c
+      }
+    })
+    return mapa
+  }, [colaboradores])
+
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
     if (!formData.nome_completo.trim() || !formData.cpf_cnpj.trim() || !formData.cargo.trim()) {
       toast.error('Preencha os campos obrigatórios: Nome Completo, CPF/CNPJ e Cargo.')
       return
+    }
+
+    // Validação 1:1: Verificar se o usuário escolhido já está vinculado a outro colaborador
+    if (formData.usuario_sistema) {
+      const colabExistente = mapaUsuarioJaVinculado[formData.usuario_sistema]
+      if (colabExistente && (!editingItem || colabExistente.id !== editingItem.id)) {
+        toast.error(
+          `Esta conta de usuário já está vinculada ao colaborador "${colabExistente.nome_completo}". A relação entre colaborador e usuário deve ser 1:1.`,
+        )
+        return
+      }
     }
 
     setSaving(true)
@@ -858,7 +882,19 @@ export default function PessoalPage() {
                               )}
                             </td>
                             <td className="px-4 py-3 font-mono text-neutral-600">
-                              {item.data_admissao ? formatDate(item.data_admissao) : '—'}
+                              <div>{item.data_admissao ? formatDate(item.data_admissao) : '—'}</div>
+                              {item.usuario_sistema && item.expand?.usuario_sistema && (
+                                <div
+                                  className="mt-1 inline-flex items-center gap-1 rounded bg-[#FFF0E6] px-1.5 py-0.5 text-[10px] font-semibold text-[#D65100] border border-[#FF6A13]/30"
+                                  title={`Conta de acesso vinculada: ${item.expand.usuario_sistema.name || item.expand.usuario_sistema.email}`}
+                                >
+                                  <UserCheck2 className="h-2.5 w-2.5 text-[#FF6A13]" />
+                                  <span className="truncate max-w-[110px]">
+                                    {item.expand.usuario_sistema.name ||
+                                      item.expand.usuario_sistema.email}
+                                  </span>
+                                </div>
+                              )}
                             </td>
                             <td className="px-4 py-3 text-right font-mono font-semibold text-neutral-800">
                               {item.remuneracao_base && item.remuneracao_base > 0
@@ -1458,25 +1494,74 @@ export default function PessoalPage() {
               )}
 
               <div className="space-y-1">
-                <Label className="text-xs">Vincular Usuário do Sistema (Login)</Label>
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-semibold text-neutral-800 flex items-center gap-1.5">
+                    <UserCheck2 className="h-3.5 w-3.5 text-[#FF6A13]" />
+                    <span>Conta de Usuário Vinculada (Login)</span>
+                  </Label>
+                  {formData.usuario_sistema && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-5 px-1.5 text-[10px] text-rose-600 hover:text-rose-700 hover:bg-rose-50 gap-0.5"
+                      onClick={() => setFormData({ ...formData, usuario_sistema: '' })}
+                      title="Desvincular usuário deste colaborador"
+                    >
+                      <X className="h-3 w-3" />
+                      Desvincular
+                    </Button>
+                  )}
+                </div>
                 <Select
                   value={formData.usuario_sistema || 'none'}
                   onValueChange={(val) =>
                     setFormData({ ...formData, usuario_sistema: val === 'none' ? '' : val })
                   }
                 >
-                  <SelectTrigger className="h-9 text-xs">
-                    <SelectValue placeholder="Selecione um usuário" />
+                  <SelectTrigger className="h-9 text-xs bg-white">
+                    <SelectValue placeholder="Selecione um usuário para vincular..." />
                   </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Nenhum usuário vinculado</SelectItem>
-                    {usuarios.map((u) => (
-                      <SelectItem key={u.id} value={u.id}>
-                        {u.name} ({u.email})
-                      </SelectItem>
-                    ))}
+                  <SelectContent className="max-h-72">
+                    <SelectItem value="none" className="text-neutral-400 italic">
+                      -- Nenhum usuário vinculado --
+                    </SelectItem>
+                    {usuarios.map((u) => {
+                      const outroColab = mapaUsuarioJaVinculado[u.id]
+                      const vinculadoAEste = editingItem && outroColab?.id === editingItem.id
+                      const vinculadoAOutro = outroColab && !vinculadoAEste
+
+                      return (
+                        <SelectItem
+                          key={u.id}
+                          value={u.id}
+                          disabled={Boolean(vinculadoAOutro)}
+                          className={vinculadoAOutro ? 'opacity-50 text-neutral-400' : ''}
+                        >
+                          <div className="flex items-center justify-between gap-2 w-full">
+                            <span>
+                              {u.name} ({u.email})
+                            </span>
+                            {vinculadoAOutro && (
+                              <span className="text-[10px] text-amber-700 italic shrink-0">
+                                (Já em: {outroColab.nome_completo})
+                              </span>
+                            )}
+                            {vinculadoAEste && (
+                              <span className="text-[10px] text-emerald-700 font-bold shrink-0">
+                                (Atual)
+                              </span>
+                            )}
+                          </div>
+                        </SelectItem>
+                      )
+                    })}
                   </SelectContent>
                 </Select>
+                <p className="text-[10px] text-neutral-500">
+                  Relação 1:1 estrita. Uma conta de usuário só pode pertencer a um colaborador da
+                  equipe.
+                </p>
               </div>
 
               <div className="space-y-1">

@@ -420,6 +420,284 @@ export async function excluirProjetoEmCascata(
   return { notasOrfasDevolvidas }
 }
 
+export interface ImpactoExclusaoUsuario {
+  usuario: {
+    id: string
+    name: string
+    email: string
+    role?: string
+    roles?: string[]
+    active?: boolean
+  }
+  isUltimoAdmin: boolean
+  isUsuarioLogado: boolean
+  colaboradorVinculado: { id: string; nome_completo: string; cargo?: string } | null
+  totalAlertasDispensados: number
+  totalMensagensEnviadas: number
+  totalAtividadesCriadas: number
+  totalOrdensServico: number
+  totalContasPagarCriadas: number
+  totalContasReceberCriadas: number
+  totalTarefasCriadas: number
+}
+
+/**
+ * Analisa as referências e impacto antes da exclusão definitiva de um usuário.
+ */
+export async function analisarImpactoExclusaoUsuario(
+  usuarioId: string,
+  usuarioLogadoId?: string,
+): Promise<ImpactoExclusaoUsuario> {
+  const user = await pb.collection('users').getOne(usuarioId)
+
+  const isUsuarioLogado = usuarioId === usuarioLogadoId
+
+  // Verificar se é o último admin
+  let isUltimoAdmin = false
+  const allUsers = await pb.collection('users').getFullList()
+  const admins = allUsers.filter((u) => {
+    const roles: string[] =
+      Array.isArray(u.roles) && u.roles.length > 0 ? u.roles : [u.role || 'tecnico']
+    return roles.includes('admin')
+  })
+  if (admins.length <= 1 && admins.some((u) => u.id === usuarioId)) {
+    isUltimoAdmin = true
+  }
+
+  // Verificar se há colaborador vinculado
+  let colaboradorVinculado: { id: string; nome_completo: string; cargo?: string } | null = null
+  try {
+    const colabs = await pb.collection('colaboradores').getFullList({
+      filter: `usuario_sistema = "${usuarioId}"`,
+    })
+    if (colabs.length > 0) {
+      colaboradorVinculado = {
+        id: colabs[0].id,
+        nome_completo: colabs[0].nome_completo || 'Colaborador sem nome',
+        cargo: colabs[0].cargo || '',
+      }
+    }
+  } catch (e) {
+    console.warn('Erro ao buscar colaborador vinculado:', e)
+  }
+
+  // Contar referências
+  let totalAlertasDispensados = 0
+  try {
+    const res = await pb.collection('alertas_dispensados').getList(1, 1, {
+      filter: `usuario = "${usuarioId}"`,
+    })
+    totalAlertasDispensados = res.totalItems
+  } catch {
+    /* intentionally ignored */
+  }
+
+  let totalMensagensEnviadas = 0
+  try {
+    const res = await pb.collection('mensagens').getList(1, 1, {
+      filter: `remetente = "${usuarioId}"`,
+    })
+    totalMensagensEnviadas = res.totalItems
+  } catch {
+    /* intentionally ignored */
+  }
+
+  let totalAtividadesCriadas = 0
+  try {
+    const res = await pb.collection('atividades').getList(1, 1, {
+      filter: `usuario = "${usuarioId}"`,
+    })
+    totalAtividadesCriadas = res.totalItems
+  } catch {
+    /* intentionally ignored */
+  }
+
+  let totalOrdensServico = 0
+  try {
+    const res = await pb.collection('ordens_servico').getList(1, 1, {
+      filter: `usuario = "${usuarioId}"`,
+    })
+    totalOrdensServico = res.totalItems
+  } catch {
+    /* intentionally ignored */
+  }
+
+  let totalContasPagarCriadas = 0
+  try {
+    const res = await pb.collection('contas_pagar').getList(1, 1, {
+      filter: `criado_por = "${usuarioId}"`,
+    })
+    totalContasPagarCriadas = res.totalItems
+  } catch {
+    /* intentionally ignored */
+  }
+
+  let totalContasReceberCriadas = 0
+  try {
+    const res = await pb.collection('contas_receber').getList(1, 1, {
+      filter: `criado_por = "${usuarioId}"`,
+    })
+    totalContasReceberCriadas = res.totalItems
+  } catch {
+    /* intentionally ignored */
+  }
+
+  let totalTarefasCriadas = 0
+  try {
+    const res = await pb.collection('tarefas').getList(1, 1, {
+      filter: `criado_por = "${usuarioId}"`,
+    })
+    totalTarefasCriadas = res.totalItems
+  } catch {
+    /* intentionally ignored */
+  }
+
+  return {
+    usuario: {
+      id: user.id,
+      name: user.name || user.email || 'Usuário',
+      email: user.email,
+      role: user.role,
+      roles: user.roles,
+      active: user.active,
+    },
+    isUltimoAdmin,
+    isUsuarioLogado,
+    colaboradorVinculado,
+    totalAlertasDispensados,
+    totalMensagensEnviadas,
+    totalAtividadesCriadas,
+    totalOrdensServico,
+    totalContasPagarCriadas,
+    totalContasReceberCriadas,
+    totalTarefasCriadas,
+  }
+}
+
+/**
+ * Executa a exclusão permanente e segura de um usuário:
+ * 1. Valida se não é o próprio usuário logado
+ * 2. Valida se não é o último administrador do sistema
+ * 3. Desvincula o colaborador associado (se houver, setando usuario_sistema = '')
+ * 4. Limpa preferências efêmeras (alertas dispensados)
+ * 5. Preserva integridade de negócio (atividades, ordens de serviço, mensagens, lançamentos financeiros mantêm seu histórico ou campos informativos)
+ * 6. Registra auditoria da exclusão
+ * 7. Deleta o registro em users, liberando vaga no limite de contas ativas
+ */
+export async function executarExclusaoUsuario(
+  usuarioId: string,
+  operador: { id: string; nome: string; email?: string },
+): Promise<void> {
+  if (usuarioId === operador.id) {
+    throw new Error('Você não pode excluir a sua própria conta de usuário logada.')
+  }
+
+  // Verificar admin único
+  const allUsers = await pb.collection('users').getFullList()
+  const admins = allUsers.filter((u) => {
+    const roles: string[] =
+      Array.isArray(u.roles) && u.roles.length > 0 ? u.roles : [u.role || 'tecnico']
+    return roles.includes('admin')
+  })
+  if (admins.length <= 1 && admins.some((u) => u.id === usuarioId)) {
+    throw new Error(
+      'Não é permitido excluir o único administrador do sistema. Promova outro usuário a administrador antes.',
+    )
+  }
+
+  const userParaExcluir = await pb.collection('users').getOne(usuarioId)
+
+  // 1. Desvincular de qualquer colaborador
+  try {
+    const colabs = await pb.collection('colaboradores').getFullList({
+      filter: `usuario_sistema = "${usuarioId}"`,
+    })
+    for (const c of colabs) {
+      await pb.collection('colaboradores').update(c.id, { usuario_sistema: '' })
+    }
+  } catch (errColab) {
+    console.warn('Erro ao desvincular usuário de colaboradores:', errColab)
+  }
+
+  // 2. Limpar dados efêmeros: alertas dispensados pelo usuário
+  try {
+    const alertas = await pb.collection('alertas_dispensados').getFullList({
+      filter: `usuario = "${usuarioId}"`,
+    })
+    for (const al of alertas) {
+      await pb
+        .collection('alertas_dispensados')
+        .delete(al.id)
+        .catch(() => null)
+    }
+  } catch (errAlertas) {
+    console.warn('Erro ao remover alertas dispensados do usuário:', errAlertas)
+  }
+
+  // 3. Registrar auditoria permanente antes de apagar
+  try {
+    await pb
+      .collection('auditoria_operacoes_bloco')
+      .create({
+        acao: 'exclusao_usuario_permanente',
+        colecao_alvo: 'users',
+        total_registros: 1,
+        ids_afetados: [usuarioId],
+        usuario: operador.id || '',
+        detalhes: {
+          usuarioExcluido: {
+            id: usuarioId,
+            nome: userParaExcluir.name,
+            email: userParaExcluir.email,
+            role: userParaExcluir.role,
+            roles: userParaExcluir.roles,
+            ativo: userParaExcluir.active,
+          },
+          operador: {
+            id: operador.id,
+            nome: operador.nome,
+            email: operador.email,
+          },
+          dataHora: new Date().toISOString(),
+        },
+        desfeito: false,
+      })
+      .catch(() => null)
+  } catch (errAudit) {
+    console.warn('Erro ao gravar log em auditoria_operacoes_bloco:', errAudit)
+  }
+
+  // Registrar também no importacoes_log (espelho de trilha administrativa)
+  try {
+    await pb
+      .collection('importacoes_log')
+      .create({
+        arquivo_nome: `AUDITORIA_EXCLUSAO_USUARIO_${(userParaExcluir.email || usuarioId).replace(/[^a-zA-Z0-9]/g, '_')}.json`,
+        tamanho_bytes: 0,
+        usuario: operador.id || null,
+        total_clientes: 0,
+        total_projetos: 0,
+        total_financeiro: 0,
+        total_comunicacoes: 0,
+        resumo: {
+          acao: 'exclusao_usuario_permanente',
+          usuarioExcluidoId: usuarioId,
+          nome: userParaExcluir.name,
+          email: userParaExcluir.email,
+          operadorId: operador.id,
+          operadorNome: operador.nome,
+          dataHora: new Date().toISOString(),
+        },
+      })
+      .catch(() => null)
+  } catch (errAudit2) {
+    console.warn('Erro ao gravar log em importacoes_log:', errAudit2)
+  }
+
+  // 4. Excluir o registro de users no PocketBase
+  await pb.collection('users').delete(usuarioId)
+}
+
 /**
  * Consulta em detalhe os vínculos de uma oportunidade comercial antes da exclusão
  */

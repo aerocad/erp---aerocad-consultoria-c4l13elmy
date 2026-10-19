@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import { useEffect } from 'react'
 import {
   Users,
   UserPlus,
@@ -11,6 +12,9 @@ import {
   XCircle,
   Pencil,
   Lock,
+  Trash2,
+  AlertTriangle,
+  UserCheck2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -39,6 +43,11 @@ import { roleLabels, getUserRoles } from '@/lib/crm'
 import pb from '@/lib/pocketbase/client'
 import { updateOne } from '@/services/api'
 import type { UserRecord, Role } from '@/types/crm'
+import {
+  analisarImpactoExclusaoUsuario,
+  executarExclusaoUsuario,
+  type ImpactoExclusaoUsuario,
+} from '@/services/exclusaoService'
 import { toast } from 'sonner'
 
 export const LIMITE_MAXIMO_USUARIOS_ATIVOS = 10
@@ -94,6 +103,37 @@ export function GestaoUsuariosAdminSection({
   const [novosPerfis, setNovosPerfis] = useState<Role[]>(['comercial'])
   const [isSubmittingCreate, setIsSubmittingCreate] = useState(false)
 
+  // Mapa de colaboradores vinculados a cada usuário (userId -> { id, nome_completo, cargo })
+  const [colaboradoresPorUsuario, setColaboradoresPorUsuario] = useState<
+    Record<string, { id: string; nome_completo: string; cargo?: string }>
+  >({})
+
+  const carregarColaboradoresVinculados = async () => {
+    try {
+      const colabs = await pb.collection('colaboradores').getFullList({
+        filter: "usuario_sistema != ''",
+        fields: 'id,nome_completo,cargo,usuario_sistema',
+      })
+      const mapa: Record<string, { id: string; nome_completo: string; cargo?: string }> = {}
+      for (const c of colabs) {
+        if (c.usuario_sistema) {
+          mapa[c.usuario_sistema] = {
+            id: c.id,
+            nome_completo: c.nome_completo || 'Colaborador',
+            cargo: c.cargo,
+          }
+        }
+      }
+      setColaboradoresPorUsuario(mapa)
+    } catch (e) {
+      console.warn('Erro ao carregar colaboradores vinculados:', e)
+    }
+  }
+
+  useEffect(() => {
+    void carregarColaboradoresVinculados()
+  }, [users])
+
   // Modal Editar Perfil / Status / Senha
   const [editTarget, setEditTarget] = useState<UserRecord | null>(null)
   const [editNome, setEditNome] = useState('')
@@ -101,6 +141,62 @@ export function GestaoUsuariosAdminSection({
   const [editAtivo, setEditAtivo] = useState(true)
   const [editNovaSenha, setEditNovaSenha] = useState('')
   const [isSubmittingEdit, setIsSubmittingEdit] = useState(false)
+
+  // Modal Exclusão Permanente de Usuário
+  const [deleteTarget, setDeleteTarget] = useState<UserRecord | null>(null)
+  const [impactoExclusao, setImpactoExclusao] = useState<ImpactoExclusaoUsuario | null>(null)
+  const [carregandoImpacto, setCarregandoImpacto] = useState(false)
+  const [confirmacaoDigitada, setConfirmacaoDigitada] = useState('')
+  const [isDeleting, setIsDeleting] = useState(false)
+
+  const handleOpenDelete = async (target: UserRecord) => {
+    if (rawUser?.id === target.id) {
+      toast.error('Você não pode excluir sua própria conta de usuário logada.')
+      return
+    }
+
+    setDeleteTarget(target)
+    setConfirmacaoDigitada('')
+    setCarregandoImpacto(true)
+    setImpactoExclusao(null)
+
+    try {
+      const impacto = await analisarImpactoExclusaoUsuario(target.id, rawUser?.id)
+      setImpactoExclusao(impacto)
+    } catch (e: any) {
+      toast.error(`Erro ao verificar impacto de exclusão: ${e?.message || e}`)
+    } finally {
+      setCarregandoImpacto(false)
+    }
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return
+    if (confirmacaoDigitada.trim().toUpperCase() !== 'EXCLUIR') {
+      toast.error('Digite a palavra EXCLUIR para confirmar a exclusão permanente.')
+      return
+    }
+
+    setIsDeleting(true)
+    try {
+      await executarExclusaoUsuario(deleteTarget.id, {
+        id: rawUser?.id || '',
+        nome: rawUser?.name || 'Administrador',
+        email: rawUser?.email,
+      })
+
+      toast.success(
+        `Usuário "${deleteTarget.name}" foi excluído definitivamente. 1 vaga foi liberada na equipe!`,
+      )
+      setDeleteTarget(null)
+      await carregarColaboradoresVinculados()
+      await onReload()
+    } catch (e: any) {
+      toast.error(`Não foi possível excluir o usuário: ${e?.message || e}`)
+    } finally {
+      setIsDeleting(false)
+    }
+  }
 
   const handleOpenCreate = () => {
     if (limiteAtingido) {
@@ -406,6 +502,15 @@ export function GestaoUsuariosAdminSection({
                         Inativo
                       </span>
                     )}
+                    {colaboradoresPorUsuario[item.id] && (
+                      <span
+                        className="inline-flex items-center gap-1 rounded-md bg-[#FFF0E6] px-2 py-0.5 text-[10px] font-semibold text-[#D65100] border border-[#FF6A13]/30"
+                        title={`Colaborador vinculado da equipe: ${colaboradoresPorUsuario[item.id].nome_completo}${colaboradoresPorUsuario[item.id].cargo ? ` (${colaboradoresPorUsuario[item.id].cargo})` : ''}`}
+                      >
+                        <UserCheck2 className="h-3 w-3 text-[#FF6A13]" />
+                        <span>Equipe: {colaboradoresPorUsuario[item.id].nome_completo}</span>
+                      </span>
+                    )}
                   </div>
                   <p className="text-xs text-neutral-500 truncate">{item.email}</p>
                 </div>
@@ -528,6 +633,17 @@ export function GestaoUsuariosAdminSection({
                             <span>Reativar</span>
                           </>
                         )}
+                      </Button>
+
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleOpenDelete(item)}
+                        className="h-8 px-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+                        title="Excluir usuário permanentemente"
+                      >
+                        <Trash2 className="h-3.5 w-3.5 mr-1" />
+                        <span>Excluir</span>
                       </Button>
                     </div>
                   )
@@ -765,6 +881,154 @@ export function GestaoUsuariosAdminSection({
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal: Exclusão Permanente de Usuário */}
+      <Dialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(o) => !o && !isDeleting && setDeleteTarget(null)}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <div className="flex items-center gap-2">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-rose-100 text-rose-600">
+                <Trash2 className="h-5 w-5" />
+              </div>
+              <div>
+                <DialogTitle className="text-base font-bold text-neutral-900">
+                  Excluir Usuário Definitivamente
+                </DialogTitle>
+                <DialogDescription className="text-xs text-neutral-500">
+                  Esta ação é irreversível e remove permanentemente a conta de acesso ao CRM.
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+
+          {carregandoImpacto ? (
+            <div className="py-8 text-center space-y-2">
+              <div className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-solid border-[#FF6A13] border-r-transparent align-[-0.125em]" />
+              <p className="text-xs text-neutral-500">
+                Analisando vínculos, registros e integridade de auditoria...
+              </p>
+            </div>
+          ) : impactoExclusao ? (
+            <div className="space-y-4 py-2 text-xs">
+              {/* Alerta de bloqueio caso seja usuário logado ou último admin */}
+              {impactoExclusao.isUsuarioLogado ? (
+                <div className="rounded-lg bg-rose-50 border border-rose-200 p-3 text-rose-800 space-y-1">
+                  <p className="font-bold flex items-center gap-1.5">
+                    <AlertTriangle className="h-4 w-4 text-rose-600" />
+                    Exclusão não permitida
+                  </p>
+                  <p>Você não pode excluir a sua própria conta atualmente logada.</p>
+                </div>
+              ) : impactoExclusao.isUltimoAdmin ? (
+                <div className="rounded-lg bg-rose-50 border border-rose-200 p-3 text-rose-800 space-y-1">
+                  <p className="font-bold flex items-center gap-1.5">
+                    <AlertTriangle className="h-4 w-4 text-rose-600" />
+                    Último administrador do sistema
+                  </p>
+                  <p>
+                    Este é o único usuário com perfil de Administrador no CRM. Promova outro usuário
+                    a administrador antes de poder excluir esta conta.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {/* Dados do usuário a excluir */}
+                  <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
+                    <div className="font-bold text-neutral-900 text-sm">
+                      {impactoExclusao.usuario.name}
+                    </div>
+                    <div className="text-neutral-500">{impactoExclusao.usuario.email}</div>
+                  </div>
+
+                  {/* Informações sobre o que acontece com os registros */}
+                  <div className="space-y-2 rounded-lg border border-neutral-200 bg-white p-3">
+                    <h4 className="font-bold text-neutral-800 text-xs">
+                      O que acontece com os registros vinculados:
+                    </h4>
+                    <ul className="space-y-1.5 text-neutral-600 list-disc pl-4 text-[11px]">
+                      <li>
+                        <strong>Histórico preservado:</strong> Contas a pagar, contas a receber,
+                        ordens de serviço, mensagens e relatórios de auditoria criados por este
+                        usuário permanecem intactos no CRM para fins fiscais e contábeis.
+                      </li>
+                      {impactoExclusao.colaboradorVinculado ? (
+                        <li className="text-amber-700">
+                          <strong>Colaborador da equipe:</strong> O colaborador{' '}
+                          <span className="font-bold">
+                            {impactoExclusao.colaboradorVinculado.nome_completo}
+                          </span>{' '}
+                          será desvinculado desta conta de login (o cadastro do colaborador em
+                          Pessoal não será apagado).
+                        </li>
+                      ) : (
+                        <li>Nenhum colaborador da equipe está vinculado a esta conta.</li>
+                      )}
+                      <li>
+                        <strong>Liberação de vaga:</strong> A exclusão libera 1 vaga no limite
+                        máximo de {LIMITE_MAXIMO_USUARIOS_ATIVOS} usuários ativos da AEROCAD.
+                      </li>
+                      <li>
+                        <strong>Auditoria:</strong> Um registro permanente da exclusão é gravado na
+                        trilha administrativa do sistema com data, hora e operador responsável.
+                      </li>
+                    </ul>
+                  </div>
+
+                  {/* Dica sobre desativar vs excluir */}
+                  <div className="rounded-lg bg-amber-50 border border-amber-200 p-2.5 text-[11px] text-amber-800 flex items-start gap-2">
+                    <Info className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                    <span>
+                      Se deseja apenas bloquear o acesso mantendo a conta no cadastro, use a opção{' '}
+                      <strong>Desativar</strong> em vez de excluir.
+                    </span>
+                  </div>
+
+                  {/* Campo de confirmação por texto */}
+                  <div className="space-y-1.5 pt-1">
+                    <Label className="text-xs font-semibold text-neutral-800">
+                      Para confirmar, digite{' '}
+                      <span className="font-mono font-bold text-rose-600">EXCLUIR</span> abaixo:
+                    </Label>
+                    <Input
+                      value={confirmacaoDigitada}
+                      onChange={(e) => setConfirmacaoDigitada(e.target.value)}
+                      placeholder="EXCLUIR"
+                      className="h-9 text-xs uppercase"
+                    />
+                  </div>
+                </>
+              )}
+
+              <DialogFooter className="pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setDeleteTarget(null)}
+                  disabled={isDeleting}
+                >
+                  Cancelar
+                </Button>
+                {!impactoExclusao.isUsuarioLogado && !impactoExclusao.isUltimoAdmin && (
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    onClick={handleConfirmDelete}
+                    disabled={isDeleting || confirmacaoDigitada.trim().toUpperCase() !== 'EXCLUIR'}
+                    className="font-bold"
+                  >
+                    {isDeleting ? 'Excluindo...' : 'Excluir definitivamente'}
+                  </Button>
+                )}
+              </DialogFooter>
+            </div>
+          ) : null}
         </DialogContent>
       </Dialog>
     </div>
