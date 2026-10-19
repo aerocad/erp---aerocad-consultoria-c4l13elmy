@@ -140,16 +140,7 @@ export const permissions: Record<Role, string[]> = {
     'mensagens',
   ],
   tecnico: ['painel', 'projetos', 'processos', 'documentos', 'mensagens'],
-  financeiro: [
-    'painel',
-    'clientes',
-    'projetos',
-    'financeiro',
-    'pessoal',
-    'fornecedores',
-    'relatorios',
-    'mensagens',
-  ],
+  financeiro: ['financeiro', 'pessoal', 'fornecedores', 'relatorios', 'mensagens'],
   terceiro: ['terceiro-portal', 'mensagens'],
 }
 
@@ -211,6 +202,18 @@ export function canAccess(
 ): boolean {
   const roles = getUserRoles(userOrRole)
   if (roles.length === 0) return false
+
+  // Se for objeto UserRecord e possuir personalização de menus_visiveis definida pelo admin:
+  // A personalização NUNCA dá acesso além dos perfis (só restringe).
+  if (typeof userOrRole === 'object' && userOrRole !== null && 'menus_visiveis' in userOrRole) {
+    const custom = userOrRole.menus_visiveis
+    if (Array.isArray(custom)) {
+      if (!custom.includes(area)) {
+        return false
+      }
+    }
+  }
+
   return roles.some((r) => permissions[r]?.includes(area) ?? false)
 }
 

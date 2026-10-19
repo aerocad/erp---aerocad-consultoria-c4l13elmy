@@ -1,10 +1,19 @@
 import { useState, useEffect, type FormEvent, type ReactNode } from 'react'
-import { Lock, ShieldAlert, KeyRound, AlertCircle } from 'lucide-react'
+import { Lock, ShieldAlert, KeyRound, AlertCircle, ShieldCheck } from 'lucide-react'
+import PocketBase from 'pocketbase'
 import pb from '@/lib/pocketbase/client'
 import { useAuth } from '@/contexts/AuthContext'
+import { isUserAdmin } from '@/lib/crm'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import {
   Dialog,
   DialogContent,
@@ -14,8 +23,14 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { toast } from 'sonner'
+import type { UserRecord } from '@/types/crm'
 
-export type SensitiveAreaKey = 'valuation' | 'relatorios_gerenciais' | 'servicos_precos'
+export type SensitiveAreaKey =
+  | 'valuation'
+  | 'relatorios_gerenciais'
+  | 'servicos_precos'
+  | 'balancetes'
+  | 'relatorios_avancados'
 
 const DURATION_MS = 15 * 60 * 1000 // 15 minutos
 
@@ -59,6 +74,12 @@ interface SensitiveAreaGateProps {
   children: ReactNode
 }
 
+interface AdminOption {
+  id: string
+  name: string
+  email: string
+}
+
 export function SensitiveAreaGate({
   areaKey,
   areaTitle,
@@ -68,55 +89,93 @@ export function SensitiveAreaGate({
   const { user, rawUser } = useAuth()
   const currentUserId = rawUser?.id || user?.id || ''
   const currentUserEmail = rawUser?.email || user?.email || ''
+  const currentUserIsAdmin = isUserAdmin(rawUser)
 
   const [isUnlocked, setIsUnlocked] = useState<boolean>(() =>
     isSensitiveAreaUnlocked(areaKey, currentUserId),
   )
   const [modalOpen, setModalOpen] = useState(false)
-  const [password, setPassword] = useState('')
+  const [adminsList, setAdminsList] = useState<AdminOption[]>([])
+  const [selectedAdminEmail, setSelectedAdminEmail] = useState<string>('')
+  const [adminPassword, setAdminPassword] = useState('')
   const [errorMsg, setErrorMsg] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [loadingAdmins, setLoadingAdmins] = useState(false)
 
-  // Verifica periodicamente ou na troca de usuário se expirou
+  // Verifica periodicamente se expirou
   useEffect(() => {
     const check = () => {
       const unlocked = isSensitiveAreaUnlocked(areaKey, currentUserId)
       setIsUnlocked(unlocked)
-      if (!unlocked) {
-        setModalOpen(true)
-      }
     }
     check()
     const timer = setInterval(check, 30 * 1000)
     return () => clearInterval(timer)
   }, [areaKey, currentUserId])
 
+  // Se o usuário não for admin, carregar a lista de administradores para que ele possa escolher qual autorizará
+  useEffect(() => {
+    if (!currentUserIsAdmin && modalOpen) {
+      setLoadingAdmins(true)
+      pb.collection<UserRecord>('users')
+        .getFullList({
+          filter: "role = 'admin' || roles ~ 'admin'",
+          fields: 'id,name,email',
+          sort: 'name',
+          requestKey: null,
+        })
+        .then((records) => {
+          const list = records
+            .filter((r) => r.email)
+            .map((r) => ({
+              id: r.id,
+              name: r.name || r.email,
+              email: r.email,
+            }))
+          setAdminsList(list)
+          if (list.length > 0 && !selectedAdminEmail) {
+            setSelectedAdminEmail(list[0].email)
+          }
+        })
+        .catch((err) => {
+          console.warn('Erro ao carregar administradores para validação de porta:', err)
+        })
+        .finally(() => setLoadingAdmins(false))
+    }
+  }, [currentUserIsAdmin, modalOpen, selectedAdminEmail])
+
   const handleConfirmPassword = async (e: FormEvent) => {
     e.preventDefault()
-    if (!password) {
-      setErrorMsg('Informe sua senha de acesso.')
+    if (!adminPassword) {
+      setErrorMsg('Informe a senha do administrador.')
       return
     }
-    if (!currentUserEmail) {
-      setErrorMsg('Usuário não autenticado.')
+
+    const emailToAuth = currentUserIsAdmin ? currentUserEmail : selectedAdminEmail
+    if (!emailToAuth) {
+      setErrorMsg('Selecione um administrador para validar.')
       return
     }
 
     setIsSubmitting(true)
     setErrorMsg('')
-    try {
-      // Reautentica com PocketBase usando o email do usuário logado e a senha informada
-      await pb
-        .collection('users')
-        .authWithPassword(currentUserEmail, password, { requestKey: null })
 
+    try {
+      // Instância isolada do PocketBase para validar a credencial do administrador
+      // SEM sobrescrever ou deslogar o authStore atual do usuário logado!
+      const tempPb = new PocketBase(pb.baseURL)
+      await tempPb.collection('users').authWithPassword(emailToAuth, adminPassword, {
+        requestKey: null,
+      })
+
+      // Validação concluída com sucesso!
       markSensitiveAreaUnlocked(areaKey, currentUserId)
       setIsUnlocked(true)
       setModalOpen(false)
-      setPassword('')
-      toast.success(`Acesso liberado a "${areaTitle}" por 15 minutos.`)
-    } catch {
-      setErrorMsg('Senha incorreta. Acesso não autorizado.')
+      setAdminPassword('')
+      toast.success(`Acesso a "${areaTitle}" liberado com sucesso por 15 minutos.`)
+    } catch (err: any) {
+      setErrorMsg('Senha do administrador incorreta. Acesso não autorizado.')
     } finally {
       setIsSubmitting(false)
     }
@@ -134,24 +193,24 @@ export function SensitiveAreaGate({
         </div>
         <div className="space-y-1">
           <h3 className="text-lg font-bold text-neutral-900">
-            Área Restrita — Confirmação de Identidade
+            Área Estratégica & Sensível — Senha do Administrador Exigida
           </h3>
           <p className="text-xs text-neutral-600">
             {areaDescription ||
-              `O acesso à seção "${areaTitle}" requer validação da senha do usuário administrador logado por motivos de conformidade e segurança.`}
+              `O acesso à seção "${areaTitle}" é restrito e exige a confirmação da senha do administrador do sistema por motivos de conformidade e governança.`}
           </p>
         </div>
 
         <Button
           onClick={() => {
             setErrorMsg('')
-            setPassword('')
+            setAdminPassword('')
             setModalOpen(true)
           }}
           className="bg-[#FF6A13] hover:bg-[#E85B06] text-white font-bold text-xs gap-1.5 shadow-sm"
         >
           <KeyRound className="h-4 w-4" />
-          Confirmar senha para desbloquear
+          {currentUserIsAdmin ? 'Confirmar minha senha de Admin' : 'Digitar senha de Administrador'}
         </Button>
       </div>
 
@@ -159,7 +218,6 @@ export function SensitiveAreaGate({
         open={modalOpen}
         onOpenChange={(o) => {
           if (!o && !isUnlocked) {
-            // Não fecha modal se não desbloqueado, apenas permite manter aberto
             setModalOpen(false)
           } else {
             setModalOpen(o)
@@ -174,29 +232,85 @@ export function SensitiveAreaGate({
               </div>
               <div>
                 <DialogTitle className="text-base font-bold text-neutral-900">
-                  Área restrita — confirme sua senha
+                  Validação de Administrador
                 </DialogTitle>
                 <DialogDescription className="text-xs text-neutral-500">
-                  {areaTitle} · Confirme as credenciais de {currentUserEmail}
+                  {areaTitle} · Autorização com credencial de administrador
                 </DialogDescription>
               </div>
             </div>
           </DialogHeader>
 
           <form onSubmit={handleConfirmPassword} className="space-y-4 py-1">
+            {currentUserIsAdmin ? (
+              <div className="rounded-lg border border-orange-200 bg-orange-50/60 p-3 text-xs text-neutral-700 flex items-start gap-2.5">
+                <ShieldCheck className="h-4 w-4 text-[#FF6A13] shrink-0 mt-0.5" />
+                <div>
+                  Você está logado como{' '}
+                  <strong className="text-neutral-900">{currentUserEmail}</strong> (Administrador).
+                  Digite sua senha pessoal para liberar o acesso.
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-[11px] text-amber-800">
+                  Esta área estratégica exige autorização expressa de um administrador. Peça ao
+                  administrador para digitar a senha.
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold text-neutral-800">
+                    Administrador responsável
+                  </Label>
+                  {loadingAdmins ? (
+                    <div className="text-xs text-neutral-400 py-1">
+                      Carregando administradores...
+                    </div>
+                  ) : adminsList.length > 0 ? (
+                    <Select
+                      value={selectedAdminEmail}
+                      onValueChange={(val) => {
+                        setSelectedAdminEmail(val)
+                        if (errorMsg) setErrorMsg('')
+                      }}
+                    >
+                      <SelectTrigger className="h-9 text-xs">
+                        <SelectValue placeholder="Selecione o administrador" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {adminsList.map((admin) => (
+                          <SelectItem key={admin.id} value={admin.email}>
+                            {admin.name} ({admin.email})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input
+                      type="email"
+                      value={selectedAdminEmail}
+                      onChange={(e) => setSelectedAdminEmail(e.target.value)}
+                      placeholder="admin@aerocad.com.br"
+                      className="h-9 text-xs"
+                    />
+                  )}
+                </div>
+              </div>
+            )}
+
             <div className="space-y-1.5">
               <Label className="text-xs font-semibold text-neutral-800">
-                Senha do usuário logado
+                {currentUserIsAdmin ? 'Sua senha de administrador' : 'Senha do administrador'}
               </Label>
               <Input
                 autoFocus
                 type="password"
-                value={password}
+                value={adminPassword}
                 onChange={(e) => {
-                  setPassword(e.target.value)
+                  setAdminPassword(e.target.value)
                   if (errorMsg) setErrorMsg('')
                 }}
-                placeholder="Digite sua senha atual"
+                placeholder="••••••••"
                 className="h-9 text-xs"
               />
               {errorMsg && (
@@ -206,7 +320,7 @@ export function SensitiveAreaGate({
                 </div>
               )}
               <p className="text-[11px] text-neutral-400">
-                Após autenticar, a área permanece liberada neste navegador por 15 minutos.
+                Após autorizar, o acesso permanece liberado nesta sessão por 15 minutos.
               </p>
             </div>
 
@@ -223,10 +337,10 @@ export function SensitiveAreaGate({
               <Button
                 type="submit"
                 size="sm"
-                disabled={isSubmitting || !password}
+                disabled={isSubmitting || !adminPassword}
                 className="bg-[#FF6A13] hover:bg-[#E85B06] text-white font-bold"
               >
-                {isSubmitting ? 'Validando...' : 'Confirmar e acessar'}
+                {isSubmitting ? 'Validando...' : 'Liberar acesso'}
               </Button>
             </DialogFooter>
           </form>

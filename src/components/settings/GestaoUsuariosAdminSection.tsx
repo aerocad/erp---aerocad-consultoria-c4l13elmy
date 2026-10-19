@@ -101,6 +101,10 @@ export function GestaoUsuariosAdminSection({
   const [novoEmail, setNovoEmail] = useState('')
   const [novaSenha, setNovaSenha] = useState('')
   const [novosPerfis, setNovosPerfis] = useState<Role[]>(['comercial'])
+  const [novoColaboradorId, setNovoColaboradorId] = useState<string>('manual')
+  const [colaboradoresDisponiveis, setColaboradoresDisponiveis] = useState<
+    Array<{ id: string; nome_completo: string; email?: string; cargo?: string }>
+  >([])
   const [isSubmittingCreate, setIsSubmittingCreate] = useState(false)
 
   // Mapa de colaboradores vinculados a cada usuário (userId -> { id, nome_completo, cargo })
@@ -209,7 +213,31 @@ export function GestaoUsuariosAdminSection({
     setNovoNome('')
     setNovoEmail('')
     setNovaSenha('')
+    setNovoColaboradorId('manual')
     setNovosPerfis(['comercial'])
+
+    // Carregar colaboradores que ainda não têm usuário_sistema vinculado
+    void pb
+      .collection('colaboradores')
+      .getFullList({
+        filter: "usuario_sistema = '' || usuario_sistema = null",
+        fields: 'id,nome_completo,email,cargo',
+        sort: 'nome_completo',
+      })
+      .then((records) => {
+        setColaboradoresDisponiveis(
+          records.map((r) => ({
+            id: r.id,
+            nome_completo: r.nome_completo || 'Colaborador',
+            email: r.email || '',
+            cargo: r.cargo || '',
+          })),
+        )
+      })
+      .catch((e) => {
+        console.warn('Erro ao listar colaboradores disponíveis:', e)
+      })
+
     setCreateOpen(true)
   }
 
@@ -270,7 +298,7 @@ export function GestaoUsuariosAdminSection({
       const emailLimpo = novoEmail.trim().toLowerCase()
       const primaryRole = novosPerfis[0]
 
-      await pb.collection('users').create({
+      const createdUser = await pb.collection('users').create({
         name: novoNome.trim(),
         email: emailLimpo,
         password: novaSenha,
@@ -278,11 +306,25 @@ export function GestaoUsuariosAdminSection({
         role: primaryRole,
         roles: novosPerfis,
         ativo: true,
+        primeiro_acesso: true,
         emailVisibility: false,
       })
 
+      // Se um colaborador foi escolhido, vinculá-lo imediatamente à nova conta
+      if (novoColaboradorId && novoColaboradorId !== 'manual') {
+        try {
+          await pb.collection('colaboradores').update(novoColaboradorId, {
+            usuario_sistema: createdUser.id,
+          })
+        } catch (vincErr) {
+          console.warn('Erro ao vincular colaborador ao novo usuário:', vincErr)
+          toast.warning('Usuário criado, mas houve aviso ao vincular colaborador.')
+        }
+      }
+
       toast.success(`Usuário "${novoNome.trim()}" criado com sucesso!`)
       setCreateOpen(false)
+      await carregarColaboradoresVinculados()
       await onReload()
     } catch (err: any) {
       let msg = 'Não foi possível criar o usuário.'
@@ -675,6 +717,47 @@ export function GestaoUsuariosAdminSection({
           </DialogHeader>
 
           <form onSubmit={handleCreateUser} className="space-y-3.5 py-1">
+            {/* Seletor de Colaborador da Equipe Técnica */}
+            <div className="space-y-1.5 bg-neutral-50 p-2.5 rounded-lg border border-neutral-200">
+              <Label className="text-xs font-semibold text-neutral-800 flex items-center justify-between">
+                <span>Vincular Colaborador da Equipe (Opcional)</span>
+                {novoColaboradorId !== 'manual' && (
+                  <span className="text-[10px] text-emerald-700 font-bold">
+                    Colaborador selecionado
+                  </span>
+                )}
+              </Label>
+              <Select
+                value={novoColaboradorId}
+                onValueChange={(val) => {
+                  setNovoColaboradorId(val)
+                  if (val === 'manual') return
+                  const colab = colaboradoresDisponiveis.find((c) => c.id === val)
+                  if (colab) {
+                    if (colab.nome_completo) setNovoNome(colab.nome_completo)
+                    if (colab.email) setNovoEmail(colab.email)
+                  }
+                }}
+              >
+                <SelectTrigger className="h-9 text-xs bg-white">
+                  <SelectValue placeholder="Preenchimento manual (ou selecione da lista)" />
+                </SelectTrigger>
+                <SelectContent className="max-h-60">
+                  <SelectItem value="manual">-- Preenchimento manual livre --</SelectItem>
+                  {colaboradoresDisponiveis.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.nome_completo} {c.cargo ? `(${c.cargo})` : ''}{' '}
+                      {c.email ? `— ${c.email}` : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[10px] text-neutral-500">
+                Selecione para preencher nome e e-mail automaticamente e vincular o colaborador à
+                nova conta.
+              </p>
+            </div>
+
             <div className="space-y-1.5">
               <Label className="text-xs font-semibold">Nome completo</Label>
               <Input

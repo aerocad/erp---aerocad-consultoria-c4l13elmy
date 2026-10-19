@@ -10,6 +10,8 @@ export interface UserRecord extends RecordModel {
   role: Role
   roles?: Role[]
   ativo?: boolean
+  primeiro_acesso?: boolean
+  menus_visiveis?: string[] | null
 }
 
 export interface MensagemRecord extends RecordModel {

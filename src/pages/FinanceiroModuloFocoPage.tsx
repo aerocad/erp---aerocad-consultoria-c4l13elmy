@@ -27,10 +27,10 @@ import { ExtratosComprovantesTab } from '@/components/financeiro/ExtratosComprov
 import { BalancetesTab } from '@/components/financeiro/BalancetesTab'
 import { RelatoriosFinanceirosTab } from '@/components/financeiro/RelatoriosFinanceirosTab'
 import { RelatoriosContabeisAvancadosTab } from '@/components/financeiro/RelatoriosContabeisAvancadosTab'
-import { AtivosPatrimonioTab } from '@/components/financeiro/AtivosPatrimonioTab'
+import { SensitiveAreaGate } from '@/components/auth/SensitiveAreaGate'
+import { CentralFinanceiraHub } from '@/components/financeiro/CentralFinanceiraHub'
 import { PlanoContasTab } from '@/components/financeiro/PlanoContasTab'
-import { ValuationTab } from '@/components/financeiro/ValuationTab'
-import { PageLoading } from '@/components/common/States'
+import { ValuationTab } from '@/components/financeiro/ValuationTab'import { PageLoading } from '@/components/common/States'
 import { toast } from 'sonner'
 
 export function FinanceiroModuloFocoPage() {
@@ -304,23 +304,29 @@ export function FinanceiroModuloFocoPage() {
               }}
             />
           ) : tabKey === 'valuation' && canWrite ? (
-            <ValuationTab
-              parcelas={installments.data}
-              contasPagar={contasPagar.data}
-              contasReceber={contasReceber.data}
-              contasBancarias={contasBancarias.data}
-              ativosPatrimonio={ativosPatrimonio.data}
-              extratosTransacoes={extratosTransacoes.data}
-              balancetes={balancetesList.data}
-              canWrite={canWrite}
-              canDelete={user?.role === 'admin'}
-              userRole={user?.role}
-              usuarioNome={user?.name || user?.email || 'Diretoria AEROCAD'}
-              usuarioId={user?.id}
-              onNavigateTab={(tab) => {
-                navigate(`/financeiro/modulo/${tab.replace(/_/g, '-')}`)
-              }}
-            />
+            <SensitiveAreaGate
+              areaKey="valuation"
+              areaTitle="Valuation da AEROCAD"
+              areaDescription="O Valuation contém projeções econômicas, valor patrimonial e múltiplos confidenciais da empresa. Acesso exclusivo mediante senha do administrador."
+            >
+              <ValuationTab
+                parcelas={installments.data}
+                contasPagar={contasPagar.data}
+                contasReceber={contasReceber.data}
+                contasBancarias={contasBancarias.data}
+                ativosPatrimonio={ativosPatrimonio.data}
+                extratosTransacoes={extratosTransacoes.data}
+                balancetes={balancetesList.data}
+                canWrite={canWrite}
+                canDelete={user?.role === 'admin'}
+                userRole={user?.role}
+                usuarioNome={user?.name || user?.email || 'Diretoria AEROCAD'}
+                usuarioId={user?.id}
+                onNavigateTab={(tab) => {
+                  navigate(`/financeiro/modulo/${tab.replace(/_/g, '-')}`)
+                }}
+              />
+            </SensitiveAreaGate>
           ) : tabKey === 'plano_contas' && canWrite ? (
             <PlanoContasTab
               contasPagar={contasPagar.data}
@@ -337,13 +343,19 @@ export function FinanceiroModuloFocoPage() {
               }}
             />
           ) : tabKey === 'relatorios' ? (
-            <RelatoriosFinanceirosTab
-              parcelas={installments.data}
-              contasPagar={contasPagar.data}
-              contasReceber={contasReceber.data}
-              projetos={projects.data}
-              clientes={clients.data}
-            />
+            <SensitiveAreaGate
+              areaKey="relatorios_gerenciais"
+              areaTitle="Relatórios Gerenciais Financeiros"
+              areaDescription="Os relatórios gerenciais e contábeis consolidam faturamento bruto/líquido, aging de inadimplência e rentabilidade. Confirme a senha do administrador para visualizar."
+            >
+              <RelatoriosFinanceirosTab
+                parcelas={installments.data}
+                contasPagar={contasPagar.data}
+                contasReceber={contasReceber.data}
+                projetos={projects.data}
+                clientes={clients.data}
+              />
+            </SensitiveAreaGate>
           ) : (
             <div className="crm-card p-8 text-center">
               <p className="text-neutral-600 font-semibold">

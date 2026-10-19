@@ -49,6 +49,7 @@ import {
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { SensitiveAreaGate } from '@/components/auth/SensitiveAreaGate'
 import { RelatorioSaldoAFaturarCliente } from '@/components/financeiro/RelatorioSaldoAFaturarCliente'
 import { useAuth } from '@/contexts/AuthContext'
 import { useFinanceiroVisibilidade } from '@/contexts/FinanceiroVisibilidadeContext'
@@ -1577,249 +1578,256 @@ export default function ReportsPage() {
         {/* ABA 4: FINANCEIRO & CONCENTRAÇÃO */}
         {/* ========================================================= */}
         <TabsContent value="financeiro" className="space-y-6">
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <SensitiveAreaGate
+            areaKey="relatorios_gerenciais"
+            areaTitle="Relatórios Gerenciais Financeiros & Concentração"
+            areaDescription="Indicadores consolidados de faturamento, faturamento por cliente e distribuição de recebimentos exigem a senha do administrador."
+          >
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="crm-card p-5">
+                <p className="technical-label">TOTAL FATURADO / RECEBIDO</p>
+                <p className="mono-value mt-2 text-2xl font-bold text-[#248A57]">
+                  {formatCurrency(financeiro.faturado)}
+                </p>
+                <p className="mt-1 text-xs text-[#8A8A8A]">Parcelas quitadas no período</p>
+              </div>
+
+              <div className="crm-card p-5">
+                <p className="technical-label">A RECEBER (EM ABERTO)</p>
+                <p className="mono-value mt-2 text-2xl font-bold text-sky-600">
+                  {formatCurrency(financeiro.aReceber)}
+                </p>
+                <p className="mt-1 text-xs text-[#8A8A8A]">Parcelas a vencer</p>
+              </div>
+
+              <div className="crm-card p-5">
+                <p className="technical-label">INADIMPLÊNCIA / VENCIDO</p>
+                <p className="mono-value mt-2 text-2xl font-bold text-red-600">
+                  {formatCurrency(financeiro.vencido)}
+                </p>
+                <p className="mt-1 text-xs text-[#8A8A8A]">Requerem cobrança ativa</p>
+              </div>
+
+              <div className="crm-card p-5">
+                <p className="technical-label">CONCENTRAÇÃO TOP 3 CLIENTES</p>
+                <p className="mono-value mt-2 text-2xl font-bold text-[#FF6A13]">
+                  {financeiro.concentracaoTop3.toFixed(1)}%
+                </p>
+                <p className="mt-1 text-xs text-[#8A8A8A]">Da receita total da carteira</p>
+              </div>
+            </div>
+
+            {/* Painel de Faturamento de Projetos por NFS-e (Inferência) */}
+            <div className="crm-card p-5 bg-gradient-to-br from-white to-[#FFF9F5] border-[#FFD2B3]">
+              <div className="mb-4 flex flex-wrap items-center justify-between border-b border-[#FFD2B3]/60 pb-3 gap-2">
+                <div>
+                  <p className="technical-label">STATUS DE FATURAMENTO DOS PROJETOS (NFS-E)</p>
+                  <h3 className="text-base font-bold text-[#4B4B4B]">
+                    Confronto de Projetos Contratados × Faturados em Notas
+                  </h3>
+                </div>
+                <Link to="/projetos" className="text-xs font-bold text-[#FF6A13] hover:underline">
+                  Ver todos os projetos →
+                </Link>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-1">
+                <div className="rounded-lg bg-white p-3 border border-emerald-200">
+                  <span className="text-[10px] text-emerald-800 font-bold uppercase block">
+                    100% Faturados (Integral)
+                  </span>
+                  <span className="mono-value font-black text-2xl text-emerald-700">
+                    {financeiro.projetosFaturamentoIntegral}
+                  </span>
+                  <span className="text-[11px] text-neutral-500 block mt-0.5">
+                    Projetos quitados em notas
+                  </span>
+                </div>
+
+                <div className="rounded-lg bg-white p-3 border border-orange-200">
+                  <span className="text-[10px] text-[#D65100] font-bold uppercase block">
+                    Pagamento Parcial
+                  </span>
+                  <span className="mono-value font-black text-2xl text-[#FF6A13]">
+                    {financeiro.projetosPagamentoParcial}
+                  </span>
+                  <span className="text-[11px] text-neutral-500 block mt-0.5">
+                    Com faturamento em andamento
+                  </span>
+                </div>
+
+                <div className="rounded-lg bg-white p-3 border border-neutral-200">
+                  <span className="text-[10px] text-neutral-600 font-bold uppercase block">
+                    Sem NFS-e Vinculada
+                  </span>
+                  <span className="mono-value font-black text-2xl text-neutral-700">
+                    {financeiro.projetosSemNfse}
+                  </span>
+                  <span className="text-[11px] text-neutral-500 block mt-0.5">
+                    Aguardando emissão
+                  </span>
+                </div>
+
+                <div className="rounded-lg bg-white p-3 border border-neutral-200">
+                  <span className="text-[10px] text-neutral-600 font-bold uppercase block">
+                    Total Faturado em NFS-e
+                  </span>
+                  <span className="mono-value font-bold text-lg text-emerald-700">
+                    {formatCurrency(financeiro.totalFaturadoNfseProjetos)}
+                  </span>
+                  <span className="text-[11px] text-neutral-500 block mt-0.5">
+                    Soma nominal das notas
+                  </span>
+                </div>
+
+                <div className="rounded-lg bg-white p-3 border border-neutral-200">
+                  <span className="text-[10px] text-neutral-600 font-bold uppercase block">
+                    Saldo a Faturar
+                  </span>
+                  <span className="mono-value font-bold text-lg text-[#FF6A13]">
+                    {formatCurrency(financeiro.totalSaldoAFaturarProjetos)}
+                  </span>
+                  <span className="text-[11px] text-neutral-500 block mt-0.5">
+                    Contratado restante
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Relatório Analítico: Saldo a Faturar por Cliente para Cobrança Ativa (Restrito Admin / Financeiro) */}
+            {canViewFinancialDetails && (
+              <RelatorioSaldoAFaturarCliente
+                clientes={clientesData.data}
+                projetos={projetosData.data}
+                parcelas={parcelasData.data}
+              />
+            )}
+
+            {/* Gráfico de Barras por Mês do Ano Selecionável */}
             <div className="crm-card p-5">
-              <p className="technical-label">TOTAL FATURADO / RECEBIDO</p>
-              <p className="mono-value mt-2 text-2xl font-bold text-[#248A57]">
-                {formatCurrency(financeiro.faturado)}
-              </p>
-              <p className="mt-1 text-xs text-[#8A8A8A]">Parcelas quitadas no período</p>
+              <div className="mb-4 flex items-center justify-between border-b pb-3">
+                <div>
+                  <p className="technical-label">FLUXO FINANCEIRO MENSAL</p>
+                  <h3 className="text-base font-bold text-[#4B4B4B]">
+                    Faturado × A Receber × Vencido ({selectedYear})
+                  </h3>
+                </div>
+                <Link to="/financeiro" className="text-xs font-bold text-[#FF6A13] hover:underline">
+                  Abrir Financeiro Completo →
+                </Link>
+              </div>
+
+              <div className="h-72 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={financeiro.evolucaoMes}
+                    margin={{ top: 10, right: 10, left: 10, bottom: 5 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E5E5" />
+                    <XAxis dataKey="mes" tick={{ fill: '#737373', fontSize: 11 }} />
+                    <YAxis
+                      tick={{ fill: '#737373', fontSize: 11 }}
+                      tickFormatter={(val) => formatCurrency(val)}
+                    />
+                    <Tooltip
+                      formatter={(val: number) => [formatCurrency(val)]}
+                      contentStyle={{
+                        backgroundColor: '#FFF',
+                        border: '1px solid #DEDEDE',
+                        borderRadius: '8px',
+                        fontSize: '12px',
+                      }}
+                    />
+                    <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
+                    <Bar
+                      dataKey="faturado"
+                      name="Faturado / Recebido"
+                      fill="#248A57"
+                      radius={[4, 4, 0, 0]}
+                    />
+                    <Bar dataKey="aReceber" name="A Receber" fill="#0284C7" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="vencido" name="Vencido" fill="#DC2626" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             </div>
 
+            {/* Concentração de Receita por Cliente (Top 3 e ranking) */}
             <div className="crm-card p-5">
-              <p className="technical-label">A RECEBER (EM ABERTO)</p>
-              <p className="mono-value mt-2 text-2xl font-bold text-sky-600">
-                {formatCurrency(financeiro.aReceber)}
-              </p>
-              <p className="mt-1 text-xs text-[#8A8A8A]">Parcelas a vencer</p>
-            </div>
-
-            <div className="crm-card p-5">
-              <p className="technical-label">INADIMPLÊNCIA / VENCIDO</p>
-              <p className="mono-value mt-2 text-2xl font-bold text-red-600">
-                {formatCurrency(financeiro.vencido)}
-              </p>
-              <p className="mt-1 text-xs text-[#8A8A8A]">Requerem cobrança ativa</p>
-            </div>
-
-            <div className="crm-card p-5">
-              <p className="technical-label">CONCENTRAÇÃO TOP 3 CLIENTES</p>
-              <p className="mono-value mt-2 text-2xl font-bold text-[#FF6A13]">
-                {financeiro.concentracaoTop3.toFixed(1)}%
-              </p>
-              <p className="mt-1 text-xs text-[#8A8A8A]">Da receita total da carteira</p>
-            </div>
-          </div>
-
-          {/* Painel de Faturamento de Projetos por NFS-e (Inferência) */}
-          <div className="crm-card p-5 bg-gradient-to-br from-white to-[#FFF9F5] border-[#FFD2B3]">
-            <div className="mb-4 flex flex-wrap items-center justify-between border-b border-[#FFD2B3]/60 pb-3 gap-2">
-              <div>
-                <p className="technical-label">STATUS DE FATURAMENTO DOS PROJETOS (NFS-E)</p>
-                <h3 className="text-base font-bold text-[#4B4B4B]">
-                  Confronto de Projetos Contratados × Faturados em Notas
-                </h3>
-              </div>
-              <Link to="/projetos" className="text-xs font-bold text-[#FF6A13] hover:underline">
-                Ver todos os projetos →
-              </Link>
-            </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-1">
-              <div className="rounded-lg bg-white p-3 border border-emerald-200">
-                <span className="text-[10px] text-emerald-800 font-bold uppercase block">
-                  100% Faturados (Integral)
-                </span>
-                <span className="mono-value font-black text-2xl text-emerald-700">
-                  {financeiro.projetosFaturamentoIntegral}
-                </span>
-                <span className="text-[11px] text-neutral-500 block mt-0.5">
-                  Projetos quitados em notas
-                </span>
+              <div className="mb-4 flex items-center justify-between border-b pb-3">
+                <div>
+                  <p className="technical-label">DISTRIBUIÇÃO DE CARTEIRA</p>
+                  <h3 className="text-base font-bold text-[#4B4B4B]">
+                    Concentração de Receita por Cliente
+                  </h3>
+                </div>
+                <CrmBadge tone="orange">
+                  Top 3: {financeiro.concentracaoTop3.toFixed(1)}% do total
+                </CrmBadge>
               </div>
 
-              <div className="rounded-lg bg-white p-3 border border-orange-200">
-                <span className="text-[10px] text-[#D65100] font-bold uppercase block">
-                  Pagamento Parcial
-                </span>
-                <span className="mono-value font-black text-2xl text-[#FF6A13]">
-                  {financeiro.projetosPagamentoParcial}
-                </span>
-                <span className="text-[11px] text-neutral-500 block mt-0.5">
-                  Com faturamento em andamento
-                </span>
-              </div>
-
-              <div className="rounded-lg bg-white p-3 border border-neutral-200">
-                <span className="text-[10px] text-neutral-600 font-bold uppercase block">
-                  Sem NFS-e Vinculada
-                </span>
-                <span className="mono-value font-black text-2xl text-neutral-700">
-                  {financeiro.projetosSemNfse}
-                </span>
-                <span className="text-[11px] text-neutral-500 block mt-0.5">
-                  Aguardando emissão
-                </span>
-              </div>
-
-              <div className="rounded-lg bg-white p-3 border border-neutral-200">
-                <span className="text-[10px] text-neutral-600 font-bold uppercase block">
-                  Total Faturado em NFS-e
-                </span>
-                <span className="mono-value font-bold text-lg text-emerald-700">
-                  {formatCurrency(financeiro.totalFaturadoNfseProjetos)}
-                </span>
-                <span className="text-[11px] text-neutral-500 block mt-0.5">
-                  Soma nominal das notas
-                </span>
-              </div>
-
-              <div className="rounded-lg bg-white p-3 border border-neutral-200">
-                <span className="text-[10px] text-neutral-600 font-bold uppercase block">
-                  Saldo a Faturar
-                </span>
-                <span className="mono-value font-bold text-lg text-[#FF6A13]">
-                  {formatCurrency(financeiro.totalSaldoAFaturarProjetos)}
-                </span>
-                <span className="text-[11px] text-neutral-500 block mt-0.5">
-                  Contratado restante
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Relatório Analítico: Saldo a Faturar por Cliente para Cobrança Ativa (Restrito Admin / Financeiro) */}
-          {canViewFinancialDetails && (
-            <RelatorioSaldoAFaturarCliente
-              clientes={clientesData.data}
-              projetos={projetosData.data}
-              parcelas={parcelasData.data}
-            />
-          )}
-
-          {/* Gráfico de Barras por Mês do Ano Selecionável */}
-          <div className="crm-card p-5">
-            <div className="mb-4 flex items-center justify-between border-b pb-3">
-              <div>
-                <p className="technical-label">FLUXO FINANCEIRO MENSAL</p>
-                <h3 className="text-base font-bold text-[#4B4B4B]">
-                  Faturado × A Receber × Vencido ({selectedYear})
-                </h3>
-              </div>
-              <Link to="/financeiro" className="text-xs font-bold text-[#FF6A13] hover:underline">
-                Abrir Financeiro Completo →
-              </Link>
-            </div>
-
-            <div className="h-72 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={financeiro.evolucaoMes}
-                  margin={{ top: 10, right: 10, left: 10, bottom: 5 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E5E5" />
-                  <XAxis dataKey="mes" tick={{ fill: '#737373', fontSize: 11 }} />
-                  <YAxis
-                    tick={{ fill: '#737373', fontSize: 11 }}
-                    tickFormatter={(val) => formatCurrency(val)}
+              {/* Barra de Concentração Gráfica */}
+              <div className="mb-6 space-y-2">
+                <div className="flex justify-between text-xs font-semibold text-[#737373]">
+                  <span>Top 3 Clientes Estratégicos</span>
+                  <span>
+                    Restante da Carteira (
+                    {Math.max(0, 100 - financeiro.concentracaoTop3).toFixed(1)}
+                    %)
+                  </span>
+                </div>
+                <div className="h-4 w-full rounded-full bg-zinc-100 overflow-hidden flex">
+                  <div
+                    className="bg-[#FF6A13] h-full"
+                    style={{ width: `${Math.min(100, financeiro.concentracaoTop3)}%` }}
+                    title={`Top 3 Clientes: ${financeiro.concentracaoTop3.toFixed(1)}%`}
                   />
-                  <Tooltip
-                    formatter={(val: number) => [formatCurrency(val)]}
-                    contentStyle={{
-                      backgroundColor: '#FFF',
-                      border: '1px solid #DEDEDE',
-                      borderRadius: '8px',
-                      fontSize: '12px',
-                    }}
+                  <div
+                    className="bg-zinc-300 h-full"
+                    style={{ width: `${Math.max(0, 100 - financeiro.concentracaoTop3)}%` }}
+                    title="Demais clientes"
                   />
-                  <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
-                  <Bar
-                    dataKey="faturado"
-                    name="Faturado / Recebido"
-                    fill="#248A57"
-                    radius={[4, 4, 0, 0]}
-                  />
-                  <Bar dataKey="aReceber" name="A Receber" fill="#0284C7" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="vencido" name="Vencido" fill="#DC2626" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          {/* Concentração de Receita por Cliente (Top 3 e ranking) */}
-          <div className="crm-card p-5">
-            <div className="mb-4 flex items-center justify-between border-b pb-3">
-              <div>
-                <p className="technical-label">DISTRIBUIÇÃO DE CARTEIRA</p>
-                <h3 className="text-base font-bold text-[#4B4B4B]">
-                  Concentração de Receita por Cliente
-                </h3>
+                </div>
               </div>
-              <CrmBadge tone="orange">
-                Top 3: {financeiro.concentracaoTop3.toFixed(1)}% do total
-              </CrmBadge>
-            </div>
 
-            {/* Barra de Concentração Gráfica */}
-            <div className="mb-6 space-y-2">
-              <div className="flex justify-between text-xs font-semibold text-[#737373]">
-                <span>Top 3 Clientes Estratégicos</span>
-                <span>
-                  Restante da Carteira ({Math.max(0, 100 - financeiro.concentracaoTop3).toFixed(1)}
-                  %)
-                </span>
-              </div>
-              <div className="h-4 w-full rounded-full bg-zinc-100 overflow-hidden flex">
-                <div
-                  className="bg-[#FF6A13] h-full"
-                  style={{ width: `${Math.min(100, financeiro.concentracaoTop3)}%` }}
-                  title={`Top 3 Clientes: ${financeiro.concentracaoTop3.toFixed(1)}%`}
-                />
-                <div
-                  className="bg-zinc-300 h-full"
-                  style={{ width: `${Math.max(0, 100 - financeiro.concentracaoTop3)}%` }}
-                  title="Demais clientes"
-                />
-              </div>
-            </div>
+              {/* Lista dos Top Clientes */}
+              <div className="divide-y text-xs">
+                {financeiro.rankingClientes.slice(0, 5).map((cli, idx) => (
+                  <div
+                    key={cli.id}
+                    className="flex items-center justify-between py-3 hover:bg-[#FFF6EC]/30 px-2 rounded-lg"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#F2F2F2] font-mono text-xs font-bold text-[#4B4B4B]">
+                        {idx + 1}
+                      </span>
+                      <div>
+                        <Link
+                          to={`/clientes/${cli.id}`}
+                          className="font-bold text-sm text-[#4B4B4B] hover:text-[#FF6A13] hover:underline"
+                        >
+                          {cli.razao}
+                        </Link>
+                        <p className="text-[#8A8A8A] text-[11px]">
+                          Recebido: {formatCurrency(cli.totalFaturado)} · A receber:{' '}
+                          {formatCurrency(cli.totalAberto)}
+                        </p>
+                      </div>
+                    </div>
 
-            {/* Lista dos Top Clientes */}
-            <div className="divide-y text-xs">
-              {financeiro.rankingClientes.slice(0, 5).map((cli, idx) => (
-                <div
-                  key={cli.id}
-                  className="flex items-center justify-between py-3 hover:bg-[#FFF6EC]/30 px-2 rounded-lg"
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#F2F2F2] font-mono text-xs font-bold text-[#4B4B4B]">
-                      {idx + 1}
-                    </span>
-                    <div>
-                      <Link
-                        to={`/clientes/${cli.id}`}
-                        className="font-bold text-sm text-[#4B4B4B] hover:text-[#FF6A13] hover:underline"
-                      >
-                        {cli.razao}
-                      </Link>
-                      <p className="text-[#8A8A8A] text-[11px]">
-                        Recebido: {formatCurrency(cli.totalFaturado)} · A receber:{' '}
-                        {formatCurrency(cli.totalAberto)}
+                    <div className="text-right">
+                      <p className="mono-value font-bold text-sm text-[#333]">
+                        {formatCurrency(cli.total)}
                       </p>
+                      <span className="mono-value font-bold text-[#FF6A13] text-[11px]">
+                        {cli.percentual.toFixed(1)}% do total
+                      </span>
                     </div>
                   </div>
-
-                  <div className="text-right">
-                    <p className="mono-value font-bold text-sm text-[#333]">
-                      {formatCurrency(cli.total)}
-                    </p>
-                    <span className="mono-value font-bold text-[#FF6A13] text-[11px]">
-                      {cli.percentual.toFixed(1)}% do total
-                    </span>
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
+          </SensitiveAreaGate>
         </TabsContent>
 
         {/* ========================================================= */}
