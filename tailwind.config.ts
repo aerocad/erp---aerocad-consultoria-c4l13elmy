@@ -27,8 +27,10 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ['Inter var', 'SF Pro Display', 'system-ui', 'sans-serif'],
-        display: ['SF Pro Display', 'Inter var', 'system-ui', 'sans-serif'],
+        // [TESTE ROBOTO UI] Para voltar ao Arial, descomentar a linha abaixo e remover/comentar Roboto:
+        // sans: ['Arial', 'Helvetica', 'sans-serif'],
+        sans: ['Roboto', 'Arial', 'Helvetica', 'sans-serif'],
+        display: ['Roboto', 'Arial', 'Helvetica', 'sans-serif'],
       },
       colors: {
         border: 'hsl(var(--border))',

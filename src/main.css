@@ -61,10 +61,13 @@
     @apply border-border;
   }
   html {
-    font-family: Arial, Helvetica, sans-serif;
+    /* [TESTE ROBOTO UI] Fonte da INTERFACE do CRM AEROCAD em teste para avaliação.
+       Para voltar ao Arial original da identidade visual, basta trocar a linha abaixo para:
+       font-family: Arial, Helvetica, sans-serif; */
+    font-family: 'Roboto', Arial, Helvetica, sans-serif;
   }
   body {
-    @apply bg-background text-foreground antialiased;
+    @apply bg-background text-foreground antialiased font-sans;
     min-width: 320px;
   }
   button,
@@ -227,15 +230,22 @@ thead {
   break-inside: avoid !important;
 }
 
-/* Blindagem dos Documentos e Relatórios Oficiais na Impressão */
+/* Blindagem dos Documentos e Relatórios Oficiais: permanecem estritamente em Arial */
 #print-document,
-#print-document * {
+#print-document *,
+.eva-doc,
+.eva-doc *,
+.po-doc,
+.po-doc *,
+.os-container,
+.os-container * {
   color-scheme: light !important;
-  background-color: transparent !important;
+  font-family: Arial, Helvetica, sans-serif;
 }
 #print-document {
   background-color: #ffffff !important;
   color: #2d2d2d !important;
+  font-family: Arial, Helvetica, sans-serif !important;
 }
 
 /* Blindagem definitiva do logotipo nos documentos A4 e @media print */
