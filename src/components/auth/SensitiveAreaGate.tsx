@@ -238,7 +238,9 @@ export function SensitiveAreaGate({
     // Regra estrita de segurança:
     // Se o logado não é admin, NUNCA permitir autenticar com o email do próprio logado!
     if (!currentUserIsAdmin && emailToAuth === currentUserEmail.trim().toLowerCase()) {
-      setErrorMsg('Acesso negado: a senha do próprio usuário não-administrador não é aceita.')
+      setErrorMsg(
+        'Acesso negado: a senha do próprio usuário não-administrador é recusada. É necessária a autenticação de um administrador.',
+      )
       return
     }
 

@@ -6,8 +6,8 @@ import { Button } from '@/components/ui/button'
 
 export default function NotFound() {
   return (
-    <main className="auth-grid flex min-h-screen items-center justify-center bg-[#FFF6EC] p-4">
-      <div className="w-full max-w-lg rounded-2xl border bg-white p-9 text-center shadow-xl">
+    <main className="auth-grid flex min-h-screen items-center justify-center p-4">
+      <div className="w-full max-w-lg rounded-2xl border border-white/20 bg-white/95 p-9 text-center shadow-[0_22px_70px_rgba(0,0,0,0.35)] backdrop-blur">
         <div className="flex justify-center">
           <AerocadLogo className="h-10 w-auto max-w-[240px] object-contain" />
         </div>

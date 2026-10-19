@@ -48,10 +48,10 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="auth-grid relative min-h-screen overflow-hidden bg-[#FFF6EC] px-4 py-10">
-      <div className="pointer-events-none absolute -right-24 -top-28 h-80 w-80 rounded-full border-[48px] border-[#FF6A13]/10" />
+    <main className="auth-grid relative min-h-screen overflow-hidden px-4 py-10">
+      <div className="pointer-events-none absolute -right-24 -top-28 h-80 w-80 rounded-full border-[48px] border-white/5" />
       <div className="relative mx-auto flex min-h-[calc(100vh-5rem)] max-w-md items-center">
-        <div className="w-full rounded-2xl border border-white/80 bg-white/95 p-7 shadow-[0_22px_70px_rgba(89,89,89,0.15)] sm:p-9">
+        <div className="w-full rounded-2xl border border-white/20 bg-white/95 p-7 shadow-[0_22px_70px_rgba(0,0,0,0.35)] sm:p-9 backdrop-blur">
           <div className="flex justify-center">
             <AerocadLogo className="h-12 w-auto max-w-[280px] object-contain" />
           </div>

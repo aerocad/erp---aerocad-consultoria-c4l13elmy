@@ -30,8 +30,8 @@ export default function RecoverPasswordPage() {
   }
 
   return (
-    <main className="auth-grid flex min-h-screen items-center justify-center bg-[#FFF6EC] p-4">
-      <div className="w-full max-w-md rounded-2xl border bg-white p-8 shadow-xl">
+    <main className="auth-grid flex min-h-screen items-center justify-center p-4">
+      <div className="w-full max-w-md rounded-2xl border border-white/20 bg-white/95 p-8 shadow-[0_22px_70px_rgba(0,0,0,0.35)] backdrop-blur">
         <div className="flex justify-center">
           <AerocadLogo className="h-10 w-auto max-w-[240px] object-contain" />
         </div>

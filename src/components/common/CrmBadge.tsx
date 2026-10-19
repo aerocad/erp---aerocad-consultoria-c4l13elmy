@@ -26,7 +26,7 @@ export function CrmBadge({
   return (
     <Badge
       variant="outline"
-      className={cn('whitespace-nowrap font-medium', tones[tone], className)}
+      className={cn('whitespace-nowrap text-xs font-semibold px-2 py-0.5', tones[tone], className)}
     >
       {children}
     </Badge>
