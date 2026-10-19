@@ -64,10 +64,13 @@ import {
   canAccess,
   canViewFinancials,
   canViewNfse,
+  isUserAdmin,
   osStatusColors,
   osStatusLabels,
   trailLabels,
   trailPhases,
+  userHasAnyRole,
+  userHasRole,
 } from '@/lib/crm'
 import { formatCurrency, formatDate } from '@/lib/format'
 import { createOne, deleteOne, getOne, listAll, updateOne } from '@/services/api'
@@ -145,22 +148,23 @@ export default function ProjectDetailPage() {
   >('geral')
   const [arquivarModalOpen, setArquivarModalOpen] = useState(false)
   const [converterOppModalOpen, setConverterOppModalOpen] = useState(false)
-  const canWrite = ['admin', 'comercial', 'tecnico'].includes(user?.role || '')
-  const isAdmin = user?.role === 'admin'
-  const canConvertOpp = ['admin', 'comercial'].includes(user?.role || '')
-  const canManageOS = ['admin', 'tecnico'].includes(user?.role || '')
-  const canEditName = ['admin', 'tecnico'].includes(user?.role || '')
-  const canEditProject = ['admin', 'tecnico', 'financeiro'].includes(user?.role || '')
-  const canArchive = ['admin', 'tecnico'].includes(user?.role || '')
-  const canManageFinanceiro = ['admin', 'financeiro'].includes(user?.role || '')
-  const canGerarMinutaCobranca = ['admin', 'financeiro', 'comercial'].includes(user?.role || '')
-  const userCanViewFinancials = canViewFinancials(user?.role)
-  const userCanViewNfseRole = canViewNfse(user?.role)
-  const canAnexarNfse = userCanViewNfseRole && ['admin', 'financeiro'].includes(user?.role || '')
-  const canExcluirNfse = userCanViewNfseRole && ['admin', 'financeiro'].includes(user?.role || '')
+  const canWrite = userHasAnyRole(user, ['admin', 'comercial', 'tecnico'])
+  const isAdmin = isUserAdmin(user)
+  const canConvertOpp = userHasAnyRole(user, ['admin', 'comercial'])
+  const canManageOS = userHasAnyRole(user, ['admin', 'tecnico'])
+  const canEditName = userHasAnyRole(user, ['admin', 'tecnico'])
+  const canEditProject = userHasAnyRole(user, ['admin', 'tecnico', 'financeiro'])
+  const canArchive = userHasAnyRole(user, ['admin', 'tecnico'])
+  const canManageFinanceiro = userHasAnyRole(user, ['admin', 'financeiro'])
+  const canGerarMinutaCobranca = userHasAnyRole(user, ['admin', 'financeiro', 'comercial'])
+  const userCanViewFinancials = canViewFinancials(user)
+  const userCanViewNfseRole = canViewNfse(user)
+  const canDeleteProject = isUserAdmin(user)
+  const canExcluirNfse =
+    userCanViewNfseRole && (isUserAdmin(user) || userHasRole(user, 'financeiro'))
   const canEditVencimento =
-    userCanViewNfseRole && ['admin', 'financeiro'].includes(user?.role || '')
-  const canAccessClients = canAccess(user?.role, 'clientes')
+    userCanViewNfseRole && (isUserAdmin(user) || userHasRole(user, 'financeiro'))
+  const canAccessClients = canAccess(user, 'clientes')
 
   const load = async () => {
     setLoading(true)

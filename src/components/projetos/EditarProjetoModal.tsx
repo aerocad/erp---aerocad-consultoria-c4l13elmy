@@ -74,8 +74,8 @@ export function EditarProjetoModal({
   const isAdmin = user?.role === 'admin'
   const isTecnico = user?.role === 'tecnico'
   const isFinanceiro = user?.role === 'financeiro'
-  const canSeeClients = canAccess(user?.role, 'clientes')
-  const canSeeFinanceTab = canViewFinancials(user?.role)
+  const canSeeClients = canAccess(user, 'clientes')
+  const canSeeFinanceTab = canViewFinancials(user)
   const canEditGeneral = isAdmin || isTecnico
   const canEditValues = (isAdmin || isFinanceiro) && canSeeFinanceTab
 

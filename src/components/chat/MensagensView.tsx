@@ -19,7 +19,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { useAuth } from '@/contexts/AuthContext'
 import { useMensagens } from '@/contexts/MensagensContext'
-import { roleLabels } from '@/lib/crm'
+import { formatUserRoles } from '@/lib/crm'
 import { initials } from '@/lib/format'
 import type { UserRecord, MensagemRecord } from '@/types/crm'
 
@@ -88,7 +88,7 @@ export function MensagensView() {
       (c) =>
         c.name.toLowerCase().includes(q) ||
         c.email.toLowerCase().includes(q) ||
-        (roleLabels[c.role] || '').toLowerCase().includes(q),
+        formatUserRoles(c).toLowerCase().includes(q),
     )
   }, [colegas, busca])
 
@@ -257,8 +257,11 @@ export function MensagensView() {
                     </div>
 
                     <div className="flex items-center gap-1.5 mt-0.5">
-                      <span className="text-[10px] px-1.5 py-0.2 rounded bg-neutral-100 text-neutral-600 font-medium">
-                        {roleLabels[colega.role] || colega.role}
+                      <span
+                        className="text-[10px] px-1.5 py-0.2 rounded bg-neutral-100 text-neutral-600 font-medium truncate max-w-[170px]"
+                        title={formatUserRoles(colega)}
+                      >
+                        {formatUserRoles(colega)}
                       </span>
                       {!isAtivo && <span className="text-[9px] text-neutral-400">(inativo)</span>}
                     </div>
@@ -316,8 +319,11 @@ export function MensagensView() {
                     <h3 className="text-xs sm:text-sm font-bold text-neutral-900 truncate">
                       {colegaSelecionado.name}
                     </h3>
-                    <span className="text-[10px] font-semibold text-[#D65100] bg-orange-100 px-1.5 py-0.2 rounded">
-                      {roleLabels[colegaSelecionado.role] || colegaSelecionado.role}
+                    <span
+                      className="text-[10px] font-semibold text-[#D65100] bg-orange-100 px-1.5 py-0.2 rounded"
+                      title={formatUserRoles(colegaSelecionado)}
+                    >
+                      {formatUserRoles(colegaSelecionado)}
                     </span>
                   </div>
                   <p className="text-[11px] text-neutral-500 truncate">{colegaSelecionado.email}</p>

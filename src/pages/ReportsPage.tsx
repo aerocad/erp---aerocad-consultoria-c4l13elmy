@@ -53,7 +53,14 @@ import { RelatorioSaldoAFaturarCliente } from '@/components/financeiro/Relatorio
 import { useAuth } from '@/contexts/AuthContext'
 import { useFinanceiroVisibilidade } from '@/contexts/FinanceiroVisibilidadeContext'
 import { useCrmData } from '@/hooks/use-crm-data'
-import { canViewFinancials, stageColors, stageLabels, trailLabels, trailPhases } from '@/lib/crm'
+import {
+  canViewFinancials,
+  stageColors,
+  stageLabels,
+  trailLabels,
+  trailPhases,
+  userHasAnyRole,
+} from '@/lib/crm'
 import { formatCurrency, formatDate } from '@/lib/format'
 import { calcularResumoFinanceiroTodosProjetos } from '@/services/projetoFinanceiroInferidor'
 import type {
@@ -104,10 +111,9 @@ export default function ReportsPage() {
   const navigate = useNavigate()
   const currentYear = new Date().getFullYear().toString()
 
-  const canSeeFinance = canViewFinancials(user?.role)
+  const canSeeFinance = canViewFinancials(user)
   // Controle de permissão para visualização de valores internos de faturamento/cobrança
-  const canViewFinancialDetails =
-    canSeeFinance && ['admin', 'financeiro'].includes(user?.role || '')
+  const canViewFinancialDetails = canSeeFinance && userHasAnyRole(user, ['admin', 'financeiro'])
 
   // Filtros principais
   const [selectedYear, setSelectedYear] = useState<string>(currentYear)

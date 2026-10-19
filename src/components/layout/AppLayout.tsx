@@ -43,7 +43,7 @@ import { useAlertas } from '@/contexts/AlertasContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { useFinanceiroVisibilidade } from '@/contexts/FinanceiroVisibilidadeContext'
 import { useMensagens } from '@/contexts/MensagensContext'
-import { canAccess, roleLabels } from '@/lib/crm'
+import { canAccess, formatUserRoles, getUserRoles, roleLabels } from '@/lib/crm'
 import { escapeFilter, initials } from '@/lib/format'
 import pb from '@/lib/pocketbase/client'
 import { cn } from '@/lib/utils'
@@ -106,14 +106,18 @@ export default function AppLayout() {
   const [results, setResults] = useState<SearchResult[]>([])
   const [searching, setSearching] = useState(false)
   const role = user?.role || 'comercial'
+  const userRoles = useMemo(() => getUserRoles(user), [user])
+  const isOnlyTerceiro = userRoles.length === 1 && userRoles[0] === 'terceiro'
+  const isUserAdmin = userRoles.includes('admin')
 
   useEffect(() => {
-    if (role === 'terceiro' && !location.pathname.startsWith('/prestador')) {
+    if (isOnlyTerceiro && !location.pathname.startsWith('/prestador')) {
       navigate('/prestador', { replace: true })
     }
-  }, [role, location.pathname, navigate])
+  }, [isOnlyTerceiro, location.pathname, navigate])
 
-  const items = useMemo(() => navItems.filter((item) => canAccess(role, item.key)), [role])
+  // Filtra itens de navegação pela UNIÃO de todos os perfis atribuídos ao usuário
+  const items = useMemo(() => navItems.filter((item) => canAccess(user, item.key)), [user])
   const currentKey = location.pathname.split('/')[1] || 'painel'
   const title = titleMap[currentKey] || 'CRM AEROCAD'
 
@@ -128,7 +132,7 @@ export default function AppLayout() {
       setSearching(true)
       const q = escapeFilter(query.trim())
       try {
-        const canSearchClients = canAccess(role, 'clientes')
+        const canSearchClients = canAccess(user, 'clientes')
         const [clients, projects, processes] = await Promise.all([
           canSearchClients
             ? pb.collection<ClienteRecord>('clientes').getList(1, 5, {
@@ -316,7 +320,9 @@ export default function AppLayout() {
             {(!collapsed || mobile) && (
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold">{user?.name}</p>
-                <p className="truncate text-[11px] text-white/50">{roleLabels[role]}</p>
+                <p className="truncate text-[11px] text-white/50" title={formatUserRoles(user)}>
+                  {formatUserRoles(user)}
+                </p>
               </div>
             )}
           </div>
@@ -495,7 +501,7 @@ export default function AppLayout() {
             </Button>
 
             {/* Sininho de Notificações / Alertas por Prazo */}
-            {role !== 'terceiro' && (
+            {!isOnlyTerceiro && (
               <Button
                 variant="outline"
                 size="icon"
@@ -525,32 +531,32 @@ export default function AppLayout() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-52">
-                {canAccess(role, 'funil') && (
+                {canAccess(user, 'funil') && (
                   <DropdownMenuItem onSelect={() => navigate('/funil?novo=1')}>
                     Nova oportunidade
                   </DropdownMenuItem>
                 )}
-                {canAccess(role, 'clientes') && (
+                {canAccess(user, 'clientes') && (
                   <DropdownMenuItem onSelect={() => navigate('/clientes?novo=1')}>
                     Novo cliente
                   </DropdownMenuItem>
                 )}
-                {canAccess(role, 'projetos') && (
+                {canAccess(user, 'projetos') && (
                   <DropdownMenuItem onSelect={() => navigate('/projetos?novo=1')}>
                     Novo projeto
                   </DropdownMenuItem>
                 )}
-                {canAccess(role, 'processos') && (
+                {canAccess(user, 'processos') && (
                   <DropdownMenuItem onSelect={() => navigate('/processos?novo=1')}>
                     Novo processo
                   </DropdownMenuItem>
                 )}
-                {canAccess(role, 'documentos') && (
+                {canAccess(user, 'documentos') && (
                   <DropdownMenuItem onSelect={() => navigate('/documentos/novo')}>
                     Gerar documento
                   </DropdownMenuItem>
                 )}
-                {role === 'admin' && (
+                {isUserAdmin && (
                   <DropdownMenuItem onSelect={() => navigate('/configuracoes/importacao')}>
                     <FileSpreadsheet className="mr-2 h-4 w-4 text-[#FF6A13]" />
                     Importar planilha
@@ -569,7 +575,7 @@ export default function AppLayout() {
         <footer className="border-t border-[var(--app-header-border,#DEDEDE)] px-5 py-4 text-center text-xs text-[#8A8A8A]">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-2 max-w-[1440px] mx-auto">
             <div>
-              CRM AEROCAD · v1 <span className="mx-2">•</span> Perfil: {roleLabels[role]}
+              CRM AEROCAD · v1 <span className="mx-2">•</span> Perfis: {formatUserRoles(user)}
               {isSimulating && (
                 <span className="ml-1 text-amber-600 font-semibold">(Modo de Simulação Ativo)</span>
               )}

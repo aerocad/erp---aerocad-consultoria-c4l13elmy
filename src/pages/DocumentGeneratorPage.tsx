@@ -97,8 +97,8 @@ export default function DocumentGeneratorPage() {
   const [searchParams] = useSearchParams()
   const initialProjectId = searchParams.get('projeto') || ''
 
-  const canSeeClients = canAccess(user?.role, 'clientes')
-  const canSeeFinance = canViewFinancials(user?.role)
+  const canSeeClients = canAccess(user, 'clientes')
+  const canSeeFinance = canViewFinancials(user)
 
   const [templates, setTemplates] = useState<ModeloRecord[]>([])
   const [clients, setClients] = useState<ClienteRecord[]>([])

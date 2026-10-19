@@ -58,13 +58,13 @@ export function AssistenteSecaoDrawer({
   floatingBottomClass = 'bottom-6 right-6',
 }: AssistenteSecaoDrawerProps) {
   const { user } = useAuth()
-  const role = user?.role || 'comercial'
 
   // Regra mínima de autorização:
-  // Se for especificada área de permissão, respeita canAccess da sidebar.
-  // Terceiros nunca têm acesso a assistentes internos.
+  // Se for especificada área de permissão, respeita canAccess da sidebar (união de perfis).
+  // Se o usuário tiver APENAS o perfil 'terceiro', não tem acesso a assistentes internos.
+  const isOnlyTerceiro = user?.role === 'terceiro' && (!user?.roles || user.roles.length <= 1)
   const isAutorizado = Boolean(
-    user && role !== 'terceiro' && (!areaPermissao || canAccess(role, areaPermissao)),
+    user && !isOnlyTerceiro && (!areaPermissao || canAccess(user, areaPermissao)),
   )
 
   const [aberto, setAberto] = useState(isOpen ?? false)

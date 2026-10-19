@@ -17,7 +17,7 @@ export function ProtectedRoute() {
 
 export function AreaGuard({ area }: { area: string }) {
   const { user, isSimulating } = useAuth()
-  const allowed = Boolean(user && canAccess(user.role, area))
+  const allowed = Boolean(user && canAccess(user, area))
   useEffect(() => {
     if (!allowed) {
       if (isSimulating) {
@@ -30,7 +30,10 @@ export function AreaGuard({ area }: { area: string }) {
     }
   }, [allowed, isSimulating, user?.role, area])
   if (!allowed) {
-    const fallback = user?.role === 'terceiro' ? '/prestador' : '/painel'
+    // Redireciona para /prestador apenas se o usuário tiver apenas o perfil terceiro; caso contrário /painel
+    const roles = user?.roles && user.roles.length > 0 ? user.roles : user?.role ? [user.role] : []
+    const isOnlyTerceiro = roles.length === 1 && roles[0] === 'terceiro'
+    const fallback = isOnlyTerceiro ? '/prestador' : '/painel'
     return <Navigate to={fallback} replace />
   }
   return <Outlet />

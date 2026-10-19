@@ -48,7 +48,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { useAuth } from '@/contexts/AuthContext'
 import { useCrmData } from '@/hooks/use-crm-data'
-import { roleLabels } from '@/lib/crm'
+import { SensitiveAreaGate } from '@/components/auth/SensitiveAreaGate'
+import { isUserAdmin, roleLabels } from '@/lib/crm'
 import { formatCurrency, initials } from '@/lib/format'
 import pb from '@/lib/pocketbase/client'
 import { createOne, updateOne } from '@/services/api'
@@ -106,8 +107,8 @@ export default function SettingsPage() {
     enabled: loadedTabs.has('contas_bancarias'),
   })
 
-  const isRealAdmin = rawUser?.role === 'admin'
-  const isAdmin = user?.role === 'admin'
+  const isRealAdmin = isUserAdmin(rawUser)
+  const isAdmin = isUserAdmin(user)
   const [templateOpen, setTemplateOpen] = useState(false)
   const [editingTemplate, setEditingTemplate] = useState<ModeloRecord | null>(null)
   const [tpl, setTpl] = useState({ nome: '', categoria: 'outro', corpo: '' })
@@ -373,39 +374,45 @@ export default function SettingsPage() {
           )}
         </TabsContent>
         <TabsContent value="servicos">
-          {services.loading ? (
-            <PageLoading label="Carregando serviços e tabela de preços..." />
-          ) : services.error ? (
-            <ErrorState onRetry={() => void services.reload()} />
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {services.data.map((item) => (
-                <article key={item.id} className="crm-card p-5">
-                  <div className="flex items-start justify-between">
-                    <span className="mono-value font-black text-[#D65100]">{item.codigo}</span>
-                    <Button variant="ghost" size="icon" onClick={() => setService(item)}>
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                  </div>
-                  <h2 className="mt-2 font-bold">{item.nome}</h2>
-                  <p className="mono-value mt-4 text-xl font-bold">
-                    {formatCurrency(item.preco_padrao)}
-                  </p>
-                  <p className="mt-1 text-xs text-[#737373]">
-                    Faixa: {formatCurrency(item.faixa_min)} a {formatCurrency(item.faixa_max)}
-                  </p>
-                  <div className="mt-4 border-t pt-3">
-                    <p className="text-xs text-[#737373]">
-                      {item.base_normativa} · {item.prazo_tipico}
+          <SensitiveAreaGate
+            areaKey="servicos_precos"
+            areaTitle="Serviços e Preços"
+            areaDescription="A tabela de serviços e preços base da AEROCAD contém parâmetros comerciais e de faturamento estratégicos. Confirme sua senha de acesso para visualizar e editar."
+          >
+            {services.loading ? (
+              <PageLoading label="Carregando serviços e tabela de preços..." />
+            ) : services.error ? (
+              <ErrorState onRetry={() => void services.reload()} />
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {services.data.map((item) => (
+                  <article key={item.id} className="crm-card p-5">
+                    <div className="flex items-start justify-between">
+                      <span className="mono-value font-black text-[#D65100]">{item.codigo}</span>
+                      <Button variant="ghost" size="icon" onClick={() => setService(item)}>
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <h2 className="mt-2 font-bold">{item.nome}</h2>
+                    <p className="mono-value mt-4 text-xl font-bold">
+                      {formatCurrency(item.preco_padrao)}
                     </p>
-                    <CrmBadge tone="orange" className="mt-2">
-                      Pacote 3+: {item.desconto_pacote_percentual}%
-                    </CrmBadge>
-                  </div>
-                </article>
-              ))}
-            </div>
-          )}
+                    <p className="mt-1 text-xs text-[#737373]">
+                      Faixa: {formatCurrency(item.faixa_min)} a {formatCurrency(item.faixa_max)}
+                    </p>
+                    <div className="mt-4 border-t pt-3">
+                      <p className="text-xs text-[#737373]">
+                        {item.base_normativa} · {item.prazo_tipico}
+                      </p>
+                      <CrmBadge tone="orange" className="mt-2">
+                        Pacote 3+: {item.desconto_pacote_percentual}%
+                      </CrmBadge>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </SensitiveAreaGate>
         </TabsContent>
         <TabsContent value="numeracao">
           {sequences.loading ? (

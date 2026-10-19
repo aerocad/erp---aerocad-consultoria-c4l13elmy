@@ -48,6 +48,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useFinanceiroVisibilidade } from '@/contexts/FinanceiroVisibilidadeContext'
 import { useCrmData } from '@/hooks/use-crm-data'
 import { formatCurrency, formatDate } from '@/lib/format'
+import { isUserAdmin, userHasAnyRole } from '@/lib/crm'
 import { updateOne } from '@/services/api'
 import {
   calcularResumoFinanceiroTodosProjetos,
@@ -130,11 +131,11 @@ export default function ProjectsPage() {
   useEffect(() => {
     if (params.get('novo') === '1') setDialog(true)
   }, [params])
-  const canWrite = ['admin', 'comercial', 'tecnico', 'financeiro'].includes(user?.role || '')
-  const canEditName = ['admin', 'tecnico'].includes(user?.role || '')
-  const canEditFull = ['admin', 'tecnico', 'financeiro'].includes(user?.role || '')
-  const canArchive = ['admin', 'tecnico'].includes(user?.role || '')
-  const canConvertOpp = ['admin', 'comercial'].includes(user?.role || '')
+  const canWrite = userHasAnyRole(user, ['admin', 'comercial', 'tecnico', 'financeiro'])
+  const canEditName = userHasAnyRole(user, ['admin', 'tecnico'])
+  const canEditFull = userHasAnyRole(user, ['admin', 'tecnico', 'financeiro'])
+  const canArchive = userHasAnyRole(user, ['admin', 'tecnico'])
+  const canConvertOpp = userHasAnyRole(user, ['admin', 'comercial'])
 
   // Alterna seleção individual de projeto de forma confiável
   const handleToggleSelect = (id: string, e?: React.SyntheticEvent) => {

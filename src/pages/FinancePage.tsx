@@ -1738,13 +1738,19 @@ export function FinancePage() {
         </div>
       ) : activeTab === 'relatorios' ? (
         <div className="mt-5">
-          <RelatoriosFinanceirosTab
-            parcelas={installments.data}
-            contasPagar={contasPagar.data}
-            contasReceber={contasReceber.data}
-            projetos={projects.data}
-            clientes={clients.data}
-          />
+          <SensitiveAreaGate
+            areaKey="relatorios_gerenciais"
+            areaTitle="Relatórios Gerenciais Financeiros"
+            areaDescription="Os relatórios gerenciais e contábeis consolidam faturamento bruto/líquido, aging de inadimplência e rentabilidade. Confirme sua senha de acesso para visualizar."
+          >
+            <RelatoriosFinanceirosTab
+              parcelas={installments.data}
+              contasPagar={contasPagar.data}
+              contasReceber={contasReceber.data}
+              projetos={projects.data}
+              clientes={clients.data}
+            />
+          </SensitiveAreaGate>
         </div>
       ) : activeTab === 'orfas' ? (
         <div className="mt-5 space-y-4">

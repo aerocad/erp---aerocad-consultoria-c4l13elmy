@@ -18,7 +18,7 @@ import {
 } from '@/components/ui/select'
 import { useAuth } from '@/contexts/AuthContext'
 import { useCrmData } from '@/hooks/use-crm-data'
-import { processOrgaoList, processStatusLabels } from '@/lib/crm'
+import { processOrgaoList, processStatusLabels, userHasAnyRole } from '@/lib/crm'
 import { formatDate } from '@/lib/format'
 import type { ProcessoRecord } from '@/types/crm'
 
@@ -45,7 +45,7 @@ export default function ProcessesPage() {
   useEffect(() => {
     if (params.get('novo') === '1') setDialog(true)
   }, [params])
-  const canWrite = ['admin', 'comercial', 'tecnico'].includes(user?.role || '')
+  const canWrite = userHasAnyRole(user, ['admin', 'comercial', 'tecnico'])
   const rows = useMemo(
     () =>
       records.data.filter(

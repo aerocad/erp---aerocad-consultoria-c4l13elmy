@@ -22,7 +22,15 @@ import { useAlertas } from '@/contexts/AlertasContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { useFinanceiroVisibilidade } from '@/contexts/FinanceiroVisibilidadeContext'
 import { useCrmData } from '@/hooks/use-crm-data'
-import { osStatusColors, osStatusLabels, stageColors, stageLabels, trailLabels } from '@/lib/crm'
+import {
+  isUserAdmin,
+  osStatusColors,
+  osStatusLabels,
+  stageColors,
+  stageLabels,
+  trailLabels,
+  userHasAnyRole,
+} from '@/lib/crm'
 import {
   formatCurrency,
   formatDate,
@@ -178,8 +186,8 @@ export default function DashboardPage() {
   )
 
   // Cálculos de Ordens de Serviço de Terceiros
-  const isAdmin = user?.role === 'admin'
-  const isInternal = ['admin', 'tecnico', 'comercial'].includes(user?.role || '')
+  const isAdmin = isUserAdmin(user)
+  const isInternal = userHasAnyRole(user, ['admin', 'tecnico', 'comercial'])
 
   const osPendentesAceite = ordensServico.data.filter((o) =>
     ['atribuida', 'emitida', 'rascunho'].includes(o.status),

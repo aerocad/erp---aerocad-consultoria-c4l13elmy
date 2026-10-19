@@ -126,9 +126,9 @@ export function GerenciarParcelamentoModal({
   const { ocultarValores } = useFinanceiroVisibilidade()
 
   // Permissões
-  const userCanViewFinancials = canViewFinancials(user?.role)
-  const userCanViewNfseRole = canViewNfse(user?.role)
-  const canManage = ['admin', 'financeiro'].includes(user?.role || '')
+  const userCanViewFinancials = canViewFinancials(user)
+  const userCanViewNfseRole = canViewNfse(user)
+  const canManage = userHasAnyRole(user, ['admin', 'financeiro'])
 
   // Identificar parcelas protegidas (com NFSe vinculada ou quitadas)
   const { parcelasProtegidas, parcelasDescartaveis } = useMemo(() => {

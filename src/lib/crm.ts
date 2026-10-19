@@ -1,4 +1,4 @@
-import type { Role, Trail } from '@/types/crm'
+import type { Role, Trail, UserRecord } from '@/types/crm'
 
 export const roleLabels: Record<Role, string> = {
   admin: 'Administrador',
@@ -6,6 +6,18 @@ export const roleLabels: Record<Role, string> = {
   tecnico: 'Técnico',
   financeiro: 'Financeiro',
   terceiro: 'Prestador Terceiro',
+}
+
+/**
+ * Retorna uma string formatada com os rótulos de todos os perfis do usuário (ex.: "Comercial · Financeiro").
+ */
+export function formatUserRoles(
+  userOrRole?: UserRecord | Role | Role[] | string | null,
+  separator = ' · ',
+): string {
+  const roles = getUserRoles(userOrRole)
+  if (roles.length === 0) return 'Sem perfil'
+  return roles.map((r) => roleLabels[r] || r).join(separator)
 }
 
 export const osStatusLabels: Record<string, string> = {
@@ -166,12 +178,22 @@ export function getUserRoles(userOrRole?: UserRecord | Role | Role[] | string | 
  */
 export function userHasRole(
   userOrRole: UserRecord | Role | Role[] | string | null | undefined,
-  targetRole: Role,
+  roleToCheck: Role,
 ): boolean {
   const roles = getUserRoles(userOrRole)
-  return roles.includes(targetRole)
+  return roles.includes(roleToCheck)
 }
 
+/**
+ * Verifica se o usuário possui QUALQUER um dos perfis fornecidos (união).
+ */
+export function userHasAnyRole(
+  userOrRole: UserRecord | Role | Role[] | string | null | undefined,
+  rolesToCheck: Role[],
+): boolean {
+  const roles = getUserRoles(userOrRole)
+  return rolesToCheck.some((r) => roles.includes(r))
+}
 /**
  * Verifica se o usuário é administrador (possui admin entre seus perfis).
  */
