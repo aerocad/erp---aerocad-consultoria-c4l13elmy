@@ -85,14 +85,17 @@ export default function DashboardPage() {
     sort: '-created',
     realtime: true,
   })
-  const loading =
-    opportunities.loading ||
-    requirements.loading ||
-    installments.loading ||
-    projects.loading ||
-    ordensServico.loading ||
-    activities.loading
-  const error = opportunities.error || requirements.error || projects.error
+  const loadingEssential = opportunities.loading && requirements.loading && projects.loading
+
+  const hasAnyData =
+    opportunities.data.length > 0 ||
+    requirements.data.length > 0 ||
+    projects.data.length > 0 ||
+    installments.data.length > 0
+
+  const loading = loadingEssential && !hasAnyData
+
+  const error = !hasAnyData && (opportunities.error || requirements.error || projects.error)
 
   // Revalidação por foco de janela, visibilidade e intervalo de segurança (30s)
   useEffect(() => {

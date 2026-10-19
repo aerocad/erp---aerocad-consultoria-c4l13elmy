@@ -56,8 +56,9 @@ export default function ClientsPage() {
     [clients.data, type, query, sortAsc],
   )
 
-  if (clients.loading || projects.loading) return <PageLoading />
-  if (clients.error) return <ErrorState onRetry={() => void clients.reload()} />
+  const hasClientData = clients.data.length > 0
+  if (clients.loading && !hasClientData) return <PageLoading label="Carregando clientes..." />
+  if (clients.error && !hasClientData) return <ErrorState onRetry={() => void clients.reload()} />
 
   return (
     <div>

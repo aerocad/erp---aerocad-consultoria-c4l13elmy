@@ -71,11 +71,41 @@ export default function SettingsPage() {
     stopSimulation,
     refreshUser,
   } = useAuth()
-  const users = useCrmData<UserRecord>('users', { sort: 'name' })
-  const templates = useCrmData<ModeloRecord>('modelos_documentos', { sort: 'nome' })
-  const services = useCrmData<ServiceRecord>('servicos_catalogo', { sort: 'codigo' })
-  const sequences = useCrmData<SequenciaRecord>('sequencias', { sort: 'chave' })
-  const contasBancarias = useCrmData<ContaBancariaRecord>('contas_bancarias', { sort: 'apelido' })
+  const [activeTab, setActiveTab] = useState('usuarios')
+  const [loadedTabs, setLoadedTabs] = useState<Set<string>>(() => new Set(['usuarios']))
+
+  function handleTabChange(tab: string) {
+    setActiveTab(tab)
+    setLoadedTabs((prev) => {
+      if (prev.has(tab)) return prev
+      const next = new Set(prev)
+      next.add(tab)
+      return next
+    })
+  }
+
+  // Carrega apenas os dados da aba ativa ou de abas previamente visitadas
+  const users = useCrmData<UserRecord>('users', {
+    sort: 'name',
+    enabled: loadedTabs.has('usuarios'),
+  })
+  const templates = useCrmData<ModeloRecord>('modelos_documentos', {
+    sort: 'nome',
+    enabled: loadedTabs.has('modelos'),
+  })
+  const services = useCrmData<ServiceRecord>('servicos_catalogo', {
+    sort: 'codigo',
+    enabled: loadedTabs.has('servicos'),
+  })
+  const sequences = useCrmData<SequenciaRecord>('sequencias', {
+    sort: 'chave',
+    enabled: loadedTabs.has('numeracao'),
+  })
+  const contasBancarias = useCrmData<ContaBancariaRecord>('contas_bancarias', {
+    sort: 'apelido',
+    enabled: loadedTabs.has('contas_bancarias'),
+  })
+
   const isRealAdmin = rawUser?.role === 'admin'
   const isAdmin = user?.role === 'admin'
   const [templateOpen, setTemplateOpen] = useState(false)
@@ -86,9 +116,6 @@ export default function SettingsPage() {
   const [newEmail, setNewEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
-  if (users.loading || templates.loading || services.loading || sequences.loading)
-    return <PageLoading />
-  if (users.error) return <ErrorState onRetry={() => void users.reload()} />
   function openTemplate(item?: ModeloRecord) {
     setEditingTemplate(item || null)
     setTpl(
@@ -187,7 +214,7 @@ export default function SettingsPage() {
         title="Configurações"
         description="Usuários, catálogo, documentos e numeração segura."
       />
-      <Tabs defaultValue="usuarios">
+      <Tabs value={activeTab} onValueChange={handleTabChange}>
         <TabsList className="h-auto w-full justify-start overflow-x-auto bg-white p-1">
           <TabsTrigger value="usuarios">Usuários</TabsTrigger>
           <TabsTrigger value="conta">Minha conta</TabsTrigger>
@@ -235,18 +262,24 @@ export default function SettingsPage() {
           )}
         </TabsList>
         <TabsContent value="usuarios">
-          <GestaoUsuariosAdminSection
-            users={users.data}
-            rawUser={rawUser}
-            isRealAdmin={isRealAdmin}
-            isSimulating={isSimulating}
-            simulatedRole={simulatedRole}
-            startSimulation={startSimulation}
-            stopSimulation={stopSimulation}
-            onReload={async () => {
-              void users.reload()
-            }}
-          />
+          {users.loading ? (
+            <PageLoading label="Carregando usuários do sistema..." />
+          ) : users.error ? (
+            <ErrorState onRetry={() => void users.reload()} />
+          ) : (
+            <GestaoUsuariosAdminSection
+              users={users.data}
+              rawUser={rawUser}
+              isRealAdmin={isRealAdmin}
+              isSimulating={isSimulating}
+              simulatedRole={simulatedRole}
+              startSimulation={startSimulation}
+              stopSimulation={stopSimulation}
+              onReload={async () => {
+                void users.reload()
+              }}
+            />
+          )}
         </TabsContent>
         <TabsContent value="conta">
           <div className="grid gap-5 lg:grid-cols-2">
@@ -302,122 +335,148 @@ export default function SettingsPage() {
           </div>
         </TabsContent>
         <TabsContent value="modelos">
-          <section className="crm-card overflow-hidden">
-            <div className="flex items-center justify-between border-b p-5">
-              <div>
-                <h2 className="font-bold">Modelos de documentos</h2>
-                <p className="text-sm text-[#737373]">
-                  Use placeholders no formato <code>{'{{campo}}'}</code>.
-                </p>
-              </div>
-              <Button onClick={() => openTemplate()}>
-                <Plus className="mr-2 h-4 w-4" />
-                Novo modelo
-              </Button>
-            </div>
-            <div className="divide-y">
-              {templates.data.map((item) => (
-                <div key={item.id} className="flex items-center justify-between p-4">
-                  <div className="flex items-center gap-3">
-                    <FileText className="h-5 w-5 text-[#FF6A13]" />
-                    <div>
-                      <p className="font-semibold">{item.nome}</p>
-                      <p className="text-xs uppercase text-[#8A8A8A]">{item.categoria}</p>
-                    </div>
-                  </div>
-                  <Button variant="ghost" size="icon" onClick={() => openTemplate(item)}>
-                    <Pencil className="h-4 w-4" />
-                  </Button>
+          {templates.loading ? (
+            <PageLoading label="Carregando modelos de documento..." />
+          ) : templates.error ? (
+            <ErrorState onRetry={() => void templates.reload()} />
+          ) : (
+            <section className="crm-card overflow-hidden">
+              <div className="flex items-center justify-between border-b p-5">
+                <div>
+                  <h2 className="font-bold">Modelos de documentos</h2>
+                  <p className="text-sm text-[#737373]">
+                    Use placeholders no formato <code>{'{{campo}}'}</code>.
+                  </p>
                 </div>
-              ))}
-            </div>
-          </section>
+                <Button onClick={() => openTemplate()}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Novo modelo
+                </Button>
+              </div>
+              <div className="divide-y">
+                {templates.data.map((item) => (
+                  <div key={item.id} className="flex items-center justify-between p-4">
+                    <div className="flex items-center gap-3">
+                      <FileText className="h-5 w-5 text-[#FF6A13]" />
+                      <div>
+                        <p className="font-semibold">{item.nome}</p>
+                        <p className="text-xs uppercase text-[#8A8A8A]">{item.categoria}</p>
+                      </div>
+                    </div>
+                    <Button variant="ghost" size="icon" onClick={() => openTemplate(item)}>
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
         </TabsContent>
         <TabsContent value="servicos">
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {services.data.map((item) => (
-              <article key={item.id} className="crm-card p-5">
-                <div className="flex items-start justify-between">
-                  <span className="mono-value font-black text-[#D65100]">{item.codigo}</span>
-                  <Button variant="ghost" size="icon" onClick={() => setService(item)}>
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                </div>
-                <h2 className="mt-2 font-bold">{item.nome}</h2>
-                <p className="mono-value mt-4 text-xl font-bold">
-                  {formatCurrency(item.preco_padrao)}
-                </p>
-                <p className="mt-1 text-xs text-[#737373]">
-                  Faixa: {formatCurrency(item.faixa_min)} a {formatCurrency(item.faixa_max)}
-                </p>
-                <div className="mt-4 border-t pt-3">
-                  <p className="text-xs text-[#737373]">
-                    {item.base_normativa} · {item.prazo_tipico}
+          {services.loading ? (
+            <PageLoading label="Carregando serviços e tabela de preços..." />
+          ) : services.error ? (
+            <ErrorState onRetry={() => void services.reload()} />
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {services.data.map((item) => (
+                <article key={item.id} className="crm-card p-5">
+                  <div className="flex items-start justify-between">
+                    <span className="mono-value font-black text-[#D65100]">{item.codigo}</span>
+                    <Button variant="ghost" size="icon" onClick={() => setService(item)}>
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <h2 className="mt-2 font-bold">{item.nome}</h2>
+                  <p className="mono-value mt-4 text-xl font-bold">
+                    {formatCurrency(item.preco_padrao)}
                   </p>
-                  <CrmBadge tone="orange" className="mt-2">
-                    Pacote 3+: {item.desconto_pacote_percentual}%
-                  </CrmBadge>
-                </div>
-              </article>
-            ))}
-          </div>
+                  <p className="mt-1 text-xs text-[#737373]">
+                    Faixa: {formatCurrency(item.faixa_min)} a {formatCurrency(item.faixa_max)}
+                  </p>
+                  <div className="mt-4 border-t pt-3">
+                    <p className="text-xs text-[#737373]">
+                      {item.base_normativa} · {item.prazo_tipico}
+                    </p>
+                    <CrmBadge tone="orange" className="mt-2">
+                      Pacote 3+: {item.desconto_pacote_percentual}%
+                    </CrmBadge>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
         </TabsContent>
         <TabsContent value="numeracao">
-          <section className="crm-card overflow-hidden">
-            <div className="border-b p-5">
-              <div className="flex items-center gap-3">
-                <Shield className="h-5 w-5 text-[#FF6A13]" />
-                <div>
-                  <h2 className="font-bold">Sequências transacionais</h2>
-                  <p className="text-sm text-[#737373]">
-                    Contadores globais por chave e ano; mutação exclusiva pelos hooks do servidor.
-                  </p>
-                </div>
-              </div>
-            </div>
-            <div className="divide-y">
-              {sequences.data.map((item) => (
-                <div key={item.id} className="flex items-center justify-between p-5">
+          {sequences.loading ? (
+            <PageLoading label="Carregando sequências transacionais..." />
+          ) : sequences.error ? (
+            <ErrorState onRetry={() => void sequences.reload()} />
+          ) : (
+            <section className="crm-card overflow-hidden">
+              <div className="border-b p-5">
+                <div className="flex items-center gap-3">
+                  <Shield className="h-5 w-5 text-[#FF6A13]" />
                   <div>
-                    <p className="font-semibold">{item.chave.replaceAll('_', ' ')}</p>
-                    <p className="text-xs text-[#8A8A8A]">Ano {item.ano}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="technical-label">PRÓXIMO</p>
-                    <p className="mono-value text-xl font-bold text-[#D65100]">
-                      {String(item.atual + 1).padStart(3, '0')}
+                    <h2 className="font-bold">Sequências transacionais</h2>
+                    <p className="text-sm text-[#737373]">
+                      Contadores globais por chave e ano; mutação exclusiva pelos hooks do servidor.
                     </p>
                   </div>
                 </div>
-              ))}
-            </div>
-          </section>
+              </div>
+              <div className="divide-y">
+                {sequences.data.map((item) => (
+                  <div key={item.id} className="flex items-center justify-between p-5">
+                    <div>
+                      <p className="font-semibold">{item.chave.replaceAll('_', ' ')}</p>
+                      <p className="text-xs text-[#8A8A8A]">Ano {item.ano}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="technical-label">PRÓXIMO</p>
+                      <p className="mono-value text-xl font-bold text-[#D65100]">
+                        {String(item.atual + 1).padStart(3, '0')}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
         </TabsContent>
         <TabsContent value="contas_bancarias">
-          <ContasBancariasTab
-            contas={contasBancarias.data}
-            canWrite={isRealAdmin || rawUser?.role === 'financeiro'}
-            canDelete={isRealAdmin}
-            onReload={async () => {
-              void contasBancarias.reload()
-            }}
-          />
+          {contasBancarias.loading ? (
+            <PageLoading label="Carregando contas bancárias..." />
+          ) : contasBancarias.error ? (
+            <ErrorState onRetry={() => void contasBancarias.reload()} />
+          ) : (
+            <ContasBancariasTab
+              contas={contasBancarias.data}
+              canWrite={isRealAdmin || rawUser?.role === 'financeiro'}
+              canDelete={isRealAdmin}
+              onReload={async () => {
+                void contasBancarias.reload()
+              }}
+            />
+          )}
         </TabsContent>
         {isAdmin && (
           <>
             <TabsContent value="empresa">
-              <DadosEmpresaSection />
+              {loadedTabs.has('empresa') ? <DadosEmpresaSection /> : null}
             </TabsContent>
             <TabsContent value="whatsapp">
-              <WhatsAppSettingsSection />
+              {loadedTabs.has('whatsapp') ? <WhatsAppSettingsSection /> : null}
             </TabsContent>
             <TabsContent value="importacao">
-              <div className="crm-card p-6">
-                <ImportacaoWizard />
-              </div>
+              {loadedTabs.has('importacao') ? (
+                <div className="crm-card p-6">
+                  <ImportacaoWizard />
+                </div>
+              ) : null}
             </TabsContent>
             <TabsContent value="exportacao">
-              <ExportarDadosSection />
+              {loadedTabs.has('exportacao') ? <ExportarDadosSection /> : null}
             </TabsContent>
           </>
         )}

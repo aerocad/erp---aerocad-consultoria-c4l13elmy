@@ -411,8 +411,10 @@ export default function ProjectsPage() {
       })
     }
   }
-  if (projects.loading) return <PageLoading />
-  if (projects.error) return <ErrorState onRetry={() => void projects.reload()} />
+  const hasProjectsData = projects.data.length > 0
+  if (projects.loading && !hasProjectsData) return <PageLoading label="Carregando projetos..." />
+  if (projects.error && !hasProjectsData)
+    return <ErrorState onRetry={() => void projects.reload()} />
   return (
     <div>
       <SectionHeader
