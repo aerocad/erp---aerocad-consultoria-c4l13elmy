@@ -34,6 +34,16 @@ export type SensitiveAreaKey =
 
 const DURATION_MS = 15 * 60 * 1000 // 15 minutos
 
+export interface UnlockedGateMetadata {
+  timestamp: number
+  userId: string
+  userEmail: string
+  adminId: string
+  adminEmail: string
+  adminName: string
+  areaKey: SensitiveAreaKey
+}
+
 function getStorageKey(areaKey: SensitiveAreaKey, userId: string): string {
   return `aerocad_auth_gate_${userId}_${areaKey}`
 }
@@ -44,24 +54,78 @@ export function isSensitiveAreaUnlocked(
 ): boolean {
   if (!userId) return false
   try {
-    const raw = sessionStorage.getItem(getStorageKey(areaKey, userId))
+    const key = getStorageKey(areaKey, userId)
+    const raw = sessionStorage.getItem(key)
     if (!raw) return false
-    const ts = parseInt(raw, 10)
-    if (Number.isNaN(ts)) return false
+
+    // Suporta tanto o formato novo serializado (JSON com metadata e vínculo de usuário)
+    // quanto legado com timestamp numérico puro
+    let timestamp = 0
+    let storedUserId = userId
+
+    if (raw.startsWith('{')) {
+      const parsed: UnlockedGateMetadata = JSON.parse(raw)
+      timestamp = parsed.timestamp
+      storedUserId = parsed.userId
+    } else {
+      timestamp = parseInt(raw, 10)
+    }
+
+    if (Number.isNaN(timestamp) || !timestamp || storedUserId !== userId) {
+      sessionStorage.removeItem(key)
+      return false
+    }
+
     const now = Date.now()
-    if (now - ts < DURATION_MS) {
+    if (now - timestamp < DURATION_MS) {
       return true
     }
-    sessionStorage.removeItem(getStorageKey(areaKey, userId))
+    sessionStorage.removeItem(key)
     return false
   } catch {
     return false
   }
 }
 
-export function markSensitiveAreaUnlocked(areaKey: SensitiveAreaKey, userId: string) {
+export function markSensitiveAreaUnlocked(
+  areaKey: SensitiveAreaKey,
+  userId: string,
+  meta?: {
+    userEmail: string
+    adminId: string
+    adminEmail: string
+    adminName: string
+  },
+) {
   try {
-    sessionStorage.setItem(getStorageKey(areaKey, userId), Date.now().toString())
+    const payload: UnlockedGateMetadata = {
+      timestamp: Date.now(),
+      userId,
+      userEmail: meta?.userEmail || '',
+      adminId: meta?.adminId || '',
+      adminEmail: meta?.adminEmail || '',
+      adminName: meta?.adminName || '',
+      areaKey,
+    }
+    sessionStorage.setItem(getStorageKey(areaKey, userId), JSON.stringify(payload))
+  } catch {
+    /* ignore */
+  }
+}
+
+export function clearSensitiveAreaGates(userId?: string | null) {
+  try {
+    const prefix = userId ? `aerocad_auth_gate_${userId}_` : 'aerocad_auth_gate_'
+    const keysToRemove: string[] = []
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const k = sessionStorage.key(i)
+      if (k && k.startsWith(prefix)) {
+        keysToRemove.push(k)
+      }
+    }
+    for (const k of keysToRemove) {
+      sessionStorage.removeItem(k)
+    }
   } catch {
     /* ignore */
   }
@@ -119,22 +183,30 @@ export function SensitiveAreaGate({
       setLoadingAdmins(true)
       pb.collection<UserRecord>('users')
         .getFullList({
-          filter: "role = 'admin' || roles ~ 'admin'",
-          fields: 'id,name,email',
+          filter: "(role = 'admin' || roles ~ 'admin') && ativo = true",
+          fields: 'id,name,email,role,roles',
           sort: 'name',
           requestKey: null,
         })
         .then((records) => {
+          // Garante estritamente apenas quem tem role de administrador
+          // e que NÃO seja o usuário logado não-admin
           const list = records
-            .filter((r) => r.email)
+            .filter((r) => r.email && isUserAdmin(r))
+            .filter(
+              (r) =>
+                r.id !== currentUserId && r.email.toLowerCase() !== currentUserEmail.toLowerCase(),
+            )
             .map((r) => ({
               id: r.id,
               name: r.name || r.email,
               email: r.email,
             }))
           setAdminsList(list)
-          if (list.length > 0 && !selectedAdminEmail) {
-            setSelectedAdminEmail(list[0].email)
+          if (list.length > 0) {
+            setSelectedAdminEmail((prev) =>
+              list.some((a) => a.email === prev) ? prev : list[0].email,
+            )
           }
         })
         .catch((err) => {
@@ -142,7 +214,7 @@ export function SensitiveAreaGate({
         })
         .finally(() => setLoadingAdmins(false))
     }
-  }, [currentUserIsAdmin, modalOpen, selectedAdminEmail])
+  }, [currentUserIsAdmin, modalOpen, currentUserId, currentUserEmail])
 
   const handleConfirmPassword = async (e: FormEvent) => {
     e.preventDefault()
@@ -151,9 +223,22 @@ export function SensitiveAreaGate({
       return
     }
 
-    const emailToAuth = currentUserIsAdmin ? currentUserEmail : selectedAdminEmail
+    // Regra 1 e 2:
+    // Se o usuário logado É admin: valida a própria senha dele
+    // Se o usuário logado NÃO é admin: a validação OBRIGATORIAMENTE deve ser contra a conta do administrador selecionado
+    const emailToAuth = currentUserIsAdmin
+      ? currentUserEmail.trim().toLowerCase()
+      : selectedAdminEmail.trim().toLowerCase()
+
     if (!emailToAuth) {
       setErrorMsg('Selecione um administrador para validar.')
+      return
+    }
+
+    // Regra estrita de segurança:
+    // Se o logado não é admin, NUNCA permitir autenticar com o email do próprio logado!
+    if (!currentUserIsAdmin && emailToAuth === currentUserEmail.trim().toLowerCase()) {
+      setErrorMsg('Acesso negado: a senha do próprio usuário não-administrador não é aceita.')
       return
     }
 
@@ -162,19 +247,78 @@ export function SensitiveAreaGate({
 
     try {
       // Instância isolada do PocketBase para validar a credencial do administrador
-      // SEM sobrescrever ou deslogar o authStore atual do usuário logado!
+      // SEM sobrescrever ou deslogar o authStore atual da sessão do usuário logado!
       const tempPb = new PocketBase(pb.baseURL)
-      await tempPb.collection('users').authWithPassword(emailToAuth, adminPassword, {
-        requestKey: null,
-      })
+      const authResult = await tempPb
+        .collection('users')
+        .authWithPassword(emailToAuth, adminPassword, {
+          requestKey: null,
+        })
+
+      const adminRecord = authResult.record as unknown as UserRecord
+      // Dupla checagem: o usuário autenticado na instância temporária tem credencial real de admin?
+      if (!isUserAdmin(adminRecord)) {
+        setErrorMsg('A conta informada não possui privilégios de administrador.')
+        return
+      }
 
       // Validação concluída com sucesso!
-      markSensitiveAreaUnlocked(areaKey, currentUserId)
+      const adminName = adminRecord.name || adminRecord.email
+      const adminId = adminRecord.id
+
+      // 1. Gravar log de auditoria oficial (coleção auditoria_operacoes_bloco)
+      try {
+        const descAuditoria = currentUserIsAdmin
+          ? `Acesso à área sensível "${areaTitle}" liberado por auto-confirmação do próprio Administrador ${adminName} (${adminRecord.email}) por 15 minutos.`
+          : `Acesso à área sensível "${areaTitle}" LIBERADO para o usuário ${rawUser?.name || currentUserEmail} (${currentUserEmail}) mediante autorização expressa e senha do Administrador ${adminName} (${adminRecord.email}) por 15 minutos.`
+
+        await pb.collection('auditoria_operacoes_bloco').create({
+          usuario: currentUserId || null,
+          tipo_operacao: 'liberacao_area_sensivel',
+          colecao_alvo: `area_sensivel:${areaKey}`,
+          descricao: descAuditoria,
+          criterio_filtro: {
+            areaKey,
+            areaTitle,
+            usuario_solicitante_id: currentUserId,
+            usuario_solicitante_email: currentUserEmail,
+            usuario_solicitante_nome: rawUser?.name || currentUserEmail,
+            admin_autorizador_id: adminId,
+            admin_autorizador_email: adminRecord.email,
+            admin_autorizador_nome: adminName,
+            auto_aprovacao: currentUserIsAdmin,
+            duracao_minutos: 15,
+          },
+          alteracoes_solicitadas: {
+            status: 'liberado',
+            areaKey,
+            expira_em_ms: DURATION_MS,
+          },
+          total_registros_afetados: 1,
+          total_falhas: 0,
+          desfeito: false,
+        })
+      } catch (auditErr) {
+        console.warn('Aviso: Falha ao registrar auditoria de liberação de área sensível:', auditErr)
+      }
+
+      // 2. Registrar desbloqueio na sessão vinculando ao usuário logado
+      markSensitiveAreaUnlocked(areaKey, currentUserId, {
+        userEmail: currentUserEmail,
+        adminId,
+        adminEmail: adminRecord.email,
+        adminName,
+      })
+
       setIsUnlocked(true)
       setModalOpen(false)
       setAdminPassword('')
-      toast.success(`Acesso a "${areaTitle}" liberado com sucesso por 15 minutos.`)
-    } catch (err: any) {
+      toast.success(
+        currentUserIsAdmin
+          ? `Acesso a "${areaTitle}" liberado com sucesso por 15 minutos.`
+          : `Acesso a "${areaTitle}" liberado pelo administrador ${adminName} por 15 minutos.`,
+      )
+    } catch {
       setErrorMsg('Senha do administrador incorreta. Acesso não autorizado.')
     } finally {
       setIsSubmitting(false)
@@ -289,7 +433,10 @@ export function SensitiveAreaGate({
                     <Input
                       type="email"
                       value={selectedAdminEmail}
-                      onChange={(e) => setSelectedAdminEmail(e.target.value)}
+                      onChange={(e) => {
+                        setSelectedAdminEmail(e.target.value)
+                        if (errorMsg) setErrorMsg('')
+                      }}
                       placeholder="admin@aerocad.com.br"
                       className="h-9 text-xs"
                     />

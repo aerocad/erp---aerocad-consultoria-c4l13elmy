@@ -12,6 +12,7 @@ import { useNavigate } from 'react-router-dom'
 import { setGlobalOcultarValores } from '@/lib/format'
 import pb from '@/lib/pocketbase/client'
 import type { UserRecord } from '@/types/crm'
+import { clearSensitiveAreaGates } from '@/components/auth/SensitiveAreaGate'
 
 import type { Role } from '@/types/crm'
 
@@ -54,6 +55,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch {
         /* intentionally ignored */
       }
+      clearSensitiveAreaGates()
       setGlobalOcultarValores(true)
       return
     }
@@ -81,6 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch {
         /* intentionally ignored */
       }
+      clearSensitiveAreaGates()
       setGlobalOcultarValores(true)
     }
   }, [])
@@ -90,6 +93,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return pb.authStore.onChange((_, record) => {
       const rec = record as UserRecord | null
       setRawUser(rec)
+      if (!rec) {
+        clearSensitiveAreaGates()
+      }
       const isActualAdmin =
         rec && (rec.role === 'admin' || (Array.isArray(rec.roles) && rec.roles.includes('admin')))
       if (!isActualAdmin) {
@@ -104,6 +110,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [refreshUser])
 
   const login = useCallback(async (email: string, password: string) => {
+    // Ao efetuar um novo login, limpa imediatamente qualquer portão sensível de sessões anteriores
+    clearSensitiveAreaGates()
+
     const result = await pb
       .collection<UserRecord>('users')
       .authWithPassword(email, password, { requestKey: null })
@@ -148,6 +157,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(() => {
     pb.authStore.clear()
+    clearSensitiveAreaGates()
     setRawUser(null)
     setSimulatedRole(null)
     try {
