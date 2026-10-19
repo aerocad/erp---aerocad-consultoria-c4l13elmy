@@ -442,6 +442,23 @@ export interface ImpactoExclusaoUsuario {
 }
 
 /**
+ * Traduz erros do PocketBase em mensagens claras em pt-BR
+ */
+export function formatarErroExclusaoUsuario(err: unknown): string {
+  const rawMsg = err instanceof Error ? err.message : String(err)
+  if (
+    rawMsg.includes('required relation reference') ||
+    rawMsg.includes('part of a required relation')
+  ) {
+    return 'Não foi possível concluir a exclusão porque ainda existem referências obrigatórias ativas vinculadas a esta conta de usuário. Verifique se há registros associados no sistema.'
+  }
+  if (rawMsg.includes('Failed to delete record')) {
+    return `Falha ao excluir registro de usuário: ${rawMsg}`
+  }
+  return rawMsg || 'Erro inesperado ao excluir o usuário.'
+}
+
+/**
  * Analisa as referências e impacto antes da exclusão definitiva de um usuário.
  */
 export async function analisarImpactoExclusaoUsuario(
@@ -495,7 +512,7 @@ export async function analisarImpactoExclusaoUsuario(
   let totalMensagensEnviadas = 0
   try {
     const res = await pb.collection('mensagens').getList(1, 1, {
-      filter: `remetente = "${usuarioId}"`,
+      filter: `remetente = "${usuarioId}" || destinatario = "${usuarioId}"`,
     })
     totalMensagensEnviadas = res.totalItems
   } catch {
@@ -515,7 +532,7 @@ export async function analisarImpactoExclusaoUsuario(
   let totalOrdensServico = 0
   try {
     const res = await pb.collection('ordens_servico').getList(1, 1, {
-      filter: `usuario = "${usuarioId}"`,
+      filter: `prestador_usuario = "${usuarioId}"`,
     })
     totalOrdensServico = res.totalItems
   } catch {
@@ -545,7 +562,7 @@ export async function analisarImpactoExclusaoUsuario(
   let totalTarefasCriadas = 0
   try {
     const res = await pb.collection('tarefas').getList(1, 1, {
-      filter: `criado_por = "${usuarioId}"`,
+      filter: `responsavel = "${usuarioId}"`,
     })
     totalTarefasCriadas = res.totalItems
   } catch {
@@ -559,7 +576,7 @@ export async function analisarImpactoExclusaoUsuario(
       email: user.email,
       role: user.role,
       roles: user.roles,
-      active: user.active,
+      active: (user as any).ativo ?? user.active ?? true,
     },
     isUltimoAdmin,
     isUsuarioLogado,
@@ -580,8 +597,10 @@ export async function analisarImpactoExclusaoUsuario(
  * 2. Valida se não é o último administrador do sistema
  * 3. Desvincula o colaborador associado (se houver, setando usuario_sistema = '')
  * 4. Limpa preferências efêmeras (alertas dispensados)
- * 5. Preserva integridade de negócio (atividades, ordens de serviço, mensagens, lançamentos financeiros mantêm seu histórico ou campos informativos)
- * 6. Registra auditoria da exclusão
+ * 5. Neutraliza vínculos bloqueantes (anula campo opcional ou reatribui sem apagar registros de negócio)
+ *    - mensagens: neutraliza vínculos de remetente/destinatário para garantir liberação sem apagar o histórico de texto
+ *    - atividades / anexos / links_externos / tarefas / ordens_servico / projetos / processos / exigencias
+ * 6. Registra auditoria permanente da exclusão
  * 7. Deleta o registro em users, liberando vaga no limite de contas ativas
  */
 export async function executarExclusaoUsuario(
@@ -608,18 +627,21 @@ export async function executarExclusaoUsuario(
   const userParaExcluir = await pb.collection('users').getOne(usuarioId)
 
   // 1. Desvincular de qualquer colaborador
+  let totalColaboradoresDesvinculados = 0
   try {
     const colabs = await pb.collection('colaboradores').getFullList({
       filter: `usuario_sistema = "${usuarioId}"`,
     })
     for (const c of colabs) {
       await pb.collection('colaboradores').update(c.id, { usuario_sistema: '' })
+      totalColaboradoresDesvinculados++
     }
   } catch (errColab) {
     console.warn('Erro ao desvincular usuário de colaboradores:', errColab)
   }
 
   // 2. Limpar dados efêmeros: alertas dispensados pelo usuário
+  let totalAlertasRemovidos = 0
   try {
     const alertas = await pb.collection('alertas_dispensados').getFullList({
       filter: `usuario = "${usuarioId}"`,
@@ -629,29 +651,223 @@ export async function executarExclusaoUsuario(
         .collection('alertas_dispensados')
         .delete(al.id)
         .catch(() => null)
+      totalAlertasRemovidos++
     }
   } catch (errAlertas) {
     console.warn('Erro ao remover alertas dispensados do usuário:', errAlertas)
   }
 
-  // 3. Registrar auditoria permanente antes de apagar
+  // 3. Neutralizar mensagens: anular remetente e destinatário quando apontarem para este usuário
+  // Preserva o texto da mensagem no chat mantendo integridade histórica
+  let totalMensagensNeutralizadas = 0
+  try {
+    const msgsRemetente = await pb.collection('mensagens').getFullList({
+      filter: `remetente = "${usuarioId}"`,
+    })
+    for (const m of msgsRemetente) {
+      await pb
+        .collection('mensagens')
+        .update(m.id, { remetente: null })
+        .catch(() => null)
+      totalMensagensNeutralizadas++
+    }
+    const msgsDestinatario = await pb.collection('mensagens').getFullList({
+      filter: `destinatario = "${usuarioId}"`,
+    })
+    for (const m of msgsDestinatario) {
+      await pb
+        .collection('mensagens')
+        .update(m.id, { destinatario: null })
+        .catch(() => null)
+      totalMensagensNeutralizadas++
+    }
+  } catch (errMsgs) {
+    console.warn('Erro ao neutralizar vínculos de mensagens:', errMsgs)
+  }
+
+  // 4. Neutralizar vínculos relacionais em coleções que apontam para users
+  // (atividades, anexos, links_externos, tarefas, ordens_servico, exigencias, auditoria_operacoes_bloco)
+  let totalAtividadesNeutralizadas = 0
+  try {
+    const ativs = await pb.collection('atividades').getFullList({
+      filter: `usuario = "${usuarioId}"`,
+    })
+    for (const at of ativs) {
+      await pb
+        .collection('atividades')
+        .update(at.id, { usuario: null })
+        .catch(() => null)
+      totalAtividadesNeutralizadas++
+    }
+  } catch (errAtiv) {
+    console.warn('Erro ao neutralizar vínculos em atividades:', errAtiv)
+  }
+
+  let totalAnexosNeutralizados = 0
+  try {
+    const anxs = await pb.collection('anexos').getFullList({
+      filter: `usuario = "${usuarioId}"`,
+    })
+    for (const an of anxs) {
+      await pb
+        .collection('anexos')
+        .update(an.id, { usuario: null })
+        .catch(() => null)
+      totalAnexosNeutralizados++
+    }
+  } catch (errAnx) {
+    console.warn('Erro ao neutralizar vínculos em anexos:', errAnx)
+  }
+
+  let totalLinksNeutralizados = 0
+  try {
+    const lnks = await pb.collection('links_externos').getFullList({
+      filter: `criado_por = "${usuarioId}"`,
+    })
+    for (const lk of lnks) {
+      await pb
+        .collection('links_externos')
+        .update(lk.id, { criado_por: null })
+        .catch(() => null)
+      totalLinksNeutralizados++
+    }
+  } catch (errLnk) {
+    console.warn('Erro ao neutralizar vínculos em links_externos:', errLnk)
+  }
+
+  let totalTarefasNeutralizadas = 0
+  try {
+    const trfs = await pb.collection('tarefas').getFullList({
+      filter: `responsavel = "${usuarioId}"`,
+    })
+    for (const tf of trfs) {
+      await pb
+        .collection('tarefas')
+        .update(tf.id, { responsavel: null })
+        .catch(() => null)
+      totalTarefasNeutralizadas++
+    }
+  } catch (errTrf) {
+    console.warn('Erro ao neutralizar vínculos em tarefas:', errTrf)
+  }
+
+  let totalOrdensNeutralizadas = 0
+  try {
+    const ords = await pb.collection('ordens_servico').getFullList({
+      filter: `prestador_usuario = "${usuarioId}"`,
+    })
+    for (const os of ords) {
+      await pb
+        .collection('ordens_servico')
+        .update(os.id, { prestador_usuario: null })
+        .catch(() => null)
+      totalOrdensNeutralizadas++
+    }
+  } catch (errOrd) {
+    console.warn('Erro ao neutralizar vínculos em ordens_servico:', errOrd)
+  }
+
+  let totalExigenciasNeutralizadas = 0
+  try {
+    const exigs = await pb.collection('exigencias').getFullList({
+      filter: `responsavel = "${usuarioId}"`,
+    })
+    for (const ex of exigs) {
+      await pb
+        .collection('exigencias')
+        .update(ex.id, { responsavel: null })
+        .catch(() => null)
+      totalExigenciasNeutralizadas++
+    }
+  } catch (errExig) {
+    console.warn('Erro ao neutralizar vínculos em exigencias:', errExig)
+  }
+
+  let totalOportunidadesNeutralizadas = 0
+  try {
+    const opps = await pb.collection('oportunidades').getFullList({
+      filter: `responsavel = "${usuarioId}"`,
+    })
+    for (const op of opps) {
+      await pb
+        .collection('oportunidades')
+        .update(op.id, { responsavel: null })
+        .catch(() => null)
+      totalOportunidadesNeutralizadas++
+    }
+  } catch (errOpp) {
+    console.warn('Erro ao neutralizar vínculos em oportunidades:', errOpp)
+  }
+
+  let totalProjetosNeutralizados = 0
+  try {
+    const projs = await pb.collection('projetos').getFullList({
+      filter: `responsavel_tecnico = "${usuarioId}"`,
+    })
+    for (const pr of projs) {
+      await pb
+        .collection('projetos')
+        .update(pr.id, { responsavel_tecnico: null })
+        .catch(() => null)
+      totalProjetosNeutralizados++
+    }
+  } catch (errProj) {
+    console.warn('Erro ao neutralizar vínculos em projetos:', errProj)
+  }
+
+  let totalAuditBlocoNeutralizadas = 0
+  try {
+    const audits = await pb.collection('auditoria_operacoes_bloco').getFullList({
+      filter: `usuario = "${usuarioId}" || desfeito_por = "${usuarioId}"`,
+    })
+    for (const ad of audits) {
+      const upd: Record<string, any> = {}
+      if ((ad as any).usuario === usuarioId) upd.usuario = null
+      if ((ad as any).desfeito_por === usuarioId) upd.desfeito_por = null
+      if (Object.keys(upd).length > 0) {
+        await pb
+          .collection('auditoria_operacoes_bloco')
+          .update(ad.id, upd)
+          .catch(() => null)
+        totalAuditBlocoNeutralizadas++
+      }
+    }
+  } catch (errAuditB) {
+    console.warn('Erro ao neutralizar vínculos em auditoria_operacoes_bloco:', errAuditB)
+  }
+
+  // 5. Registrar auditoria permanente antes de apagar
   try {
     await pb
       .collection('auditoria_operacoes_bloco')
       .create({
-        acao: 'exclusao_usuario_permanente',
+        tipo_operacao: 'exclusao_usuario_permanente',
         colecao_alvo: 'users',
-        total_registros: 1,
-        ids_afetados: [usuarioId],
-        usuario: operador.id || '',
-        detalhes: {
+        descricao: `Exclusão permanente do usuário "${userParaExcluir.name}" (${userParaExcluir.email}) por ${operador.nome}.`,
+        total_registros_afetados: 1,
+        total_falhas: 0,
+        snapshot_anterior: {
           usuarioExcluido: {
             id: usuarioId,
             nome: userParaExcluir.name,
             email: userParaExcluir.email,
             role: userParaExcluir.role,
             roles: userParaExcluir.roles,
-            ativo: userParaExcluir.active,
+            ativo: (userParaExcluir as any).ativo ?? userParaExcluir.active,
+          },
+          vinculosNeutralizados: {
+            colaboradores: totalColaboradoresDesvinculados,
+            alertasDispensados: totalAlertasRemovidos,
+            mensagens: totalMensagensNeutralizadas,
+            atividades: totalAtividadesNeutralizadas,
+            anexos: totalAnexosNeutralizados,
+            linksExternos: totalLinksNeutralizados,
+            tarefas: totalTarefasNeutralizadas,
+            ordensServico: totalOrdensNeutralizadas,
+            exigencias: totalExigenciasNeutralizadas,
+            oportunidades: totalOportunidadesNeutralizadas,
+            projetos: totalProjetosNeutralizados,
+            auditoriaBloco: totalAuditBlocoNeutralizadas,
           },
           operador: {
             id: operador.id,
@@ -660,6 +876,7 @@ export async function executarExclusaoUsuario(
           },
           dataHora: new Date().toISOString(),
         },
+        usuario: operador.id || null,
         desfeito: false,
       })
       .catch(() => null)
@@ -678,7 +895,7 @@ export async function executarExclusaoUsuario(
         total_clientes: 0,
         total_projetos: 0,
         total_financeiro: 0,
-        total_comunicacoes: 0,
+        total_comunicacoes: totalMensagensNeutralizadas + totalAtividadesNeutralizadas,
         resumo: {
           acao: 'exclusao_usuario_permanente',
           usuarioExcluidoId: usuarioId,
@@ -687,6 +904,15 @@ export async function executarExclusaoUsuario(
           operadorId: operador.id,
           operadorNome: operador.nome,
           dataHora: new Date().toISOString(),
+          detalhesPreservacao: {
+            colaboradoresDesvinculados: totalColaboradoresDesvinculados,
+            mensagensPreservadas: totalMensagensNeutralizadas,
+            atividadesPreservadas: totalAtividadesNeutralizadas,
+            anexosPreservados: totalAnexosNeutralizados,
+            linksPreservados: totalLinksNeutralizados,
+            tarefasPreservadas: totalTarefasNeutralizadas,
+            ordensServicoPreservadas: totalOrdensNeutralizadas,
+          },
         },
       })
       .catch(() => null)
@@ -694,8 +920,12 @@ export async function executarExclusaoUsuario(
     console.warn('Erro ao gravar log em importacoes_log:', errAudit2)
   }
 
-  // 4. Excluir o registro de users no PocketBase
-  await pb.collection('users').delete(usuarioId)
+  // 6. Excluir o registro de users no PocketBase
+  try {
+    await pb.collection('users').delete(usuarioId)
+  } catch (errDelete) {
+    throw new Error(formatarErroExclusaoUsuario(errDelete))
+  }
 }
 
 /**

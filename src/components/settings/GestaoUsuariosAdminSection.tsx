@@ -192,7 +192,8 @@ export function GestaoUsuariosAdminSection({
       await carregarColaboradoresVinculados()
       await onReload()
     } catch (e: any) {
-      toast.error(`Não foi possível excluir o usuário: ${e?.message || e}`)
+      const msg = e?.message || String(e) || 'Erro desconhecido ao excluir o usuário.'
+      toast.error(`Não foi possível excluir o usuário: ${msg}`)
     } finally {
       setIsDeleting(false)
     }

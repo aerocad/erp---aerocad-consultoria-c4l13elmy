@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-19T19:57:43.391Z",
+  "generatedAt": "2026-10-19T20:30:22.836Z",
   "collections": [
     {
       "name": "users",
@@ -1542,7 +1542,7 @@
         {
           "name": "responsavel",
           "type": "relation",
-          "required": true,
+          "required": false,
           "system": false,
           "collectionRef": "users"
         },
@@ -2136,7 +2136,7 @@
         {
           "name": "criado_por",
           "type": "relation",
-          "required": true,
+          "required": false,
           "system": false,
           "collectionRef": "users"
         },
@@ -2176,7 +2176,7 @@
         {
           "name": "usuario",
           "type": "relation",
-          "required": true,
+          "required": false,
           "system": false,
           "collectionRef": "users"
         },
@@ -2355,7 +2355,7 @@
         {
           "name": "usuario",
           "type": "relation",
-          "required": true,
+          "required": false,
           "system": false,
           "collectionRef": "users"
         },
@@ -2478,7 +2478,7 @@
         {
           "name": "usuario",
           "type": "relation",
-          "required": true,
+          "required": false,
           "system": false,
           "collectionRef": "users"
         },
@@ -4180,7 +4180,7 @@
         {
           "name": "usuario",
           "type": "relation",
-          "required": true,
+          "required": false,
           "system": false,
           "collectionRef": "users"
         },
@@ -4558,14 +4558,14 @@
         {
           "name": "remetente",
           "type": "relation",
-          "required": true,
+          "required": false,
           "system": false,
           "collectionRef": "users"
         },
         {
           "name": "destinatario",
           "type": "relation",
-          "required": true,
+          "required": false,
           "system": false,
           "collectionRef": "users"
         },
