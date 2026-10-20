@@ -116,10 +116,13 @@ export function markSensitiveAreaUnlocked(
 export function clearSensitiveAreaGates(userId?: string | null) {
   try {
     const prefix = userId ? `aerocad_auth_gate_${userId}_` : 'aerocad_auth_gate_'
+    const directPrefix = userId
+      ? `aerocad_auth_gate_admin_direct_${userId}_`
+      : 'aerocad_auth_gate_admin_direct_'
     const keysToRemove: string[] = []
     for (let i = 0; i < sessionStorage.length; i++) {
       const k = sessionStorage.key(i)
-      if (k && k.startsWith(prefix)) {
+      if (k && (k.startsWith(prefix) || k.startsWith(directPrefix))) {
         keysToRemove.push(k)
       }
     }
@@ -150,9 +153,10 @@ export function SensitiveAreaGate({
   areaDescription,
   children,
 }: SensitiveAreaGateProps) {
-  const { user, rawUser } = useAuth()
-  const currentUserId = rawUser?.id || user?.id || ''
-  const currentUserEmail = rawUser?.email || user?.email || ''
+  const { rawUser } = useAuth()
+  const currentUserId = rawUser?.id || ''
+  const currentUserEmail = rawUser?.email || ''
+  // Credencial REAL do usuário logado (rawUser) — nunca a simulada
   const currentUserIsAdmin = isUserAdmin(rawUser)
 
   const [isUnlocked, setIsUnlocked] = useState<boolean>(() =>
@@ -165,6 +169,76 @@ export function SensitiveAreaGate({
   const [errorMsg, setErrorMsg] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [loadingAdmins, setLoadingAdmins] = useState(false)
+
+  // REGRA (v0.0.153): quando o usuário logado TEM a credencial real de administrador,
+  // o acesso às áreas sensíveis é DIRETO e imediato — sem modal e sem pedir qualquer senha.
+  // O portão simplesmente não aparece para admin; apenas o registro de auditoria é gravado
+  // (uma vez por sessão/aba para cada área sensível).
+  const adminAuditKey = `aerocad_auth_gate_admin_direct_${currentUserId}_${areaKey}`
+  useEffect(() => {
+    if (!currentUserIsAdmin || !currentUserId) return
+    let alreadyLogged = false
+    try {
+      alreadyLogged = sessionStorage.getItem(adminAuditKey) === '1'
+    } catch {
+      /* ignore */
+    }
+    if (alreadyLogged) return
+
+    // Marca imediatamente para evitar registros duplicados em re-render/navegação
+    try {
+      sessionStorage.setItem(adminAuditKey, '1')
+    } catch {
+      /* ignore */
+    }
+
+    const adminName = rawUser?.name || currentUserEmail || 'Administrador'
+    void pb
+      .collection('auditoria_operacoes_bloco')
+      .create({
+        usuario: currentUserId || null,
+        tipo_operacao: 'liberacao_area_sensivel',
+        colecao_alvo: `area_sensivel:${areaKey}`,
+        descricao: `Acesso DIRETO (sem senha) à área sensível "${areaTitle}" pelo Administrador ${adminName} (${currentUserEmail}) — credencial de administrador do próprio usuário logado.`,
+        criterio_filtro: {
+          areaKey,
+          areaTitle,
+          usuario_solicitante_id: currentUserId,
+          usuario_solicitante_email: currentUserEmail,
+          usuario_solicitante_nome: rawUser?.name || currentUserEmail,
+          admin_autorizador_id: currentUserId,
+          admin_autorizador_email: currentUserEmail,
+          admin_autorizador_nome: adminName,
+          auto_aprovacao: true,
+          acesso_direto_admin: true,
+          modal_senha: 'nao_exibido',
+          modo_liberacao: 'direto_por_credencial_admin',
+        },
+        alteracoes_solicitadas: {
+          status: 'liberado',
+          areaKey,
+          modal_senha: 'nao_exibido',
+          modo_liberacao: 'direto_por_credencial_admin',
+        },
+        total_registros_afetados: 1,
+        total_falhas: 0,
+        desfeito: false,
+      })
+      .catch((auditErr) => {
+        console.warn(
+          'Aviso: Falha ao registrar auditoria de acesso direto de administrador:',
+          auditErr,
+        )
+      })
+  }, [
+    adminAuditKey,
+    areaKey,
+    areaTitle,
+    currentUserEmail,
+    currentUserIsAdmin,
+    currentUserId,
+    rawUser?.name,
+  ])
 
   // Verifica periodicamente se expirou
   useEffect(() => {
@@ -325,6 +399,11 @@ export function SensitiveAreaGate({
     } finally {
       setIsSubmitting(false)
     }
+  }
+
+  // Administrador autenticado: acesso imediato, sem portão e sem modal
+  if (currentUserIsAdmin) {
+    return <>{children}</>
   }
 
   if (isUnlocked) {
