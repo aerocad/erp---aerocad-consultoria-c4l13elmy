@@ -17,7 +17,11 @@ import {
   Camera,
   Landmark,
   Sparkles,
+  ArrowUpDown,
+  Undo2,
 } from 'lucide-react'
+import { useReorderableColumns, type ColumnDefinition } from '@/hooks/use-reorderable-columns'
+import { ReorderableTableHead } from '@/components/common/ReorderableTableHead'
 import { CapturaBoletoModal } from '@/components/financeiro/CapturaBoletoModal'
 import { CapturaComprovanteModal } from '@/components/financeiro/CapturaComprovanteModal'
 import { SalvarCredorComprovanteModal } from '@/components/financeiro/SalvarCredorComprovanteModal'
@@ -140,6 +144,76 @@ export function ContasPagarTab({
   const [contaParaRevisao, setContaParaRevisao] = useState<ContaPagarRecord | null>(null)
   const [contasBancarias, setContasBancarias] = useState<ContaBancariaRecord[]>([])
   const [filtroContaBancaria, setFiltroContaBancaria] = useState<string>('todos')
+
+  // Definição das colunas reordenáveis da tabela de Contas a Pagar
+  const COLUNAS_PADRAO_PAGAR: ColumnDefinition[] = useMemo(
+    () => [
+      {
+        id: 'vencimento',
+        label: 'Vencimento',
+        thClassName: 'px-2.5 py-2 whitespace-nowrap min-w-[105px]',
+      },
+      {
+        id: 'descricao_fornecedor',
+        label: 'Descrição / Fornecedor',
+        thClassName: 'px-2.5 py-2 min-w-[200px]',
+      },
+      {
+        id: 'credor',
+        label: 'Credor Oficial',
+        thClassName: 'px-2.5 py-2 whitespace-nowrap min-w-[150px]',
+      },
+      {
+        id: 'classificacao_contabil',
+        label: 'Classificação Contábil',
+        thClassName: 'px-2.5 py-2 min-w-[160px]',
+      },
+      {
+        id: 'conta_pj',
+        label: 'Conta PJ',
+        thClassName: 'px-2.5 py-2 whitespace-nowrap min-w-[95px]',
+      },
+      {
+        id: 'projeto',
+        label: 'Projeto',
+        thClassName: 'px-2.5 py-2 whitespace-nowrap min-w-[90px]',
+      },
+      {
+        id: 'valor',
+        label: 'Valor Líquido',
+        align: 'right',
+        thClassName: 'px-2.5 py-2 text-right whitespace-nowrap min-w-[110px]',
+      },
+      {
+        id: 'status',
+        label: 'Status',
+        align: 'center',
+        thClassName: 'px-2.5 py-2 text-center whitespace-nowrap min-w-[85px]',
+      },
+      {
+        id: 'anexos',
+        label: 'Anexos',
+        align: 'center',
+        thClassName: 'px-2.5 py-2 text-center whitespace-nowrap min-w-[95px]',
+      },
+      {
+        id: 'acoes',
+        label: 'Ações',
+        draggable: false,
+        align: 'right',
+        thClassName: 'px-2.5 py-2 text-right whitespace-nowrap min-w-[140px]',
+      },
+    ],
+    [],
+  )
+
+  const { orderedColumns, dragState, isCustomOrder, resetOrder, dragHandlers } =
+    useReorderableColumns({
+      tableKey: 'contas_pagar',
+      columns: COLUNAS_PADRAO_PAGAR,
+      userId: user?.id,
+      pinLastActionColumn: true,
+    })
 
   useEffect(() => {
     pb.collection('contas_bancarias')
@@ -685,6 +759,35 @@ export function ContasPagarTab({
         </div>
       </div>
 
+      {/* Barra de utilidades da tabela: indicador de reordenação e botão Restaurar Ordem Padrão */}
+      <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-xs text-neutral-500">
+        <div className="flex items-center gap-1.5">
+          <ArrowUpDown className="h-3.5 w-3.5 text-[#FF6A13]" />
+          <span>
+            Arraste os cabeçalhos das colunas para alternar a ordem conforme sua preferência.
+          </span>
+          {isCustomOrder && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-semibold text-[#D65100]">
+              Personalizada
+            </span>
+          )}
+        </div>
+
+        {isCustomOrder && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={resetOrder}
+            className="h-7 px-2.5 text-xs text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 flex items-center gap-1 border border-neutral-200"
+            title="Restaurar posições originais das colunas desta tabela"
+          >
+            <Undo2 className="h-3 w-3 text-neutral-500" />
+            Restaurar ordem padrão
+          </Button>
+        )}
+      </div>
+
       {/* Lista de Contas */}
       {contasFiltradas.length === 0 ? (
         <EmptyState
@@ -698,28 +801,39 @@ export function ContasPagarTab({
       ) : (
         <div className="crm-card overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
+            <table className="w-full text-left text-xs border-collapse crm-data-table">
               <thead className="bg-neutral-50/95 text-neutral-600 font-bold border-b border-neutral-200">
                 <tr>
-                  <th className="px-2.5 py-2 whitespace-nowrap min-w-[95px]">Vencimento</th>
-                  <th className="px-2.5 py-2 min-w-[200px]">Descrição / Fornecedor</th>
-                  <th className="px-2.5 py-2 whitespace-nowrap min-w-[150px]">Credor Oficial</th>
-                  <th className="px-2.5 py-2 min-w-[160px]">Classificação Contábil</th>
-                  <th className="px-2.5 py-2 whitespace-nowrap min-w-[95px]">Conta PJ</th>
-                  <th className="px-2.5 py-2 whitespace-nowrap min-w-[90px]">Projeto</th>
-                  <th className="px-2.5 py-2 text-right whitespace-nowrap min-w-[105px]">
-                    Valor Líquido
-                  </th>
-                  <th className="px-2.5 py-2 text-center whitespace-nowrap min-w-[80px]">Status</th>
-                  <th className="px-2.5 py-2 text-center whitespace-nowrap min-w-[90px]">
-                    <span className="flex flex-col items-center">
-                      <span>Anexos</span>
-                      <span className="text-[9px] font-normal text-neutral-400">
-                        Boleto / Compr.
-                      </span>
-                    </span>
-                  </th>
-                  <th className="px-2.5 py-2 text-right whitespace-nowrap min-w-[140px]">Ações</th>
+                  {orderedColumns.map((col) => {
+                    if (col.id === 'anexos') {
+                      return (
+                        <ReorderableTableHead
+                          key={col.id}
+                          column={col}
+                          dragState={dragState}
+                          {...dragHandlers}
+                        >
+                          <span className="flex flex-col items-center">
+                            <span>Anexos</span>
+                            <span className="text-[9px] font-normal text-neutral-400">
+                              Boleto / Compr.
+                            </span>
+                          </span>
+                        </ReorderableTableHead>
+                      )
+                    }
+
+                    return (
+                      <ReorderableTableHead
+                        key={col.id}
+                        column={col}
+                        dragState={dragState}
+                        {...dragHandlers}
+                      >
+                        {col.label}
+                      </ReorderableTableHead>
+                    )
+                  })}
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-200">
@@ -731,306 +845,354 @@ export function ContasPagarTab({
                         conta.isAtrasado ? 'bg-rose-50/30' : ''
                       }`}
                     >
-                      <td className="px-2.5 py-2 whitespace-nowrap">
-                        <div className="flex flex-col">
-                          <span
-                            className={`font-mono tabular-nums text-xs font-semibold ${
-                              conta.isAtrasado
-                                ? 'text-rose-700 font-bold'
-                                : conta.isVencendoHoje
-                                  ? 'text-amber-700 font-bold'
-                                  : 'text-neutral-800'
-                            }`}
-                          >
-                            {formatDate(conta.data_vencimento)}
-                          </span>
-                          {conta.data_pagamento && (
-                            <span className="text-[10px] text-emerald-700 font-mono tabular-nums">
-                              Pago: {formatDate(conta.data_pagamento)}
-                            </span>
-                          )}
-                        </div>
-                      </td>
-
-                      <td className="px-2.5 py-2">
-                        <div className="space-y-0.5 max-w-[340px]">
-                          <p
-                            className="font-semibold text-neutral-900 line-clamp-1 text-xs"
-                            title={conta.descricao}
-                          >
-                            {conta.descricao}
-                          </p>
-                          <p className="text-neutral-500 text-[11px] flex items-center gap-1.5">
-                            <span
-                              className="font-medium text-neutral-700 truncate max-w-[200px]"
-                              title={conta.fornecedor}
-                            >
-                              {conta.fornecedor}
-                            </span>
-                            {conta.numero_documento && (
-                              <span className="text-neutral-400 font-mono text-[10px]">
-                                Doc: {conta.numero_documento}
-                              </span>
-                            )}
-                          </p>
-                          {/* Observações da exata despesa visíveis na linha */}
-                          {conta.observacoes ? (
-                            <p
-                              className="text-[10px] text-neutral-600 bg-neutral-50 px-1.5 py-0.5 rounded border border-neutral-200 line-clamp-2"
-                              title={conta.observacoes.replace(/<[^>]*>/g, '')}
-                            >
-                              <span className="font-semibold text-neutral-700">Obs:</span>{' '}
-                              {conta.observacoes.replace(/<[^>]*>/g, '')}
-                            </p>
-                          ) : null}
-                        </div>
-                      </td>
-
-                      <td className="px-2.5 py-2 whitespace-nowrap">
-                        {conta.expand?.credor ? (
-                          <div className="space-y-0.5">
-                            <span
-                              className="inline-flex items-center gap-1 font-bold text-neutral-900 text-xs truncate max-w-[190px]"
-                              title={conta.expand.credor.nome_razao_social}
-                            >
-                              <Building2 className="h-3 w-3 text-[#FF6A13] shrink-0" />
-                              <span className="truncate">
-                                {conta.expand.credor.nome_razao_social}
-                              </span>
-                            </span>
-                            <div className="text-[10px] text-neutral-500 font-mono tabular-nums">
-                              {conta.expand.credor.cnpj_cpf}
-                            </div>
-                            {conta.expand.credor.chave_pix && (
-                              <div
-                                className="text-[10px] text-[#D65100] font-mono tabular-nums truncate max-w-[180px]"
-                                title={conta.expand.credor.chave_pix}
-                              >
-                                PIX: {conta.expand.credor.chave_pix}
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="space-y-1">
-                            <span className="text-[11px] text-neutral-400 italic block">
-                              Não vinculado
-                            </span>
-                            {/* Ação rápida para salvar como credor direto da coluna caso tenha comprovante */}
-                            {canWrite &&
-                              Boolean(
-                                conta.comprovante ||
-                                (Array.isArray(conta.comprovantes_metadados) &&
-                                  conta.comprovantes_metadados.length > 0),
-                              ) && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setContaParaCredor(conta)
-                                    setModalSalvarCredorAberto(true)
-                                  }}
-                                  className="inline-flex items-center gap-1 text-[10px] font-semibold text-[#FF6A13] hover:text-[#D65100] hover:underline"
-                                  title="Criar ou vincular credor a partir dos dados do comprovante"
-                                >
-                                  <Building2 className="h-2.5 w-2.5" />
-                                  Salvar como credor
-                                </button>
-                              )}
-                          </div>
-                        )}
-                      </td>
-
-                      <td className="px-2.5 py-2">
-                        <div className="space-y-1 max-w-[240px]">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <CrmBadge tone="gray">
-                              {CATEGORIA_PAGAR_LABELS[conta.categoria] || conta.categoria}
-                            </CrmBadge>
-                          </div>
-                          {conta.id && (
-                            <ContaContabilBadgeInline
-                              colecao="contas_pagar"
-                              id={conta.id}
-                              codigoAtual={conta.plano_contas_codigo}
-                              nomeAtual={conta.plano_contas_nome}
-                              classificacaoManual={Boolean(conta.classificacao_manual)}
-                              dataRegistro={conta.data_vencimento || conta.data_pagamento}
-                              descricaoRegistro={conta.descricao}
-                              observacoesAtual={
-                                conta.observacoes ? conta.observacoes.replace(/<[^>]*>/g, '') : ''
-                              }
-                              compacto={true}
-                              onReclassificado={async (novoCod, novoNom, novasObs) => {
-                                conta.plano_contas_codigo = novoCod
-                                conta.plano_contas_nome = novoNom
-                                conta.classificacao_manual = true
-                                if (novasObs !== undefined) {
-                                  conta.observacoes = novasObs
-                                }
-                                try {
-                                  await onReload()
-                                } catch (_) {
-                                  // Fallback seguro se reload falhar
-                                }
-                              }}
-                            />
-                          )}
-                        </div>
-                      </td>
-
-                      <td className="px-2.5 py-2 whitespace-nowrap">
-                        {conta.expand?.conta_bancaria ? (
-                          <span className="text-[11px] font-medium text-neutral-800 bg-neutral-100 px-2 py-0.5 rounded border border-neutral-200">
-                            {conta.expand.conta_bancaria.apelido}
-                          </span>
-                        ) : (
-                          <span className="text-[10px] text-neutral-400 italic">
-                            Não classificada
-                          </span>
-                        )}
-                      </td>
-
-                      <td className="px-2.5 py-2 whitespace-nowrap">
-                        {conta.expand?.projeto ? (
-                          <Link
-                            to={`/projetos/${conta.projeto}`}
-                            className="font-mono tabular-nums text-[#D65100] font-semibold hover:underline text-xs"
-                          >
-                            {conta.expand.projeto.numero}
-                          </Link>
-                        ) : (
-                          <span className="text-neutral-400 italic text-[11px]">Despesa Geral</span>
-                        )}
-                      </td>
-
-                      <td className="px-2.5 py-2 text-right whitespace-nowrap">
-                        <span className="mono-value font-mono tabular-nums font-bold text-xs sm:text-sm text-neutral-900">
-                          {formatCurrency(conta.valor)}
-                        </span>
-                        {conta.forma_pagamento && (
-                          <p className="text-[10px] text-neutral-400">
-                            {FORMA_PAGTO_LABELS[conta.forma_pagamento]}
-                          </p>
-                        )}
-                      </td>
-
-                      <td className="px-2.5 py-2 text-center whitespace-nowrap">
-                        {conta.status === 'pago' ? (
-                          <CrmBadge tone="green">Pago</CrmBadge>
-                        ) : conta.isAtrasado ? (
-                          <CrmBadge tone="red">Atrasado</CrmBadge>
-                        ) : conta.isVencendoHoje ? (
-                          <CrmBadge tone="amber">Vence Hoje</CrmBadge>
-                        ) : conta.status === 'cancelado' ? (
-                          <CrmBadge tone="gray">Cancelado</CrmBadge>
-                        ) : (
-                          <CrmBadge tone="amber">Pendente</CrmBadge>
-                        )}
-                      </td>
-
-                      <td className="px-2.5 py-2 text-center">
-                        <DocumentosContaPagarBadges conta={conta} compacto={true} />
-                      </td>
-
-                      <td className="px-2.5 py-2 text-right whitespace-nowrap">
-                        {' '}
-                        <div className="flex items-center justify-end gap-1.5">
-                          {canWrite && (
-                            <>
-                              {conta.status !== 'pago' ? (
-                                <Button
-                                  size="sm"
-                                  onClick={() => {
-                                    setMarcandoPago(conta)
-                                    setDataPagamentoModal(new Date().toISOString().slice(0, 10))
-                                  }}
-                                  className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
-                                  title="Registrar pagamento"
-                                >
-                                  <CheckCircle2 className="mr-1 h-3.5 w-3.5" />
-                                  Pagar
-                                </Button>
-                              ) : (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => handleReabrirConta(conta)}
-                                  className="h-7 text-xs border-neutral-300 text-neutral-600 hover:bg-neutral-100"
-                                  title="Reabrir conta para status pendente"
-                                >
-                                  <RotateCcw className="mr-1 h-3 w-3" />
-                                  Reabrir
-                                </Button>
-                              )}
-
-                              {/* AÇÃO CRIAR CREDOR DO COMPROVANTE (quando não tem credor vinculado) */}
-                              {!conta.credor &&
-                                !conta.expand?.credor &&
-                                Boolean(
-                                  conta.comprovante ||
-                                  (Array.isArray(conta.comprovantes_metadados) &&
-                                    conta.comprovantes_metadados.length > 0),
-                                ) && (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => {
-                                      setContaParaCredor(conta)
-                                      setModalSalvarCredorAberto(true)
-                                    }}
-                                    className="h-7 px-2 text-xs border-orange-400 bg-orange-50/50 text-[#D65100] hover:bg-orange-100 font-semibold shadow-sm"
-                                    title="Salvar empresa identificada no comprovante como credor oficial"
+                      {orderedColumns.map((col) => {
+                        switch (col.id) {
+                          case 'vencimento':
+                            return (
+                              <td key={col.id} className="px-2.5 py-2 whitespace-nowrap">
+                                <div className="flex flex-col">
+                                  <span
+                                    className={`font-mono tabular-nums text-xs font-semibold ${
+                                      conta.isAtrasado
+                                        ? 'text-rose-700 font-bold'
+                                        : conta.isVencendoHoje
+                                          ? 'text-amber-700 font-bold'
+                                          : 'text-neutral-800'
+                                    }`}
                                   >
-                                    <Building2 className="mr-1 h-3 w-3 text-[#FF6A13]" />
-                                    Salvar como credor
-                                  </Button>
-                                )}
+                                    {formatDate(conta.data_vencimento)}
+                                  </span>
+                                  {conta.data_pagamento && (
+                                    <span className="text-[10px] text-emerald-700 font-mono tabular-nums">
+                                      Pago: {formatDate(conta.data_pagamento)}
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                            )
 
-                              {/* AÇÃO REVISAR LEITURA / CORRIGIR VALORES COM FOTO LADO A LADO */}
-                              {Boolean(
-                                conta.comprovante ||
-                                (Array.isArray(conta.comprovantes_metadados) &&
-                                  conta.comprovantes_metadados.length > 0),
-                              ) && (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => {
-                                    setContaParaRevisao(conta)
-                                    if (conta.forma_pagamento === 'boleto') {
-                                      setModalBoletoAberto(true)
-                                    } else {
-                                      setModalComprovanteFiscalAberto(true)
-                                    }
-                                  }}
-                                  className="h-7 px-2 text-xs border-neutral-300 text-neutral-700 hover:bg-neutral-100 font-semibold shadow-sm"
-                                  title="Reabrir foto original e corrigir valores manualmente"
-                                >
-                                  <Sparkles className="mr-1 h-3 w-3 text-[#FF6A13]" />
-                                  Revisar leitura
-                                </Button>
-                              )}
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => abrirModalEdicao(conta)}
-                                className="h-7 px-2 text-xs text-neutral-600 hover:text-neutral-900"
-                                title="Editar dados cadastrais"
+                          case 'descricao_fornecedor':
+                            return (
+                              <td key={col.id} className="px-2.5 py-2">
+                                <div className="space-y-0.5 max-w-[340px]">
+                                  <p
+                                    className="font-semibold text-neutral-900 line-clamp-1 text-xs"
+                                    title={conta.descricao}
+                                  >
+                                    {conta.descricao}
+                                  </p>
+                                  <p className="text-neutral-500 text-[11px] flex items-center gap-1.5">
+                                    <span
+                                      className="font-medium text-neutral-700 truncate max-w-[200px]"
+                                      title={conta.fornecedor}
+                                    >
+                                      {conta.fornecedor}
+                                    </span>
+                                    {conta.numero_documento && (
+                                      <span className="text-neutral-400 font-mono text-[10px]">
+                                        Doc: {conta.numero_documento}
+                                      </span>
+                                    )}
+                                  </p>
+                                  {/* Observações da exata despesa visíveis na linha */}
+                                  {conta.observacoes ? (
+                                    <p
+                                      className="text-[10px] text-neutral-600 bg-neutral-50 px-1.5 py-0.5 rounded border border-neutral-200 line-clamp-2"
+                                      title={conta.observacoes.replace(/<[^>]*>/g, '')}
+                                    >
+                                      <span className="font-semibold text-neutral-700">Obs:</span>{' '}
+                                      {conta.observacoes.replace(/<[^>]*>/g, '')}
+                                    </p>
+                                  ) : null}
+                                </div>
+                              </td>
+                            )
+
+                          case 'credor':
+                            return (
+                              <td key={col.id} className="px-2.5 py-2 whitespace-nowrap">
+                                {conta.expand?.credor ? (
+                                  <div className="space-y-0.5">
+                                    <span
+                                      className="inline-flex items-center gap-1 font-bold text-neutral-900 text-xs truncate max-w-[190px]"
+                                      title={conta.expand.credor.nome_razao_social}
+                                    >
+                                      <Building2 className="h-3 w-3 text-[#FF6A13] shrink-0" />
+                                      <span className="truncate">
+                                        {conta.expand.credor.nome_razao_social}
+                                      </span>
+                                    </span>
+                                    <div className="text-[10px] text-neutral-500 font-mono tabular-nums">
+                                      {conta.expand.credor.cnpj_cpf}
+                                    </div>
+                                    {conta.expand.credor.chave_pix && (
+                                      <div
+                                        className="text-[10px] text-[#D65100] font-mono tabular-nums truncate max-w-[180px]"
+                                        title={conta.expand.credor.chave_pix}
+                                      >
+                                        PIX: {conta.expand.credor.chave_pix}
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <div className="space-y-1">
+                                    <span className="text-[11px] text-neutral-400 italic block">
+                                      Não vinculado
+                                    </span>
+                                    {/* Ação rápida para salvar como credor direto da coluna caso tenha comprovante */}
+                                    {canWrite &&
+                                      Boolean(
+                                        conta.comprovante ||
+                                        (Array.isArray(conta.comprovantes_metadados) &&
+                                          conta.comprovantes_metadados.length > 0),
+                                      ) && (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setContaParaCredor(conta)
+                                            setModalSalvarCredorAberto(true)
+                                          }}
+                                          className="inline-flex items-center gap-1 text-[10px] font-semibold text-[#FF6A13] hover:text-[#D65100] hover:underline"
+                                          title="Criar ou vincular credor a partir dos dados do comprovante"
+                                        >
+                                          <Building2 className="h-2.5 w-2.5" />
+                                          Salvar como credor
+                                        </button>
+                                      )}
+                                  </div>
+                                )}
+                              </td>
+                            )
+
+                          case 'classificacao_contabil':
+                            return (
+                              <td key={col.id} className="px-2.5 py-2">
+                                <div className="space-y-1 max-w-[240px]">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <CrmBadge tone="gray">
+                                      {CATEGORIA_PAGAR_LABELS[conta.categoria] || conta.categoria}
+                                    </CrmBadge>
+                                  </div>
+                                  {conta.id && (
+                                    <ContaContabilBadgeInline
+                                      colecao="contas_pagar"
+                                      id={conta.id}
+                                      codigoAtual={conta.plano_contas_codigo}
+                                      nomeAtual={conta.plano_contas_nome}
+                                      classificacaoManual={Boolean(conta.classificacao_manual)}
+                                      dataRegistro={conta.data_vencimento || conta.data_pagamento}
+                                      descricaoRegistro={conta.descricao}
+                                      observacoesAtual={
+                                        conta.observacoes
+                                          ? conta.observacoes.replace(/<[^>]*>/g, '')
+                                          : ''
+                                      }
+                                      compacto={true}
+                                      onReclassificado={async (novoCod, novoNom, novasObs) => {
+                                        conta.plano_contas_codigo = novoCod
+                                        conta.plano_contas_nome = novoNom
+                                        conta.classificacao_manual = true
+                                        if (novasObs !== undefined) {
+                                          conta.observacoes = novasObs
+                                        }
+                                        try {
+                                          await onReload()
+                                        } catch (_) {
+                                          // Fallback seguro se reload falhar
+                                        }
+                                      }}
+                                    />
+                                  )}
+                                </div>
+                              </td>
+                            )
+
+                          case 'conta_pj':
+                            return (
+                              <td key={col.id} className="px-2.5 py-2 whitespace-nowrap">
+                                {conta.expand?.conta_bancaria ? (
+                                  <span className="text-[11px] font-medium text-neutral-800 bg-neutral-100 px-2 py-0.5 rounded border border-neutral-200">
+                                    {conta.expand.conta_bancaria.apelido}
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] text-neutral-400 italic">
+                                    Não classificada
+                                  </span>
+                                )}
+                              </td>
+                            )
+
+                          case 'projeto':
+                            return (
+                              <td key={col.id} className="px-2.5 py-2 whitespace-nowrap">
+                                {conta.expand?.projeto ? (
+                                  <Link
+                                    to={`/projetos/${conta.projeto}`}
+                                    className="font-mono tabular-nums text-[#D65100] font-semibold hover:underline text-xs"
+                                  >
+                                    {conta.expand.projeto.numero}
+                                  </Link>
+                                ) : (
+                                  <span className="text-neutral-400 italic text-[11px]">
+                                    Despesa Geral
+                                  </span>
+                                )}
+                              </td>
+                            )
+
+                          case 'valor':
+                            return (
+                              <td
+                                key={col.id}
+                                className="px-2.5 py-2 text-right whitespace-nowrap font-mono tabular-nums"
                               >
-                                Editar
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => setExcluindo(conta)}
-                                className="h-7 w-7 p-0 text-neutral-400 hover:text-rose-600 hover:bg-rose-50"
-                                title="Excluir conta a pagar"
+                                <span className="mono-value font-mono tabular-nums font-bold text-xs sm:text-sm text-neutral-900">
+                                  {formatCurrency(conta.valor)}
+                                </span>
+                                {conta.forma_pagamento && (
+                                  <p className="text-[10px] text-neutral-400">
+                                    {FORMA_PAGTO_LABELS[conta.forma_pagamento]}
+                                  </p>
+                                )}
+                              </td>
+                            )
+
+                          case 'status':
+                            return (
+                              <td
+                                key={col.id}
+                                className="px-2.5 py-2 text-center whitespace-nowrap"
                               >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
-                            </>
-                          )}
-                        </div>
-                      </td>
+                                {conta.status === 'pago' ? (
+                                  <CrmBadge tone="green">Pago</CrmBadge>
+                                ) : conta.isAtrasado ? (
+                                  <CrmBadge tone="red">Atrasado</CrmBadge>
+                                ) : conta.isVencendoHoje ? (
+                                  <CrmBadge tone="amber">Vence Hoje</CrmBadge>
+                                ) : conta.status === 'cancelado' ? (
+                                  <CrmBadge tone="gray">Cancelado</CrmBadge>
+                                ) : (
+                                  <CrmBadge tone="amber">Pendente</CrmBadge>
+                                )}
+                              </td>
+                            )
+
+                          case 'anexos':
+                            return (
+                              <td key={col.id} className="px-2.5 py-2 text-center">
+                                <DocumentosContaPagarBadges conta={conta} compacto={true} />
+                              </td>
+                            )
+
+                          case 'acoes':
+                            return (
+                              <td key={col.id} className="px-2.5 py-2 text-right whitespace-nowrap">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  {canWrite && (
+                                    <>
+                                      {conta.status !== 'pago' ? (
+                                        <Button
+                                          size="sm"
+                                          onClick={() => {
+                                            setMarcandoPago(conta)
+                                            setDataPagamentoModal(
+                                              new Date().toISOString().slice(0, 10),
+                                            )
+                                          }}
+                                          className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+                                          title="Registrar pagamento"
+                                        >
+                                          <CheckCircle2 className="mr-1 h-3.5 w-3.5" />
+                                          Pagar
+                                        </Button>
+                                      ) : (
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={() => handleReabrirConta(conta)}
+                                          className="h-7 text-xs border-neutral-300 text-neutral-600 hover:bg-neutral-100"
+                                          title="Reabrir conta para status pendente"
+                                        >
+                                          <RotateCcw className="mr-1 h-3 w-3" />
+                                          Reabrir
+                                        </Button>
+                                      )}
+
+                                      {/* AÇÃO CRIAR CREDOR DO COMPROVANTE (quando não tem credor vinculado) */}
+                                      {!conta.credor &&
+                                        !conta.expand?.credor &&
+                                        Boolean(
+                                          conta.comprovante ||
+                                          (Array.isArray(conta.comprovantes_metadados) &&
+                                            conta.comprovantes_metadados.length > 0),
+                                        ) && (
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() => {
+                                              setContaParaCredor(conta)
+                                              setModalSalvarCredorAberto(true)
+                                            }}
+                                            className="h-7 px-2 text-xs border-orange-400 bg-orange-50/50 text-[#D65100] hover:bg-orange-100 font-semibold shadow-sm"
+                                            title="Salvar empresa identificada no comprovante como credor oficial"
+                                          >
+                                            <Building2 className="mr-1 h-3 w-3 text-[#FF6A13]" />
+                                            Salvar como credor
+                                          </Button>
+                                        )}
+
+                                      {/* AÇÃO REVISAR LEITURA / CORRIGIR VALORES COM FOTO LADO A LADO */}
+                                      {Boolean(
+                                        conta.comprovante ||
+                                        (Array.isArray(conta.comprovantes_metadados) &&
+                                          conta.comprovantes_metadados.length > 0),
+                                      ) && (
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={() => {
+                                            setContaParaRevisao(conta)
+                                            if (conta.forma_pagamento === 'boleto') {
+                                              setModalBoletoAberto(true)
+                                            } else {
+                                              setModalComprovanteFiscalAberto(true)
+                                            }
+                                          }}
+                                          className="h-7 px-2 text-xs border-neutral-300 text-neutral-700 hover:bg-neutral-100 font-semibold shadow-sm"
+                                          title="Reabrir foto original e corrigir valores manualmente"
+                                        >
+                                          <Sparkles className="mr-1 h-3 w-3 text-[#FF6A13]" />
+                                          Revisar leitura
+                                        </Button>
+                                      )}
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={() => abrirModalEdicao(conta)}
+                                        className="h-7 px-2 text-xs text-neutral-600 hover:text-neutral-900"
+                                        title="Editar dados cadastrais"
+                                      >
+                                        Editar
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={() => setExcluindo(conta)}
+                                        className="h-7 w-7 p-0 text-neutral-400 hover:text-rose-600 hover:bg-rose-50"
+                                        title="Excluir conta a pagar"
+                                      >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </Button>
+                                    </>
+                                  )}
+                                </div>
+                              </td>
+                            )
+
+                          default:
+                            return null
+                        }
+                      })}
                     </tr>
                   )
                 })}
