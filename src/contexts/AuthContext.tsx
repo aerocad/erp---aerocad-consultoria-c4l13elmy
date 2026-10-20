@@ -117,6 +117,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .collection<UserRecord>('users')
       .authWithPassword(email, password, { requestKey: null })
     try {
+      if (email.trim()) {
+        localStorage.setItem('aerocad_last_login_email', email.trim())
+      }
+    } catch {
+      /* intentionally ignored */
+    }
+    try {
       const saved = localStorage.getItem(`aerocad_ocultar_valores_${result.record.id}`)
       if (saved !== null) {
         setGlobalOcultarValores(saved === 'true')

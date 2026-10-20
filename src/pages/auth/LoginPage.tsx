@@ -15,7 +15,15 @@ export default function LoginPage() {
   const location = useLocation()
   const [email, setEmail] = useState(() => {
     const navState = location.state as { email?: string; from?: string } | null
-    return navState?.email?.trim() || ''
+    if (navState?.email?.trim()) {
+      return navState.email.trim()
+    }
+    try {
+      const savedEmail = localStorage.getItem('aerocad_last_login_email')
+      return savedEmail?.trim() || ''
+    } catch {
+      return ''
+    }
   })
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -33,7 +41,13 @@ export default function LoginPage() {
     }
     setLoading(true)
     try {
-      const loggedUser = await login(email.trim(), password)
+      const normalizedEmail = email.trim()
+      const loggedUser = await login(normalizedEmail, password)
+      try {
+        localStorage.setItem('aerocad_last_login_email', normalizedEmail)
+      } catch {
+        /* intentionally ignored */
+      }
       const isTerceiro = loggedUser?.role === 'terceiro'
       const destination = isTerceiro
         ? '/prestador'
