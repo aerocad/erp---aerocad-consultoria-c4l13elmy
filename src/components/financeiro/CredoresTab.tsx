@@ -472,17 +472,19 @@ export function CredoresTab({
       ) : (
         <div className="crm-card overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+            <table className="w-full text-left text-xs border-collapse">
               <thead className="bg-neutral-50 text-neutral-500 font-semibold border-b border-neutral-200">
                 <tr>
-                  <th className="px-4 py-3">Credor / Razão Social</th>
-                  <th className="px-4 py-3">CNPJ / CPF</th>
-                  <th className="px-4 py-3">Categoria</th>
-                  <th className="px-4 py-3">Contato</th>
-                  <th className="px-4 py-3">Dados Bancários / PIX</th>
-                  <th className="px-4 py-3 text-center">Contas a Pagar</th>
-                  <th className="px-4 py-3 text-center">Status</th>
-                  <th className="px-4 py-3 text-right">Ações</th>
+                  <th className="px-3 py-2.5 min-w-[240px]">Credor / Razão Social</th>
+                  <th className="px-3 py-2.5 whitespace-nowrap min-w-[120px]">CNPJ / CPF</th>
+                  <th className="px-3 py-2.5 whitespace-nowrap min-w-[120px]">Categoria</th>
+                  <th className="px-3 py-2.5 min-w-[160px]">Contato</th>
+                  <th className="px-3 py-2.5 min-w-[180px]">Dados Bancários / PIX</th>
+                  <th className="px-3 py-2.5 text-center whitespace-nowrap min-w-[130px]">
+                    Contas a Pagar
+                  </th>
+                  <th className="px-3 py-2.5 text-center whitespace-nowrap min-w-[85px]">Status</th>
+                  <th className="px-3 py-2.5 text-right whitespace-nowrap min-w-[120px]">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-200 bg-white">
@@ -494,7 +496,7 @@ export function CredoresTab({
 
                   return (
                     <tr key={credor.id} className="hover:bg-[#FFF6EC]/30 transition-colors">
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-2.5">
                         <div className="flex items-center gap-2">
                           <span
                             className={`p-1.5 rounded text-[10px] font-bold ${
@@ -550,17 +552,17 @@ export function CredoresTab({
                         </div>
                       </td>
 
-                      <td className="px-4 py-3 font-mono text-neutral-700 whitespace-nowrap">
+                      <td className="px-3 py-2.5 font-mono text-neutral-700 whitespace-nowrap">
                         {credor.cnpj_cpf}
                       </td>
 
-                      <td className="px-4 py-3 whitespace-nowrap">
+                      <td className="px-3 py-2.5 whitespace-nowrap">
                         <span className="inline-flex rounded-full bg-neutral-100 text-neutral-800 text-[10px] font-semibold px-2 py-0.5 border border-neutral-200">
                           {CATEGORIA_CREDOR_LABELS[credor.categoria] || credor.categoria}
                         </span>
                       </td>
 
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-2.5">
                         <div className="space-y-0.5">
                           {credor.telefone && (
                             <div className="flex items-center gap-1 text-[11px] text-neutral-600">
@@ -580,8 +582,8 @@ export function CredoresTab({
                         </div>
                       </td>
 
-                      <td className="px-4 py-3">
-                        <div className="space-y-0.5 max-w-[200px]">
+                      <td className="px-3 py-2.5">
+                        <div className="space-y-0.5 max-w-[220px]">
                           {credor.chave_pix && (
                             <div className="font-mono text-[11px] text-[#D65100] font-semibold truncate">
                               PIX: {credor.chave_pix}
@@ -605,7 +607,7 @@ export function CredoresTab({
                         </div>
                       </td>
 
-                      <td className="px-4 py-3 text-center whitespace-nowrap">
+                      <td className="px-3 py-2.5 text-center whitespace-nowrap">
                         <button
                           type="button"
                           onClick={() => handleOpenHistorico(credor)}
@@ -622,13 +624,13 @@ export function CredoresTab({
                         </button>
                       </td>
 
-                      <td className="px-4 py-3 text-center whitespace-nowrap">
+                      <td className="px-3 py-2.5 text-center whitespace-nowrap">
                         <CrmBadge tone={credor.status === 'ativo' ? 'green' : 'gray'}>
                           {credor.status === 'ativo' ? 'ATIVO' : 'INATIVO'}
                         </CrmBadge>
                       </td>
 
-                      <td className="px-4 py-3 text-right whitespace-nowrap">
+                      <td className="px-3 py-2.5 text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-1">
                           {canWrite && (
                             <Button

@@ -105,11 +105,11 @@ export default function ClientsPage() {
         />
       ) : (
         <>
-          <div className="hidden overflow-hidden rounded-xl border bg-white md:block">
-            <table className="w-full">
+          <div className="hidden overflow-x-auto rounded-xl border bg-white md:block">
+            <table className="w-full text-left text-xs border-collapse">
               <thead className="border-b bg-[#FAFAFA] text-left text-[11px] uppercase tracking-[.08em] text-[#737373]">
                 <tr>
-                  <th className="px-5 py-3">
+                  <th className="px-3.5 py-2.5 min-w-[220px]">
                     <button
                       className="flex items-center gap-2"
                       onClick={() => setSortAsc((v) => !v)}
@@ -117,14 +117,16 @@ export default function ClientsPage() {
                       Cliente <ArrowUpDown className="h-3.5 w-3.5" />
                     </button>
                   </th>
-                  <th className="px-5 py-3">Documento</th>
-                  <th className="px-5 py-3">Localidade</th>
-                  <th className="px-5 py-3">Contato</th>
-                  <th className="px-5 py-3 text-center">Projetos</th>
-                  <th className="px-5 py-3">Status</th>
+                  <th className="px-3.5 py-2.5 whitespace-nowrap min-w-[130px]">Documento</th>
+                  <th className="px-3.5 py-2.5 whitespace-nowrap min-w-[130px]">Localidade</th>
+                  <th className="px-3.5 py-2.5 min-w-[180px]">Contato</th>
+                  <th className="px-3.5 py-2.5 text-center whitespace-nowrap min-w-[90px]">
+                    Projetos
+                  </th>
+                  <th className="px-3.5 py-2.5 whitespace-nowrap min-w-[100px]">Status</th>
                 </tr>
               </thead>
-              <tbody className="divide-y">
+              <tbody className="divide-y divide-neutral-200">
                 {rows.map((item) => {
                   const count = projects.data.filter(
                     (project) => project.cliente === item.id,
@@ -133,9 +135,9 @@ export default function ClientsPage() {
                     <tr
                       key={item.id}
                       onClick={() => navigate(`/clientes/${item.id}`)}
-                      className="cursor-pointer hover:bg-[#FFF6EC]"
+                      className="cursor-pointer hover:bg-[#FFF6EC]/50 transition-colors"
                     >
-                      <td className="px-5 py-4">
+                      <td className="px-3.5 py-2.5">
                         <div className="flex items-center gap-2">
                           <p className="font-semibold text-[#4B4B4B]">{item.razao_social}</p>
                           {item.origem === 'NFS-e' && (
@@ -148,23 +150,25 @@ export default function ClientsPage() {
                           {item.segmento || 'Segmento não informado'}
                         </p>
                       </td>
-                      <td className="mono-value px-5 py-4 text-sm">{item.cnpj_cpf || '—'}</td>
-                      <td className="px-5 py-4 text-sm">
+                      <td className="mono-value px-3.5 py-2.5 text-xs">{item.cnpj_cpf || '—'}</td>
+                      <td className="px-3.5 py-2.5 text-xs">
                         {item.municipio}
                         {item.uf ? ` / ${item.uf}` : ''}
                       </td>
-                      <td className="px-5 py-4 text-xs text-[#737373]">
+                      <td className="px-3.5 py-2.5 text-xs text-[#737373]">
                         <span className="flex items-center gap-1">
                           <Mail className="h-3 w-3" />
                           {item.email || '—'}
                         </span>
-                        <span className="mt-1 flex items-center gap-1">
+                        <span className="mt-0.5 flex items-center gap-1">
                           <Phone className="h-3 w-3" />
                           {item.telefone || '—'}
                         </span>
                       </td>
-                      <td className="mono-value px-5 py-4 text-center font-bold">{count}</td>
-                      <td className="px-5 py-4">
+                      <td className="mono-value px-3.5 py-2.5 text-center font-bold text-neutral-900">
+                        {count}
+                      </td>
+                      <td className="px-3.5 py-2.5">
                         <CrmBadge
                           tone={
                             item.status === 'cliente'

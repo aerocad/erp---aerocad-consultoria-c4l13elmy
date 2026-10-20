@@ -2157,12 +2157,12 @@ export function FinancePage() {
             </div>
           ) : (
             <div className="crm-card mt-5 overflow-hidden">
-              <div className="hidden lg:block">
-                <table className="w-full">
+              <div className="hidden lg:block overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
                   <thead className="border-b bg-[#FAFAFA] text-left text-[11px] uppercase tracking-wider text-[#737373]">
                     <tr>
                       {canWrite && (
-                        <th className="w-10 px-3 py-3 text-center">
+                        <th className="w-9 px-2.5 py-2.5 text-center">
                           <button
                             type="button"
                             onClick={handleSelectAllVisible}
@@ -2177,22 +2177,41 @@ export function FinancePage() {
                           </button>
                         </th>
                       )}
-                      <th className="px-5 py-3">Projeto / Cliente</th>
-                      <th className="px-5 py-3">Descrição</th>
-                      <th className="px-5 py-3">NFS-e / Faturamento</th>
-                      <th className="px-5 py-3">Valor</th>
-                      <th className="px-5 py-3">Vencimento / Recebimento</th>
-                      <th className="px-5 py-3">Status</th>
-                      <th className="px-5 py-3 text-right">Ação</th>
+                      <th className="px-3 py-2.5 whitespace-nowrap min-w-[160px]">
+                        Projeto / Cliente
+                      </th>
+                      <th className="px-3 py-2.5 min-w-[200px]">Descrição</th>
+                      <th className="px-3 py-2.5 whitespace-nowrap min-w-[140px]">
+                        NFS-e / Faturamento
+                      </th>
+                      <th className="px-3 py-2.5 text-right whitespace-nowrap min-w-[110px]">
+                        Valor
+                      </th>
+                      <th className="px-3 py-2.5 whitespace-nowrap min-w-[130px]">
+                        Vencimento / Recebimento
+                      </th>
+                      <th className="px-3 py-2.5 text-center whitespace-nowrap min-w-[90px]">
+                        Status
+                      </th>
+                      <th className="px-3 py-2.5 text-right whitespace-nowrap min-w-[140px]">
+                        Ação
+                      </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y">
+                  <tbody className="divide-y divide-neutral-200">
                     {rows.map((item) => {
                       const isSelected = selectedIds.includes(item.id)
                       return (
-                        <tr key={item.id} className={isSelected ? 'bg-orange-50/40' : undefined}>
+                        <tr
+                          key={item.id}
+                          className={
+                            isSelected
+                              ? 'bg-orange-50/40 hover:bg-orange-50/60'
+                              : 'hover:bg-neutral-50/80 transition-colors'
+                          }
+                        >
                           {canWrite && (
-                            <td className="px-3 py-4 text-center">
+                            <td className="px-2.5 py-2.5 text-center">
                               <button
                                 type="button"
                                 onClick={() => handleToggleSelect(item.id)}
@@ -2206,29 +2225,29 @@ export function FinancePage() {
                               </button>
                             </td>
                           )}
-                          <td className="px-5 py-4">
+                          <td className="px-3 py-2.5">
                             <Link
                               to={`/projetos/${item.projeto}`}
                               className="mono-value font-bold text-[#D65100] hover:underline"
                             >
                               {item.expand?.projeto?.numero || 'Sem projeto'}
                             </Link>
-                            <p className="text-xs text-[#737373]">
+                            <p className="text-[11px] text-[#737373] truncate max-w-[180px]">
                               {item.expand?.cliente?.razao_social}
                             </p>
                           </td>
-                          <td className="px-5 py-4 text-sm font-semibold">
-                            {item.descricao}
+                          <td className="px-3 py-2.5 text-xs font-semibold">
+                            <span>{item.descricao}</span>
                             {item.origem === 'gatilho' && (
-                              <CrmBadge tone="orange" className="ml-2">
+                              <CrmBadge tone="orange" className="ml-1.5 text-[10px] py-0 px-1.5">
                                 automático
                               </CrmBadge>
                             )}
                           </td>
-                          <td className="px-5 py-4 text-xs">
+                          <td className="px-3 py-2.5 text-xs">
                             {item.nf_numero ? (
-                              <div className="space-y-1">
-                                <span className="inline-flex items-center gap-1 font-mono font-bold text-[#FF6A13] bg-orange-50 px-2 py-0.5 rounded border border-orange-200">
+                              <div className="space-y-0.5">
+                                <span className="inline-flex items-center gap-1 font-mono font-bold text-[#FF6A13] bg-orange-50 px-1.5 py-0.5 rounded border border-orange-200 text-[11px]">
                                   NFS-e nº {item.nf_numero}
                                 </span>
                                 {item.data_faturamento && (
@@ -2246,15 +2265,15 @@ export function FinancePage() {
                                 )}
                               </div>
                             ) : (
-                              <span className="text-[#999] italic">Não faturada</span>
+                              <span className="text-[#999] italic text-[11px]">Não faturada</span>
                             )}
                           </td>
-                          <td className="mono-value px-5 py-4 font-bold">
+                          <td className="mono-value px-3 py-2.5 font-bold text-right text-neutral-900 whitespace-nowrap">
                             {formatCurrency(item.valor)}
                           </td>
-                          <td className="mono-value px-5 py-4 text-xs">
-                            <div className="flex items-center gap-1.5">
-                              <span>Venc:</span>
+                          <td className="mono-value px-3 py-2.5 text-xs whitespace-nowrap">
+                            <div className="flex items-center gap-1">
+                              <span className="text-neutral-500">Venc:</span>
                               {canWrite ? (
                                 <button
                                   type="button"
@@ -2273,12 +2292,12 @@ export function FinancePage() {
                               )}
                             </div>
                             {item.data_pagamento && (
-                              <p className="text-emerald-700 font-semibold mt-0.5">
+                              <p className="text-emerald-700 font-semibold text-[11px] mt-0.5">
                                 Rec: {formatDate(item.data_pagamento)}
                               </p>
                             )}
                           </td>
-                          <td className="px-5 py-4">
+                          <td className="px-3 py-2.5 text-center whitespace-nowrap">
                             <CrmBadge
                               tone={
                                 item.status === 'paga'
@@ -2291,7 +2310,7 @@ export function FinancePage() {
                               {item.status}
                             </CrmBadge>
                           </td>
-                          <td className="px-5 py-4 text-right">
+                          <td className="px-3 py-2.5 text-right whitespace-nowrap">
                             {canWrite && (
                               <div className="flex items-center justify-end gap-1.5">
                                 {item.status !== 'paga' ? (

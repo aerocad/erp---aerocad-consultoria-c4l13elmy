@@ -698,18 +698,20 @@ export function ContasPagarTab({
       ) : (
         <div className="crm-card overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+            <table className="w-full text-left text-xs border-collapse">
               <thead className="bg-neutral-50 text-neutral-500 font-semibold border-b border-neutral-200">
                 <tr>
-                  <th className="px-4 py-3">Vencimento</th>
-                  <th className="px-4 py-3">Descrição / Fornecedor</th>
-                  <th className="px-4 py-3">Credor Oficial</th>
-                  <th className="px-4 py-3">Classificação Contábil</th>
-                  <th className="px-4 py-3">Conta PJ</th>
-                  <th className="px-4 py-3">Projeto Vinculado</th>
-                  <th className="px-4 py-3">Valor Líquido</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3 text-center">
+                  <th className="px-3 py-2.5 whitespace-nowrap min-w-[105px]">Vencimento</th>
+                  <th className="px-3 py-2.5 min-w-[220px]">Descrição / Fornecedor</th>
+                  <th className="px-3 py-2.5 whitespace-nowrap min-w-[160px]">Credor Oficial</th>
+                  <th className="px-3 py-2.5 min-w-[170px]">Classificação Contábil</th>
+                  <th className="px-3 py-2.5 whitespace-nowrap min-w-[110px]">Conta PJ</th>
+                  <th className="px-3 py-2.5 whitespace-nowrap min-w-[100px]">Projeto</th>
+                  <th className="px-3 py-2.5 text-right whitespace-nowrap min-w-[110px]">
+                    Valor Líquido
+                  </th>
+                  <th className="px-3 py-2.5 text-center whitespace-nowrap min-w-[85px]">Status</th>
+                  <th className="px-3 py-2.5 text-center whitespace-nowrap min-w-[95px]">
                     <span className="flex flex-col items-center">
                       <span>Anexos</span>
                       <span className="text-[9px] font-normal text-neutral-400">
@@ -717,7 +719,7 @@ export function ContasPagarTab({
                       </span>
                     </span>
                   </th>
-                  <th className="px-4 py-3 text-right">Ações</th>
+                  <th className="px-3 py-2.5 text-right whitespace-nowrap min-w-[150px]">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-200">
@@ -725,11 +727,11 @@ export function ContasPagarTab({
                   return (
                     <tr
                       key={conta.id}
-                      className={`hover:bg-neutral-50/80 transition ${
+                      className={`hover:bg-neutral-50/80 transition-colors ${
                         conta.isAtrasado ? 'bg-rose-50/30' : ''
                       }`}
                     >
-                      <td className="px-4 py-3 whitespace-nowrap">
+                      <td className="px-3 py-2.5 whitespace-nowrap">
                         <div className="flex flex-col">
                           <span
                             className={`font-mono font-medium ${
@@ -750,8 +752,8 @@ export function ContasPagarTab({
                         </div>
                       </td>
 
-                      <td className="px-4 py-3">
-                        <div className="space-y-1 max-w-[280px]">
+                      <td className="px-3 py-2.5">
+                        <div className="space-y-1 max-w-[320px]">
                           <p className="font-semibold text-neutral-900 line-clamp-1">
                             {conta.descricao}
                           </p>
@@ -776,7 +778,7 @@ export function ContasPagarTab({
                         </div>
                       </td>
 
-                      <td className="px-4 py-3 whitespace-nowrap">
+                      <td className="px-3 py-2.5 whitespace-nowrap">
                         {conta.expand?.credor ? (
                           <div className="space-y-0.5">
                             <span className="inline-flex items-center gap-1 font-bold text-neutral-900 text-xs">
@@ -821,8 +823,8 @@ export function ContasPagarTab({
                         )}
                       </td>
 
-                      <td className="px-4 py-3">
-                        <div className="space-y-1 max-w-[220px]">
+                      <td className="px-3 py-2.5">
+                        <div className="space-y-1 max-w-[240px]">
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <CrmBadge tone="gray">
                               {CATEGORIA_PAGAR_LABELS[conta.categoria] || conta.categoria}
@@ -859,7 +861,7 @@ export function ContasPagarTab({
                         </div>
                       </td>
 
-                      <td className="px-4 py-3 whitespace-nowrap">
+                      <td className="px-3 py-2.5 whitespace-nowrap">
                         {conta.expand?.conta_bancaria ? (
                           <span className="text-[11px] font-medium text-neutral-800 bg-neutral-100 px-2 py-0.5 rounded border border-neutral-200">
                             {conta.expand.conta_bancaria.apelido}
@@ -871,7 +873,7 @@ export function ContasPagarTab({
                         )}
                       </td>
 
-                      <td className="px-4 py-3 whitespace-nowrap">
+                      <td className="px-3 py-2.5 whitespace-nowrap">
                         {conta.expand?.projeto ? (
                           <Link
                             to={`/projetos/${conta.projeto}`}
@@ -884,7 +886,7 @@ export function ContasPagarTab({
                         )}
                       </td>
 
-                      <td className="px-4 py-3 whitespace-nowrap">
+                      <td className="px-3 py-2.5 text-right whitespace-nowrap">
                         <span className="mono-value font-bold text-sm text-neutral-900">
                           {formatCurrency(conta.valor)}
                         </span>
@@ -895,7 +897,7 @@ export function ContasPagarTab({
                         )}
                       </td>
 
-                      <td className="px-4 py-3 whitespace-nowrap">
+                      <td className="px-3 py-2.5 text-center whitespace-nowrap">
                         {conta.status === 'pago' ? (
                           <CrmBadge tone="green">Pago</CrmBadge>
                         ) : conta.isAtrasado ? (
@@ -909,11 +911,11 @@ export function ContasPagarTab({
                         )}
                       </td>
 
-                      <td className="px-4 py-3 text-center">
+                      <td className="px-3 py-2.5 text-center">
                         <DocumentosContaPagarBadges conta={conta} compacto={true} />
                       </td>
 
-                      <td className="px-4 py-3 text-right whitespace-nowrap">
+                      <td className="px-3 py-2.5 text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-1.5">
                           {canWrite && (
                             <>

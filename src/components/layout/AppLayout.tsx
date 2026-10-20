@@ -573,12 +573,13 @@ export default function AppLayout() {
         </header>
 
         <main key={ocultarValores ? 'oculto' : 'visivel'} className="flex-1">
-          <div className="mx-auto max-w-[1440px] p-4 sm:p-6 lg:p-8">
+          {/* Layout responsivo otimizado para dados densos: aproveitamento horizontal máximo em desktop com margens laterais compactas (20px) */}
+          <div className="mx-auto w-full max-w-[1760px] 2xl:max-w-[1920px] p-4 sm:p-5 lg:py-6 lg:px-5">
             <Outlet />
           </div>
         </main>
-        <footer className="border-t border-[var(--app-header-border,#DEDEDE)] px-5 py-4 text-center text-xs text-[#8A8A8A]">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-2 max-w-[1440px] mx-auto">
+        <footer className="border-t border-[var(--app-header-border,#DEDEDE)] px-4 sm:px-5 py-4 text-center text-xs text-[#8A8A8A]">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-2 max-w-[1760px] 2xl:max-w-[1920px] mx-auto">
             <div>
               CRM AEROCAD · v1 <span className="mx-2">•</span> Perfis: {formatUserRoles(user)}
               {isSimulating && (

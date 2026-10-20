@@ -1223,12 +1223,12 @@ export function PlanoContasTab({
                         <table className="w-full text-left text-xs border-collapse">
                           <thead>
                             <tr className="bg-neutral-100/70 text-neutral-700 font-semibold border-b border-neutral-200 text-[11px]">
-                              <th className="py-2.5 px-3 w-[12%]">Código</th>
-                              <th className="py-2.5 px-3 w-[38%]">Nome da Conta Contábil</th>
-                              <th className="py-2.5 px-3 w-[14%] text-center">Classificação</th>
-                              <th className="py-2.5 px-3 w-[14%] text-center">Lançamentos</th>
-                              <th className="py-2.5 px-3 w-[12%] text-right">Volume (R$)</th>
-                              <th className="py-2.5 px-3 w-[10%] text-center">Ações</th>
+                              <th className="py-2 px-2.5 w-[10%]">Código</th>
+                              <th className="py-2 px-2.5 w-[42%]">Nome da Conta Contábil</th>
+                              <th className="py-2 px-2.5 w-[12%] text-center">Classificação</th>
+                              <th className="py-2 px-2.5 w-[12%] text-center">Lançamentos</th>
+                              <th className="py-2 px-2.5 w-[13%] text-right">Volume (R$)</th>
+                              <th className="py-2 px-2.5 w-[11%] text-center">Ações</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-neutral-100">
@@ -1241,14 +1241,14 @@ export function PlanoContasTab({
                                   className="hover:bg-neutral-50/70 transition-colors"
                                 >
                                   {/* Código */}
-                                  <td className="py-2.5 px-3 font-mono font-bold text-neutral-900">
+                                  <td className="py-2 px-2.5 font-mono font-bold text-neutral-900">
                                     <span className="bg-neutral-100 px-1.5 py-0.5 rounded text-[11px]">
                                       {conta.codigo}
                                     </span>
                                   </td>
 
                                   {/* Nome */}
-                                  <td className="py-2.5 px-3">
+                                  <td className="py-2 px-2.5">
                                     <div className="font-medium text-neutral-800">{conta.nome}</div>
                                     {conta.descricao && (
                                       <div className="text-[11px] text-neutral-400">
@@ -1258,7 +1258,7 @@ export function PlanoContasTab({
                                   </td>
 
                                   {/* Classificação / Regime */}
-                                  <td className="py-2.5 px-3 text-center">
+                                  <td className="py-2 px-2.5 text-center">
                                     {conta.fixoOuVariavel ? (
                                       <Badge
                                         variant="outline"
@@ -1278,7 +1278,7 @@ export function PlanoContasTab({
                                   </td>
 
                                   {/* Lançamentos */}
-                                  <td className="py-2.5 px-3 text-center">
+                                  <td className="py-2 px-2.5 text-center">
                                     {temLancamentos ? (
                                       <button
                                         type="button"
@@ -1301,12 +1301,12 @@ export function PlanoContasTab({
                                   </td>
 
                                   {/* Volume */}
-                                  <td className="py-2.5 px-3 text-right font-mono font-medium text-neutral-700">
+                                  <td className="py-2 px-2.5 text-right font-mono font-medium text-neutral-700 whitespace-nowrap">
                                     {temLancamentos ? formatCurrency(conta.totalValor) : '—'}
                                   </td>
 
                                   {/* Ação: Visualizar lançamentos ou navegar para aba */}
-                                  <td className="py-2.5 px-3 text-center">
+                                  <td className="py-2 px-2.5 text-center">
                                     <div className="flex items-center justify-center gap-1">
                                       {temLancamentos && (
                                         <Button

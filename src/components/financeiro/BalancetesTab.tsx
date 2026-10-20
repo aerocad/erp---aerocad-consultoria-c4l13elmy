@@ -1188,16 +1188,26 @@ export function BalancetesTab({
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+            <table className="w-full text-left text-xs border-collapse">
               <thead className="bg-neutral-50 text-neutral-600 font-semibold border-b border-neutral-200">
                 <tr>
-                  <th className="px-4 py-3">Referência / Título</th>
-                  <th className="px-4 py-3 text-right text-emerald-700">Receitas do Mês</th>
-                  <th className="px-4 py-3 text-right text-rose-700">Despesas do Mês</th>
-                  <th className="px-4 py-3 text-right font-bold">Saldo do Mês</th>
-                  <th className="px-4 py-3 text-right text-[#D65100]">Saldo Acumulado (Ano)</th>
-                  <th className="px-4 py-3 text-center">Data Emissão</th>
-                  <th className="px-4 py-3 text-right">Ações</th>
+                  <th className="px-3 py-2.5 min-w-[240px]">Referência / Título</th>
+                  <th className="px-3 py-2.5 text-right text-emerald-700 whitespace-nowrap min-w-[120px]">
+                    Receitas do Mês
+                  </th>
+                  <th className="px-3 py-2.5 text-right text-rose-700 whitespace-nowrap min-w-[120px]">
+                    Despesas do Mês
+                  </th>
+                  <th className="px-3 py-2.5 text-right font-bold whitespace-nowrap min-w-[110px]">
+                    Saldo do Mês
+                  </th>
+                  <th className="px-3 py-2.5 text-right text-[#D65100] whitespace-nowrap min-w-[140px]">
+                    Saldo Acumulado (Ano)
+                  </th>
+                  <th className="px-3 py-2.5 text-center whitespace-nowrap min-w-[100px]">
+                    Data Emissão
+                  </th>
+                  <th className="px-3 py-2.5 text-right whitespace-nowrap min-w-[200px]">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-200 bg-white">
@@ -1214,7 +1224,7 @@ export function BalancetesTab({
                       <tr
                         className={`hover:bg-[#FFF6EC]/30 transition-colors ${expandido ? 'bg-[#FFF8F3]/60' : ''}`}
                       >
-                        <td className="px-4 py-3">
+                        <td className="px-3 py-2.5">
                           <div className="flex items-center gap-2">
                             <button
                               type="button"
@@ -1248,26 +1258,26 @@ export function BalancetesTab({
                             </div>
                           </div>
                         </td>
-                        <td className="px-4 py-3 text-right font-mono font-semibold text-emerald-700">
+                        <td className="px-3 py-2.5 text-right font-mono font-semibold text-emerald-700 whitespace-nowrap">
                           {formatCurrency(bal.receita_total ?? 0)}
                         </td>
-                        <td className="px-4 py-3 text-right font-mono font-semibold text-rose-700">
+                        <td className="px-3 py-2.5 text-right font-mono font-semibold text-rose-700 whitespace-nowrap">
                           - {formatCurrency(bal.despesa_total ?? 0)}
                         </td>
                         <td
-                          className={`px-4 py-3 text-right font-mono font-bold ${
+                          className={`px-3 py-2.5 text-right font-mono font-bold whitespace-nowrap ${
                             (bal.saldo_mes ?? 0) >= 0 ? 'text-emerald-700' : 'text-rose-700'
                           }`}
                         >
                           {formatCurrency(bal.saldo_mes ?? 0)}
                         </td>
-                        <td className="px-4 py-3 text-right font-mono font-bold text-[#D65100]">
+                        <td className="px-3 py-2.5 text-right font-mono font-bold text-[#D65100] whitespace-nowrap">
                           {formatCurrency(bal.saldo_acumulado_ano ?? 0)}
                         </td>
-                        <td className="px-4 py-3 text-center font-mono text-neutral-600">
+                        <td className="px-3 py-2.5 text-center font-mono text-neutral-600 whitespace-nowrap">
                           {bal.data_emissao ? formatDate(bal.data_emissao) : '—'}
                         </td>
-                        <td className="px-4 py-3 text-right">
+                        <td className="px-3 py-2.5 text-right whitespace-nowrap">
                           <div className="flex items-center justify-end gap-1.5">
                             <Button
                               size="sm"
@@ -1308,7 +1318,7 @@ export function BalancetesTab({
                       {/* LINHA EXPANSÍVEL: DETALHAMENTO DE CONTAS CONTÁBEIS */}
                       {expandido && detalhe && (
                         <tr className="bg-neutral-50/70 border-b-2 border-orange-200">
-                          <td colSpan={7} className="p-4 sm:p-5">
+                          <td colSpan={7} className="p-3 sm:p-4">
                             <div className="space-y-4 rounded-lg bg-white p-4 border border-neutral-200 shadow-xs">
                               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b pb-3">
                                 <div className="flex items-center gap-2">

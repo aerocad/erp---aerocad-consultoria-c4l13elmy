@@ -122,40 +122,44 @@ export default function ProcessesPage() {
         />
       ) : (
         <div className="crm-card overflow-hidden">
-          <div className="hidden md:block">
-            <table className="w-full">
+          <div className="hidden overflow-x-auto md:block">
+            <table className="w-full text-left text-xs border-collapse">
               <thead className="border-b bg-[#FAFAFA] text-left text-[11px] uppercase tracking-wider text-[#737373]">
                 <tr>
-                  <th className="px-5 py-3">Protocolo</th>
-                  <th className="px-5 py-3">Projeto</th>
-                  <th className="px-5 py-3">Órgão</th>
-                  <th className="px-5 py-3">Protocolo em</th>
-                  <th className="px-5 py-3">Prazo do órgão</th>
-                  <th className="px-5 py-3">Status</th>
+                  <th className="px-3.5 py-2.5 whitespace-nowrap min-w-[140px]">Protocolo</th>
+                  <th className="px-3.5 py-2.5 min-w-[200px]">Projeto</th>
+                  <th className="px-3.5 py-2.5 whitespace-nowrap min-w-[100px]">Órgão</th>
+                  <th className="px-3.5 py-2.5 whitespace-nowrap min-w-[110px]">Protocolo em</th>
+                  <th className="px-3.5 py-2.5 whitespace-nowrap min-w-[110px]">Prazo do órgão</th>
+                  <th className="px-3.5 py-2.5 whitespace-nowrap min-w-[100px]">Status</th>
                 </tr>
               </thead>
-              <tbody className="divide-y">
+              <tbody className="divide-y divide-neutral-200">
                 {rows.map((item) => (
                   <tr
                     key={item.id}
                     onClick={() => navigate(`/processos/${item.id}`)}
-                    className="cursor-pointer hover:bg-[#FFF6EC]"
+                    className="cursor-pointer hover:bg-[#FFF6EC]/50 transition-colors"
                   >
-                    <td className="mono-value px-5 py-4 font-bold">
+                    <td className="mono-value px-3.5 py-2.5 font-bold text-neutral-900">
                       {item.numero_protocolo || 'A protocolar'}
                     </td>
-                    <td className="px-5 py-4">
+                    <td className="px-3.5 py-2.5">
                       <p className="mono-value text-xs text-[#D65100]">
                         {item.expand?.projeto?.numero}
                       </p>
-                      <p className="text-sm font-semibold">{item.expand?.projeto?.nome}</p>
+                      <p className="text-xs font-semibold text-neutral-800">
+                        {item.expand?.projeto?.nome}
+                      </p>
                     </td>
-                    <td className="px-5 py-4 text-sm">{item.orgao}</td>
-                    <td className="mono-value px-5 py-4 text-sm">
+                    <td className="px-3.5 py-2.5 text-xs text-neutral-700">{item.orgao}</td>
+                    <td className="mono-value px-3.5 py-2.5 text-xs">
                       {formatDate(item.data_protocolo)}
                     </td>
-                    <td className="mono-value px-5 py-4 text-sm">{formatDate(item.prazo_orgao)}</td>
-                    <td className="px-5 py-4">
+                    <td className="mono-value px-3.5 py-2.5 text-xs">
+                      {formatDate(item.prazo_orgao)}
+                    </td>
+                    <td className="px-3.5 py-2.5">
                       <CrmBadge
                         tone={
                           item.status === 'deferido'

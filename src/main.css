@@ -189,6 +189,20 @@
   table td {
     @apply text-[11px] sm:text-xs text-neutral-800 leading-snug;
   }
+
+  /* Otimização de tabelas corporativas AEROCAD: melhor aproveitamento horizontal, alinhamentos e padding equilibrado */
+  .crm-data-table {
+    @apply w-full text-left text-xs border-collapse;
+  }
+  .crm-data-table th {
+    @apply px-3 py-2.5 font-bold text-neutral-600 bg-neutral-50/90 border-b border-neutral-200 uppercase text-[10px] sm:text-[11px] tracking-wide whitespace-nowrap;
+  }
+  .crm-data-table td {
+    @apply px-3 py-2.5 text-xs text-neutral-800 align-middle border-b border-neutral-100;
+  }
+  .crm-data-table tr:hover td {
+    @apply bg-neutral-50/70;
+  }
 }
 
 @keyframes blueprint-rise {

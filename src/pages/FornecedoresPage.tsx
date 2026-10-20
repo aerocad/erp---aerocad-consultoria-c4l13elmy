@@ -400,17 +400,21 @@ export default function FornecedoresPage() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+            <table className="w-full text-left text-xs border-collapse">
               <thead className="bg-neutral-50 text-neutral-500 font-semibold border-b border-neutral-200">
                 <tr>
-                  <th className="px-4 py-3">Tipo</th>
-                  <th className="px-4 py-3">Fornecedor / Nome</th>
-                  <th className="px-4 py-3">Documento (CNPJ/CPF)</th>
-                  <th className="px-4 py-3">Categoria</th>
-                  <th className="px-4 py-3">Contato & Telefone</th>
-                  <th className="px-4 py-3">PIX / Dados Bancários</th>
-                  <th className="px-4 py-3 text-center">Situação</th>
-                  <th className="px-4 py-3 text-right">Ações</th>
+                  <th className="px-3 py-2.5 whitespace-nowrap min-w-[60px]">Tipo</th>
+                  <th className="px-3 py-2.5 min-w-[220px]">Fornecedor / Nome</th>
+                  <th className="px-3 py-2.5 whitespace-nowrap min-w-[130px]">
+                    Documento (CNPJ/CPF)
+                  </th>
+                  <th className="px-3 py-2.5 whitespace-nowrap min-w-[130px]">Categoria</th>
+                  <th className="px-3 py-2.5 min-w-[160px]">Contato & Telefone</th>
+                  <th className="px-3 py-2.5 min-w-[180px]">PIX / Dados Bancários</th>
+                  <th className="px-3 py-2.5 text-center whitespace-nowrap min-w-[85px]">
+                    Situação
+                  </th>
+                  <th className="px-3 py-2.5 text-right whitespace-nowrap min-w-[100px]">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-200 bg-white">
@@ -420,9 +424,9 @@ export default function FornecedoresPage() {
                     (item.cnpj_cpf && item.cnpj_cpf.replace(/\D/g, '').length === 11)
                   return (
                     <tr key={item.id} className="hover:bg-[#FFF6EC]/30 transition-colors">
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-2.5 whitespace-nowrap">
                         <span
-                          className={`inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold ${
+                          className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold ${
                             isPF
                               ? 'bg-blue-50 text-blue-700 border border-blue-200'
                               : 'bg-orange-50 text-[#D65100] border border-orange-200'
@@ -431,7 +435,7 @@ export default function FornecedoresPage() {
                           {isPF ? 'PF' : 'PJ'}
                         </span>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-2.5">
                         <div className="font-bold text-neutral-900">
                           {item.nome_completo || item.razao_social}
                         </div>
@@ -447,15 +451,15 @@ export default function FornecedoresPage() {
                           </div>
                         )}
                       </td>
-                      <td className="px-4 py-3 font-mono text-neutral-700">
+                      <td className="px-3 py-2.5 font-mono text-neutral-700 whitespace-nowrap">
                         {item.cnpj_cpf || item.cpf}
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-2.5 whitespace-nowrap">
                         <span className="inline-flex rounded-full bg-neutral-100 text-neutral-800 text-[10px] font-semibold px-2 py-0.5 border border-neutral-200">
                           {CATEGORIA_FORNECEDOR_LABELS[item.categoria] || item.categoria}
                         </span>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-2.5">
                         {item.contato_nome && (
                           <div className="font-medium text-neutral-800">{item.contato_nome}</div>
                         )}
@@ -472,7 +476,7 @@ export default function FornecedoresPage() {
                           </div>
                         )}
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-2.5">
                         {item.chave_pix ? (
                           <div className="font-mono text-[11px] text-[#D65100] font-semibold">
                             PIX: {item.chave_pix}
@@ -486,12 +490,12 @@ export default function FornecedoresPage() {
                           </div>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-center">
+                      <td className="px-3 py-2.5 text-center whitespace-nowrap">
                         <CrmBadge tone={item.status === 'ativo' ? 'green' : 'gray'}>
                           {item.status.toUpperCase()}
                         </CrmBadge>
                       </td>
-                      <td className="px-4 py-3 text-right">
+                      <td className="px-3 py-2.5 text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-1">
                           {canEdit && (
                             <Button

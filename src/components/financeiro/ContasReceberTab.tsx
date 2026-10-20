@@ -596,16 +596,18 @@ export function ContasReceberTab({
       ) : (
         <div className="crm-card overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+            <table className="w-full text-left text-xs border-collapse">
               <thead className="bg-neutral-50 text-neutral-500 font-semibold border-b border-neutral-200">
                 <tr>
-                  <th className="px-4 py-3">Vencimento</th>
-                  <th className="px-4 py-3">Descrição / Cliente</th>
-                  <th className="px-4 py-3">Origem / Categoria</th>
-                  <th className="px-4 py-3">NFS-e / Doc</th>
-                  <th className="px-4 py-3">Valor</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3 text-right">Ações</th>
+                  <th className="px-3 py-2.5 whitespace-nowrap min-w-[105px]">Vencimento</th>
+                  <th className="px-3 py-2.5 min-w-[230px]">Descrição / Cliente</th>
+                  <th className="px-3 py-2.5 whitespace-nowrap min-w-[130px]">
+                    Origem / Categoria
+                  </th>
+                  <th className="px-3 py-2.5 whitespace-nowrap min-w-[110px]">NFS-e / Doc</th>
+                  <th className="px-3 py-2.5 text-right whitespace-nowrap min-w-[110px]">Valor</th>
+                  <th className="px-3 py-2.5 text-center whitespace-nowrap min-w-[90px]">Status</th>
+                  <th className="px-3 py-2.5 text-right whitespace-nowrap min-w-[210px]">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-200">
@@ -613,11 +615,11 @@ export function ContasReceberTab({
                   return (
                     <tr
                       key={item.id}
-                      className={`hover:bg-neutral-50/80 transition ${
+                      className={`hover:bg-neutral-50/80 transition-colors ${
                         item.status === 'vencido' ? 'bg-rose-50/25' : ''
                       }`}
                     >
-                      <td className="px-4 py-3 whitespace-nowrap">
+                      <td className="px-3 py-2.5 whitespace-nowrap">
                         <div className="flex items-center gap-1.5">
                           {canWrite && item.origemTipo === 'parcela' ? (
                             <button
@@ -655,8 +657,8 @@ export function ContasReceberTab({
                         )}
                       </td>
 
-                      <td className="px-4 py-3">
-                        <div className="space-y-0.5 max-w-[300px]">
+                      <td className="px-3 py-2.5">
+                        <div className="space-y-0.5 max-w-[320px]">
                           <p className="font-semibold text-neutral-900 line-clamp-1">
                             {item.descricao}
                           </p>
@@ -674,13 +676,13 @@ export function ContasReceberTab({
                         </div>
                       </td>
 
-                      <td className="px-4 py-3 whitespace-nowrap">
+                      <td className="px-3 py-2.5 whitespace-nowrap">
                         <CrmBadge tone={item.origemTipo === 'parcela' ? 'orange' : 'gray'}>
                           {item.categoriaLabel}
                         </CrmBadge>
                       </td>
 
-                      <td className="px-4 py-3 whitespace-nowrap">
+                      <td className="px-3 py-2.5 whitespace-nowrap">
                         {item.nfNumero ? (
                           <span className="font-mono font-bold text-[#FF6A13] bg-orange-50 px-2 py-0.5 rounded border border-orange-200 text-[11px]">
                             NFS-e nº {item.nfNumero}
@@ -690,7 +692,7 @@ export function ContasReceberTab({
                         )}
                       </td>
 
-                      <td className="px-4 py-3 whitespace-nowrap">
+                      <td className="px-3 py-2.5 text-right whitespace-nowrap">
                         <span className="mono-value font-bold text-sm text-neutral-900">
                           {formatCurrency(item.valor)}
                         </span>
@@ -701,7 +703,7 @@ export function ContasReceberTab({
                         )}
                       </td>
 
-                      <td className="px-4 py-3 whitespace-nowrap">
+                      <td className="px-3 py-2.5 text-center whitespace-nowrap">
                         {item.status === 'recebido' ? (
                           <CrmBadge tone="green">Recebido</CrmBadge>
                         ) : item.status === 'vencido' ? (
@@ -713,7 +715,7 @@ export function ContasReceberTab({
                         )}
                       </td>
 
-                      <td className="px-4 py-3 text-right whitespace-nowrap">
+                      <td className="px-3 py-2.5 text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-1.5">
                           {canWrite && (
                             <>
