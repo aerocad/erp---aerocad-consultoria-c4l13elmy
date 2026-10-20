@@ -699,27 +699,27 @@ export function ContasPagarTab({
         <div className="crm-card overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
-              <thead className="bg-neutral-50 text-neutral-500 font-semibold border-b border-neutral-200">
+              <thead className="bg-neutral-50/95 text-neutral-600 font-bold border-b border-neutral-200">
                 <tr>
-                  <th className="px-3 py-2.5 whitespace-nowrap min-w-[105px]">Vencimento</th>
-                  <th className="px-3 py-2.5 min-w-[220px]">Descrição / Fornecedor</th>
-                  <th className="px-3 py-2.5 whitespace-nowrap min-w-[160px]">Credor Oficial</th>
-                  <th className="px-3 py-2.5 min-w-[170px]">Classificação Contábil</th>
-                  <th className="px-3 py-2.5 whitespace-nowrap min-w-[110px]">Conta PJ</th>
-                  <th className="px-3 py-2.5 whitespace-nowrap min-w-[100px]">Projeto</th>
-                  <th className="px-3 py-2.5 text-right whitespace-nowrap min-w-[110px]">
+                  <th className="px-2.5 py-2 whitespace-nowrap min-w-[95px]">Vencimento</th>
+                  <th className="px-2.5 py-2 min-w-[200px]">Descrição / Fornecedor</th>
+                  <th className="px-2.5 py-2 whitespace-nowrap min-w-[150px]">Credor Oficial</th>
+                  <th className="px-2.5 py-2 min-w-[160px]">Classificação Contábil</th>
+                  <th className="px-2.5 py-2 whitespace-nowrap min-w-[95px]">Conta PJ</th>
+                  <th className="px-2.5 py-2 whitespace-nowrap min-w-[90px]">Projeto</th>
+                  <th className="px-2.5 py-2 text-right whitespace-nowrap min-w-[105px]">
                     Valor Líquido
                   </th>
-                  <th className="px-3 py-2.5 text-center whitespace-nowrap min-w-[85px]">Status</th>
-                  <th className="px-3 py-2.5 text-center whitespace-nowrap min-w-[95px]">
+                  <th className="px-2.5 py-2 text-center whitespace-nowrap min-w-[80px]">Status</th>
+                  <th className="px-2.5 py-2 text-center whitespace-nowrap min-w-[90px]">
                     <span className="flex flex-col items-center">
                       <span>Anexos</span>
                       <span className="text-[9px] font-normal text-neutral-400">
-                        Boleto / Comprovante
+                        Boleto / Compr.
                       </span>
                     </span>
                   </th>
-                  <th className="px-3 py-2.5 text-right whitespace-nowrap min-w-[150px]">Ações</th>
+                  <th className="px-2.5 py-2 text-right whitespace-nowrap min-w-[140px]">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-200">
@@ -727,14 +727,14 @@ export function ContasPagarTab({
                   return (
                     <tr
                       key={conta.id}
-                      className={`hover:bg-neutral-50/80 transition-colors ${
+                      className={`hover:bg-neutral-50/90 transition-colors ${
                         conta.isAtrasado ? 'bg-rose-50/30' : ''
                       }`}
                     >
-                      <td className="px-3 py-2.5 whitespace-nowrap">
+                      <td className="px-2.5 py-2 whitespace-nowrap">
                         <div className="flex flex-col">
                           <span
-                            className={`font-mono font-medium ${
+                            className={`font-mono tabular-nums text-xs font-semibold ${
                               conta.isAtrasado
                                 ? 'text-rose-700 font-bold'
                                 : conta.isVencendoHoje
@@ -745,30 +745,38 @@ export function ContasPagarTab({
                             {formatDate(conta.data_vencimento)}
                           </span>
                           {conta.data_pagamento && (
-                            <span className="text-[10px] text-emerald-700">
+                            <span className="text-[10px] text-emerald-700 font-mono tabular-nums">
                               Pago: {formatDate(conta.data_pagamento)}
                             </span>
                           )}
                         </div>
                       </td>
 
-                      <td className="px-3 py-2.5">
-                        <div className="space-y-1 max-w-[320px]">
-                          <p className="font-semibold text-neutral-900 line-clamp-1">
+                      <td className="px-2.5 py-2">
+                        <div className="space-y-0.5 max-w-[340px]">
+                          <p
+                            className="font-semibold text-neutral-900 line-clamp-1 text-xs"
+                            title={conta.descricao}
+                          >
                             {conta.descricao}
                           </p>
                           <p className="text-neutral-500 text-[11px] flex items-center gap-1.5">
-                            <span className="font-medium text-neutral-700">{conta.fornecedor}</span>
+                            <span
+                              className="font-medium text-neutral-700 truncate max-w-[200px]"
+                              title={conta.fornecedor}
+                            >
+                              {conta.fornecedor}
+                            </span>
                             {conta.numero_documento && (
-                              <span className="text-neutral-400">
+                              <span className="text-neutral-400 font-mono text-[10px]">
                                 Doc: {conta.numero_documento}
                               </span>
                             )}
                           </p>
-                          {/* REQUISITO 2: Observações da exata despesa visíveis na linha */}
+                          {/* Observações da exata despesa visíveis na linha */}
                           {conta.observacoes ? (
                             <p
-                              className="text-[11px] text-neutral-600 bg-neutral-50 px-1.5 py-0.5 rounded border border-neutral-200 line-clamp-2"
+                              className="text-[10px] text-neutral-600 bg-neutral-50 px-1.5 py-0.5 rounded border border-neutral-200 line-clamp-2"
                               title={conta.observacoes.replace(/<[^>]*>/g, '')}
                             >
                               <span className="font-semibold text-neutral-700">Obs:</span>{' '}
@@ -778,18 +786,26 @@ export function ContasPagarTab({
                         </div>
                       </td>
 
-                      <td className="px-3 py-2.5 whitespace-nowrap">
+                      <td className="px-2.5 py-2 whitespace-nowrap">
                         {conta.expand?.credor ? (
                           <div className="space-y-0.5">
-                            <span className="inline-flex items-center gap-1 font-bold text-neutral-900 text-xs">
-                              <Building2 className="h-3 w-3 text-[#FF6A13]" />
-                              {conta.expand.credor.nome_razao_social}
+                            <span
+                              className="inline-flex items-center gap-1 font-bold text-neutral-900 text-xs truncate max-w-[190px]"
+                              title={conta.expand.credor.nome_razao_social}
+                            >
+                              <Building2 className="h-3 w-3 text-[#FF6A13] shrink-0" />
+                              <span className="truncate">
+                                {conta.expand.credor.nome_razao_social}
+                              </span>
                             </span>
-                            <div className="text-[10px] text-neutral-500 font-mono">
+                            <div className="text-[10px] text-neutral-500 font-mono tabular-nums">
                               {conta.expand.credor.cnpj_cpf}
                             </div>
                             {conta.expand.credor.chave_pix && (
-                              <div className="text-[10px] text-[#D65100] font-mono">
+                              <div
+                                className="text-[10px] text-[#D65100] font-mono tabular-nums truncate max-w-[180px]"
+                                title={conta.expand.credor.chave_pix}
+                              >
                                 PIX: {conta.expand.credor.chave_pix}
                               </div>
                             )}
@@ -823,7 +839,7 @@ export function ContasPagarTab({
                         )}
                       </td>
 
-                      <td className="px-3 py-2.5">
+                      <td className="px-2.5 py-2">
                         <div className="space-y-1 max-w-[240px]">
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <CrmBadge tone="gray">
@@ -861,7 +877,7 @@ export function ContasPagarTab({
                         </div>
                       </td>
 
-                      <td className="px-3 py-2.5 whitespace-nowrap">
+                      <td className="px-2.5 py-2 whitespace-nowrap">
                         {conta.expand?.conta_bancaria ? (
                           <span className="text-[11px] font-medium text-neutral-800 bg-neutral-100 px-2 py-0.5 rounded border border-neutral-200">
                             {conta.expand.conta_bancaria.apelido}
@@ -873,21 +889,21 @@ export function ContasPagarTab({
                         )}
                       </td>
 
-                      <td className="px-3 py-2.5 whitespace-nowrap">
+                      <td className="px-2.5 py-2 whitespace-nowrap">
                         {conta.expand?.projeto ? (
                           <Link
                             to={`/projetos/${conta.projeto}`}
-                            className="font-mono text-[#D65100] font-semibold hover:underline"
+                            className="font-mono tabular-nums text-[#D65100] font-semibold hover:underline text-xs"
                           >
                             {conta.expand.projeto.numero}
                           </Link>
                         ) : (
-                          <span className="text-neutral-400 italic">Despesa Geral</span>
+                          <span className="text-neutral-400 italic text-[11px]">Despesa Geral</span>
                         )}
                       </td>
 
-                      <td className="px-3 py-2.5 text-right whitespace-nowrap">
-                        <span className="mono-value font-bold text-sm text-neutral-900">
+                      <td className="px-2.5 py-2 text-right whitespace-nowrap">
+                        <span className="mono-value font-mono tabular-nums font-bold text-xs sm:text-sm text-neutral-900">
                           {formatCurrency(conta.valor)}
                         </span>
                         {conta.forma_pagamento && (
@@ -897,7 +913,7 @@ export function ContasPagarTab({
                         )}
                       </td>
 
-                      <td className="px-3 py-2.5 text-center whitespace-nowrap">
+                      <td className="px-2.5 py-2 text-center whitespace-nowrap">
                         {conta.status === 'pago' ? (
                           <CrmBadge tone="green">Pago</CrmBadge>
                         ) : conta.isAtrasado ? (
@@ -911,11 +927,12 @@ export function ContasPagarTab({
                         )}
                       </td>
 
-                      <td className="px-3 py-2.5 text-center">
+                      <td className="px-2.5 py-2 text-center">
                         <DocumentosContaPagarBadges conta={conta} compacto={true} />
                       </td>
 
-                      <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                      <td className="px-2.5 py-2 text-right whitespace-nowrap">
+                        {' '}
                         <div className="flex items-center justify-end gap-1.5">
                           {canWrite && (
                             <>

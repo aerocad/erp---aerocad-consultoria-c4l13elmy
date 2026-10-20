@@ -711,17 +711,23 @@ export default function PessoalPage() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-neutral-50 text-neutral-500 font-semibold border-b border-neutral-200">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead className="bg-neutral-50/95 text-neutral-600 font-bold border-b border-neutral-200">
                 <tr>
-                  <th className="px-4 py-3">Colaborador</th>
-                  <th className="px-4 py-3">Cargo & Função</th>
-                  <th className="px-4 py-3">Regime de Contratação</th>
-                  <th className="px-4 py-3">Contato & Telefone</th>
-                  <th className="px-4 py-3">Data Admissão</th>
-                  <th className="px-4 py-3 text-right">Remuneração Base</th>
-                  <th className="px-4 py-3 text-center">Situação</th>
-                  <th className="px-4 py-3 text-right">Ações</th>
+                  <th className="px-2.5 py-2 min-w-[200px]">Colaborador</th>
+                  <th className="px-2.5 py-2 min-w-[170px]">Cargo & Função</th>
+                  <th className="px-2.5 py-2 whitespace-nowrap min-w-[125px]">
+                    Regime de Contratação
+                  </th>
+                  <th className="px-2.5 py-2 min-w-[150px]">Contato & Telefone</th>
+                  <th className="px-2.5 py-2 whitespace-nowrap min-w-[105px]">Data Admissão</th>
+                  <th className="px-2.5 py-2 text-right whitespace-nowrap min-w-[110px]">
+                    Remuneração Base
+                  </th>
+                  <th className="px-2.5 py-2 text-center whitespace-nowrap min-w-[75px]">
+                    Situação
+                  </th>
+                  <th className="px-2.5 py-2 text-right whitespace-nowrap min-w-[85px]">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-200 bg-white">
@@ -733,11 +739,11 @@ export default function PessoalPage() {
                       <Fragment key={grupo.id}>
                         {/* Linha separadora de cabeçalho da seção hierárquica */}
                         <tr className="bg-gradient-to-r from-[#FFF5ED] via-[#FFFBF8] to-neutral-50 border-y border-[#FF6A13]/25">
-                          <td colSpan={8} className="px-4 py-2.5">
+                          <td colSpan={8} className="px-2.5 py-2">
                             <div className="flex items-center justify-between gap-3">
                               <div className="flex items-center gap-2">
-                                <div className="flex h-6 w-6 items-center justify-center rounded-md bg-[#FF6A13] text-white shadow-xs">
-                                  <IconeGrupo className="h-3.5 w-3.5 stroke-[2.5]" />
+                                <div className="flex h-5 w-5 items-center justify-center rounded bg-[#FF6A13] text-white shadow-xs shrink-0">
+                                  <IconeGrupo className="h-3 w-3 stroke-[2.5]" />
                                 </div>
                                 <div>
                                   <div className="flex items-center gap-2">
@@ -745,7 +751,7 @@ export default function PessoalPage() {
                                       {grupo.titulo}
                                     </span>
                                     <span
-                                      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold border ${grupo.corBadge}`}
+                                      className={`rounded-full px-2 py-0.2 text-[10px] font-semibold border ${grupo.corBadge}`}
                                     >
                                       {grupo.itens.length}{' '}
                                       {grupo.itens.length === 1 ? 'colaborador' : 'colaboradores'}
@@ -756,7 +762,7 @@ export default function PessoalPage() {
                                   </p>
                                 </div>
                               </div>
-                              <span className="text-[10px] font-mono font-medium text-neutral-400 uppercase tracking-wider hidden sm:inline">
+                              <span className="text-[10px] font-mono tabular-nums font-medium text-neutral-400 uppercase tracking-wider hidden sm:inline">
                                 Ordem Alfabética
                               </span>
                             </div>
@@ -765,17 +771,20 @@ export default function PessoalPage() {
 
                         {/* Linhas de colaboradores deste grupo */}
                         {grupo.itens.map((item) => (
-                          <tr key={item.id} className="hover:bg-[#FFF6EC]/30 transition-colors">
-                            <td className="px-4 py-3">
-                              <div className="flex items-center gap-2.5">
-                                <Avatar className="h-8 w-8 border border-neutral-200">
-                                  <AvatarFallback className="bg-[#FF6A13] text-white text-[11px] font-bold">
+                          <tr key={item.id} className="hover:bg-[#FFF6EC]/35 transition-colors">
+                            <td className="px-2.5 py-2">
+                              <div className="flex items-center gap-2">
+                                <Avatar className="h-7 w-7 border border-neutral-200 shrink-0">
+                                  <AvatarFallback className="bg-[#FF6A13] text-white text-[10px] font-bold">
                                     {initials(item.nome_completo)}
                                   </AvatarFallback>
                                 </Avatar>
                                 <div>
                                   <div className="flex items-center gap-1.5 flex-wrap">
-                                    <span className="font-bold text-neutral-900">
+                                    <span
+                                      className="font-bold text-neutral-900 text-xs truncate max-w-[200px]"
+                                      title={item.nome_completo}
+                                    >
                                       {item.nome_completo}
                                     </span>
                                     {item.regime_contratacao === 'socio' && (
@@ -802,13 +811,13 @@ export default function PessoalPage() {
                                         </Badge>
                                       )}
                                   </div>
-                                  <div className="font-mono text-[11px] text-neutral-500">
+                                  <div className="font-mono tabular-nums text-[10px] text-neutral-500">
                                     {item.cpf_cnpj}
                                   </div>
                                   {item.registro_profissional_numero && (
                                     <div className="text-[10px] text-neutral-600 font-medium flex items-center gap-1 mt-0.5">
-                                      <Award className="h-3 w-3 text-[#FF6A13]" />
-                                      <span>
+                                      <Award className="h-3 w-3 text-[#FF6A13] shrink-0" />
+                                      <span className="font-mono tabular-nums">
                                         {item.registro_profissional_tipo || 'CREA'}:{' '}
                                         {item.registro_profissional_numero}
                                         {item.registro_profissional_uf
@@ -820,21 +829,23 @@ export default function PessoalPage() {
                                 </div>
                               </div>
                             </td>
-                            <td className="px-4 py-3">
-                              <div className="font-semibold text-neutral-800">{item.cargo}</div>
+                            <td className="px-2.5 py-2">
+                              <div className="font-semibold text-neutral-800 text-xs">
+                                {item.cargo}
+                              </div>
                               <div className="text-[11px] text-neutral-500">
                                 {item.funcao || '—'}
                               </div>
                               {item.area_atuacao && (
                                 <div
-                                  className="text-[10px] text-neutral-500 italic truncate max-w-[200px]"
+                                  className="text-[10px] text-neutral-500 italic truncate max-w-[190px]"
                                   title={item.area_atuacao}
                                 >
                                   {item.area_atuacao}
                                 </div>
                               )}
                             </td>
-                            <td className="px-4 py-3">
+                            <td className="px-2.5 py-2">
                               <span
                                 className={`inline-flex rounded-full text-[10px] font-semibold px-2 py-0.5 border ${
                                   item.regime_contratacao === 'socio'
@@ -854,9 +865,11 @@ export default function PessoalPage() {
                                   {item.empresa_pj ||
                                   item.expand?.fornecedor_vinculado?.razao_social ? (
                                     <span className="flex items-center gap-1 text-[#D65100]">
-                                      <Building2 className="h-3 w-3" />
-                                      {item.empresa_pj ||
-                                        item.expand?.fornecedor_vinculado?.razao_social}
+                                      <Building2 className="h-3 w-3 shrink-0" />
+                                      <span className="truncate max-w-[140px]">
+                                        {item.empresa_pj ||
+                                          item.expand?.fornecedor_vinculado?.razao_social}
+                                      </span>
                                     </span>
                                   ) : null}
                                 </div>
@@ -867,53 +880,55 @@ export default function PessoalPage() {
                                 </div>
                               )}
                             </td>
-                            <td className="px-4 py-3">
+                            <td className="px-2.5 py-2">
                               {item.email && (
                                 <div className="flex items-center gap-1 text-[11px] text-neutral-600">
-                                  <Mail className="h-3 w-3 text-neutral-400" />
-                                  {item.email}
+                                  <Mail className="h-3 w-3 text-neutral-400 shrink-0" />
+                                  <span className="truncate max-w-[140px]" title={item.email}>
+                                    {item.email}
+                                  </span>
                                 </div>
                               )}
                               {item.telefone && (
-                                <div className="flex items-center gap-1 text-[11px] text-neutral-500">
-                                  <Phone className="h-3 w-3 text-neutral-400" />
-                                  {item.telefone}
+                                <div className="flex items-center gap-1 text-[11px] text-neutral-500 font-mono tabular-nums">
+                                  <Phone className="h-3 w-3 text-neutral-400 shrink-0" />
+                                  <span>{item.telefone}</span>
                                 </div>
                               )}
                             </td>
-                            <td className="px-4 py-3 font-mono text-neutral-600">
+                            <td className="px-2.5 py-2 font-mono tabular-nums text-neutral-600 text-xs">
                               <div>{item.data_admissao ? formatDate(item.data_admissao) : '—'}</div>
                               {item.usuario_sistema && item.expand?.usuario_sistema && (
                                 <div
                                   className="mt-1 inline-flex items-center gap-1 rounded bg-[#FFF0E6] px-1.5 py-0.5 text-[10px] font-semibold text-[#D65100] border border-[#FF6A13]/30"
                                   title={`Conta de acesso vinculada: ${item.expand.usuario_sistema.name || item.expand.usuario_sistema.email}`}
                                 >
-                                  <UserCheck2 className="h-2.5 w-2.5 text-[#FF6A13]" />
-                                  <span className="truncate max-w-[110px]">
+                                  <UserCheck2 className="h-2.5 w-2.5 text-[#FF6A13] shrink-0" />
+                                  <span className="truncate max-w-[100px]">
                                     {item.expand.usuario_sistema.name ||
                                       item.expand.usuario_sistema.email}
                                   </span>
                                 </div>
                               )}
                             </td>
-                            <td className="px-4 py-3 text-right font-mono font-semibold text-neutral-800">
+                            <td className="px-2.5 py-2 text-right font-mono tabular-nums font-semibold text-neutral-800 text-xs">
                               {item.remuneracao_base && item.remuneracao_base > 0
                                 ? formatCurrency(item.remuneracao_base)
                                 : '—'}
                             </td>
-                            <td className="px-4 py-3 text-center">
+                            <td className="px-2.5 py-2 text-center whitespace-nowrap">
                               <CrmBadge tone={item.situacao === 'ativo' ? 'green' : 'gray'}>
                                 {item.situacao.toUpperCase()}
                               </CrmBadge>
                             </td>
-                            <td className="px-4 py-3 text-right">
+                            <td className="px-2.5 py-2 text-right whitespace-nowrap">
                               <div className="flex items-center justify-end gap-1">
                                 {canEdit && (
                                   <Button
                                     variant="ghost"
                                     size="icon"
                                     onClick={() => handleOpenEdit(item)}
-                                    className="h-8 w-8 text-neutral-500 hover:text-[#FF6A13]"
+                                    className="h-7 w-7 text-neutral-500 hover:text-[#FF6A13]"
                                     title="Editar colaborador"
                                   >
                                     <Edit2 className="h-3.5 w-3.5" />
@@ -927,7 +942,7 @@ export default function PessoalPage() {
                                       setItemToDelete(item)
                                       setDeleteModalOpen(true)
                                     }}
-                                    className="h-8 w-8 text-neutral-400 hover:text-rose-600"
+                                    className="h-7 w-7 text-neutral-400 hover:text-rose-600"
                                     title="Excluir colaborador (Apenas Admin)"
                                   >
                                     <Trash2 className="h-3.5 w-3.5" />

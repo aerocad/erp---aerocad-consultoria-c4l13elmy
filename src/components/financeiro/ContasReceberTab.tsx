@@ -597,17 +597,17 @@ export function ContasReceberTab({
         <div className="crm-card overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
-              <thead className="bg-neutral-50 text-neutral-500 font-semibold border-b border-neutral-200">
+              <thead className="bg-neutral-50/95 text-neutral-600 font-bold border-b border-neutral-200">
                 <tr>
-                  <th className="px-3 py-2.5 whitespace-nowrap min-w-[105px]">Vencimento</th>
-                  <th className="px-3 py-2.5 min-w-[230px]">Descrição / Cliente</th>
-                  <th className="px-3 py-2.5 whitespace-nowrap min-w-[130px]">
+                  <th className="px-2.5 py-2 whitespace-nowrap min-w-[95px]">Vencimento</th>
+                  <th className="px-2.5 py-2 min-w-[210px]">Descrição / Cliente</th>
+                  <th className="px-2.5 py-2 whitespace-nowrap min-w-[120px]">
                     Origem / Categoria
                   </th>
-                  <th className="px-3 py-2.5 whitespace-nowrap min-w-[110px]">NFS-e / Doc</th>
-                  <th className="px-3 py-2.5 text-right whitespace-nowrap min-w-[110px]">Valor</th>
-                  <th className="px-3 py-2.5 text-center whitespace-nowrap min-w-[90px]">Status</th>
-                  <th className="px-3 py-2.5 text-right whitespace-nowrap min-w-[210px]">Ações</th>
+                  <th className="px-2.5 py-2 whitespace-nowrap min-w-[100px]">NFS-e / Doc</th>
+                  <th className="px-2.5 py-2 text-right whitespace-nowrap min-w-[105px]">Valor</th>
+                  <th className="px-2.5 py-2 text-center whitespace-nowrap min-w-[85px]">Status</th>
+                  <th className="px-2.5 py-2 text-right whitespace-nowrap min-w-[190px]">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-200">
@@ -615,11 +615,11 @@ export function ContasReceberTab({
                   return (
                     <tr
                       key={item.id}
-                      className={`hover:bg-neutral-50/80 transition-colors ${
+                      className={`hover:bg-neutral-50/90 transition-colors ${
                         item.status === 'vencido' ? 'bg-rose-50/25' : ''
                       }`}
                     >
-                      <td className="px-3 py-2.5 whitespace-nowrap">
+                      <td className="px-2.5 py-2 whitespace-nowrap">
                         <div className="flex items-center gap-1.5">
                           {canWrite && item.origemTipo === 'parcela' ? (
                             <button
@@ -628,7 +628,7 @@ export function ContasReceberTab({
                                 setParcelaParaEditarVencimento(item.rawItem as ParcelaRecord)
                                 setEditarVencimentoOpen(true)
                               }}
-                              className={`inline-flex items-center gap-1 font-mono font-medium hover:text-[#D65100] hover:underline transition ${
+                              className={`inline-flex items-center gap-1 font-mono tabular-nums font-semibold hover:text-[#D65100] hover:underline transition ${
                                 item.status === 'vencido'
                                   ? 'text-rose-700 font-bold'
                                   : 'text-neutral-800'
@@ -640,7 +640,7 @@ export function ContasReceberTab({
                             </button>
                           ) : (
                             <span
-                              className={`font-mono font-medium ${
+                              className={`font-mono tabular-nums font-medium ${
                                 item.status === 'vencido'
                                   ? 'text-rose-700 font-bold'
                                   : 'text-neutral-800'
@@ -651,23 +651,31 @@ export function ContasReceberTab({
                           )}
                         </div>
                         {item.dataRecebimento && (
-                          <p className="text-[10px] text-emerald-700 font-semibold">
+                          <p className="text-[10px] text-emerald-700 font-mono tabular-nums font-semibold">
                             Rec: {formatDate(item.dataRecebimento)}
                           </p>
                         )}
                       </td>
 
-                      <td className="px-3 py-2.5">
-                        <div className="space-y-0.5 max-w-[320px]">
-                          <p className="font-semibold text-neutral-900 line-clamp-1">
+                      <td className="px-2.5 py-2">
+                        <div className="space-y-0.5 max-w-[340px]">
+                          <p
+                            className="font-semibold text-neutral-900 line-clamp-1 text-xs"
+                            title={item.descricao}
+                          >
                             {item.descricao}
                           </p>
                           <p className="text-neutral-500 text-[11px] flex items-center gap-1.5">
-                            <span className="font-medium text-neutral-700">{item.clienteNome}</span>
+                            <span
+                              className="font-medium text-neutral-700 truncate max-w-[200px]"
+                              title={item.clienteNome}
+                            >
+                              {item.clienteNome}
+                            </span>
                             {item.projetoNumero && (
                               <Link
                                 to={`/projetos/${item.projetoId}`}
-                                className="font-mono text-[#D65100] hover:underline"
+                                className="font-mono tabular-nums text-[#D65100] hover:underline shrink-0"
                               >
                                 · {item.projetoNumero}
                               </Link>
@@ -676,15 +684,15 @@ export function ContasReceberTab({
                         </div>
                       </td>
 
-                      <td className="px-3 py-2.5 whitespace-nowrap">
+                      <td className="px-2.5 py-2 whitespace-nowrap">
                         <CrmBadge tone={item.origemTipo === 'parcela' ? 'orange' : 'gray'}>
                           {item.categoriaLabel}
                         </CrmBadge>
                       </td>
 
-                      <td className="px-3 py-2.5 whitespace-nowrap">
+                      <td className="px-2.5 py-2 whitespace-nowrap">
                         {item.nfNumero ? (
-                          <span className="font-mono font-bold text-[#FF6A13] bg-orange-50 px-2 py-0.5 rounded border border-orange-200 text-[11px]">
+                          <span className="font-mono tabular-nums font-bold text-[#FF6A13] bg-orange-50 px-1.5 py-0.5 rounded border border-orange-200 text-[11px]">
                             NFS-e nº {item.nfNumero}
                           </span>
                         ) : (
@@ -692,18 +700,18 @@ export function ContasReceberTab({
                         )}
                       </td>
 
-                      <td className="px-3 py-2.5 text-right whitespace-nowrap">
-                        <span className="mono-value font-bold text-sm text-neutral-900">
+                      <td className="px-2.5 py-2 text-right whitespace-nowrap">
+                        <span className="mono-value font-mono tabular-nums font-bold text-xs sm:text-sm text-neutral-900">
                           {formatCurrency(item.valor)}
                         </span>
                         {item.valorRecebido > 0 && item.valorRecebido !== item.valor && (
-                          <p className="text-[10px] text-emerald-700 font-mono">
+                          <p className="text-[10px] text-emerald-700 font-mono tabular-nums">
                             Rec: {formatCurrency(item.valorRecebido)}
                           </p>
                         )}
                       </td>
 
-                      <td className="px-3 py-2.5 text-center whitespace-nowrap">
+                      <td className="px-2.5 py-2 text-center whitespace-nowrap">
                         {item.status === 'recebido' ? (
                           <CrmBadge tone="green">Recebido</CrmBadge>
                         ) : item.status === 'vencido' ? (
@@ -715,7 +723,7 @@ export function ContasReceberTab({
                         )}
                       </td>
 
-                      <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                      <td className="px-2.5 py-2 text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-1.5">
                           {canWrite && (
                             <>

@@ -401,20 +401,20 @@ export default function FornecedoresPage() {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
-              <thead className="bg-neutral-50 text-neutral-500 font-semibold border-b border-neutral-200">
+              <thead className="bg-neutral-50/95 text-neutral-600 font-bold border-b border-neutral-200">
                 <tr>
-                  <th className="px-3 py-2.5 whitespace-nowrap min-w-[60px]">Tipo</th>
-                  <th className="px-3 py-2.5 min-w-[220px]">Fornecedor / Nome</th>
-                  <th className="px-3 py-2.5 whitespace-nowrap min-w-[130px]">
+                  <th className="px-2.5 py-2 whitespace-nowrap min-w-[55px]">Tipo</th>
+                  <th className="px-2.5 py-2 min-w-[200px]">Fornecedor / Nome</th>
+                  <th className="px-2.5 py-2 whitespace-nowrap min-w-[120px]">
                     Documento (CNPJ/CPF)
                   </th>
-                  <th className="px-3 py-2.5 whitespace-nowrap min-w-[130px]">Categoria</th>
-                  <th className="px-3 py-2.5 min-w-[160px]">Contato & Telefone</th>
-                  <th className="px-3 py-2.5 min-w-[180px]">PIX / Dados Bancários</th>
-                  <th className="px-3 py-2.5 text-center whitespace-nowrap min-w-[85px]">
+                  <th className="px-2.5 py-2 whitespace-nowrap min-w-[110px]">Categoria</th>
+                  <th className="px-2.5 py-2 min-w-[150px]">Contato & Telefone</th>
+                  <th className="px-2.5 py-2 min-w-[170px]">PIX / Dados Bancários</th>
+                  <th className="px-2.5 py-2 text-center whitespace-nowrap min-w-[80px]">
                     Situação
                   </th>
-                  <th className="px-3 py-2.5 text-right whitespace-nowrap min-w-[100px]">Ações</th>
+                  <th className="px-2.5 py-2 text-right whitespace-nowrap min-w-[90px]">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-200 bg-white">
@@ -423,10 +423,10 @@ export default function FornecedoresPage() {
                     item.tipo_pessoa === 'pf' ||
                     (item.cnpj_cpf && item.cnpj_cpf.replace(/\D/g, '').length === 11)
                   return (
-                    <tr key={item.id} className="hover:bg-[#FFF6EC]/30 transition-colors">
-                      <td className="px-3 py-2.5 whitespace-nowrap">
+                    <tr key={item.id} className="hover:bg-[#FFF6EC]/35 transition-colors">
+                      <td className="px-2.5 py-2 whitespace-nowrap">
                         <span
-                          className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold ${
+                          className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold ${
                             isPF
                               ? 'bg-blue-50 text-blue-700 border border-blue-200'
                               : 'bg-orange-50 text-[#D65100] border border-orange-200'
@@ -435,74 +435,90 @@ export default function FornecedoresPage() {
                           {isPF ? 'PF' : 'PJ'}
                         </span>
                       </td>
-                      <td className="px-3 py-2.5">
-                        <div className="font-bold text-neutral-900">
+                      <td className="px-2.5 py-2">
+                        <div
+                          className="font-bold text-neutral-900 text-xs truncate max-w-[220px]"
+                          title={item.nome_completo || item.razao_social}
+                        >
                           {item.nome_completo || item.razao_social}
                         </div>
                         {!isPF && item.nome_fantasia && (
-                          <span className="text-[11px] text-neutral-500 font-normal">
+                          <span
+                            className="text-[11px] text-neutral-500 font-normal block truncate max-w-[220px]"
+                            title={item.nome_fantasia}
+                          >
                             {item.nome_fantasia}
                           </span>
                         )}
                         {item.municipio_uf && (
-                          <div className="flex items-center gap-1 text-[11px] text-neutral-400 mt-0.5">
-                            <MapPin className="h-3 w-3" />
-                            {item.municipio_uf}
+                          <div className="flex items-center gap-1 text-[10px] text-neutral-400 mt-0.5">
+                            <MapPin className="h-3 w-3 shrink-0" />
+                            <span>{item.municipio_uf}</span>
                           </div>
                         )}
                       </td>
-                      <td className="px-3 py-2.5 font-mono text-neutral-700 whitespace-nowrap">
+                      <td className="px-2.5 py-2 font-mono tabular-nums text-neutral-700 whitespace-nowrap text-xs">
                         {item.cnpj_cpf || item.cpf}
                       </td>
-                      <td className="px-3 py-2.5 whitespace-nowrap">
+                      <td className="px-2.5 py-2 whitespace-nowrap">
                         <span className="inline-flex rounded-full bg-neutral-100 text-neutral-800 text-[10px] font-semibold px-2 py-0.5 border border-neutral-200">
                           {CATEGORIA_FORNECEDOR_LABELS[item.categoria] || item.categoria}
                         </span>
                       </td>
-                      <td className="px-3 py-2.5">
+                      <td className="px-2.5 py-2">
                         {item.contato_nome && (
-                          <div className="font-medium text-neutral-800">{item.contato_nome}</div>
+                          <div className="font-medium text-neutral-800 text-xs truncate max-w-[160px]">
+                            {item.contato_nome}
+                          </div>
                         )}
                         {item.telefone && (
-                          <div className="flex items-center gap-1 text-[11px] text-neutral-500">
-                            <Phone className="h-3 w-3 text-neutral-400" />
-                            {item.telefone}
+                          <div className="flex items-center gap-1 text-[11px] text-neutral-600 font-mono tabular-nums">
+                            <Phone className="h-3 w-3 text-neutral-400 shrink-0" />
+                            <span>{item.telefone}</span>
                           </div>
                         )}
                         {item.email && (
                           <div className="flex items-center gap-1 text-[11px] text-neutral-500">
-                            <Mail className="h-3 w-3 text-neutral-400" />
-                            {item.email}
+                            <Mail className="h-3 w-3 text-neutral-400 shrink-0" />
+                            <span className="truncate max-w-[140px]" title={item.email}>
+                              {item.email}
+                            </span>
                           </div>
                         )}
                       </td>
-                      <td className="px-3 py-2.5">
+                      <td className="px-2.5 py-2">
                         {item.chave_pix ? (
-                          <div className="font-mono text-[11px] text-[#D65100] font-semibold">
+                          <div
+                            className="font-mono tabular-nums text-[11px] text-[#D65100] font-semibold truncate max-w-[190px]"
+                            title={item.chave_pix}
+                          >
                             PIX: {item.chave_pix}
                           </div>
                         ) : (
-                          <span className="text-neutral-400 italic">Não informado</span>
+                          <span className="text-neutral-400 italic text-[11px]">Não informado</span>
                         )}
                         {item.dados_bancarios && (
-                          <div className="text-[11px] text-neutral-500 truncate max-w-[200px]">
+                          <div
+                            className="text-[11px] text-neutral-500 truncate max-w-[190px]"
+                            title={item.dados_bancarios}
+                          >
                             {item.dados_bancarios}
                           </div>
                         )}
                       </td>
-                      <td className="px-3 py-2.5 text-center whitespace-nowrap">
+                      <td className="px-2.5 py-2 text-center whitespace-nowrap">
                         <CrmBadge tone={item.status === 'ativo' ? 'green' : 'gray'}>
                           {item.status.toUpperCase()}
                         </CrmBadge>
                       </td>
-                      <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                      <td className="px-2.5 py-2 text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-1">
                           {canEdit && (
                             <Button
                               variant="ghost"
                               size="icon"
                               onClick={() => handleOpenEdit(item)}
-                              className="h-8 w-8 text-neutral-500 hover:text-[#FF6A13]"
+                              className="h-7 w-7 text-neutral-500 hover:text-[#FF6A13]"
                               title="Editar fornecedor"
                             >
                               <Edit2 className="h-3.5 w-3.5" />
@@ -516,7 +532,7 @@ export default function FornecedoresPage() {
                                 setItemToDelete(item)
                                 setDeleteModalOpen(true)
                               }}
-                              className="h-8 w-8 text-neutral-400 hover:text-rose-600"
+                              className="h-7 w-7 text-neutral-400 hover:text-rose-600"
                               title="Excluir fornecedor (Apenas Admin)"
                             >
                               <Trash2 className="h-3.5 w-3.5" />

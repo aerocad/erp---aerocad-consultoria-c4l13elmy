@@ -105,25 +105,25 @@ export default function ClientsPage() {
         />
       ) : (
         <>
-          <div className="hidden overflow-x-auto rounded-xl border bg-white md:block">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead className="border-b bg-[#FAFAFA] text-left text-[11px] uppercase tracking-[.08em] text-[#737373]">
+          <div className="crm-table-wrapper hidden md:block">
+            <table className="crm-data-table">
+              <thead className="border-b bg-neutral-50/95 text-neutral-600 font-bold text-left text-[11px] uppercase tracking-wider">
                 <tr>
-                  <th className="px-3.5 py-2.5 min-w-[220px]">
+                  <th className="px-2.5 py-2 min-w-[200px]">
                     <button
-                      className="flex items-center gap-2"
+                      className="flex items-center gap-1.5 text-neutral-700 hover:text-[#FF6A13]"
                       onClick={() => setSortAsc((v) => !v)}
                     >
                       Cliente <ArrowUpDown className="h-3.5 w-3.5" />
                     </button>
                   </th>
-                  <th className="px-3.5 py-2.5 whitespace-nowrap min-w-[130px]">Documento</th>
-                  <th className="px-3.5 py-2.5 whitespace-nowrap min-w-[130px]">Localidade</th>
-                  <th className="px-3.5 py-2.5 min-w-[180px]">Contato</th>
-                  <th className="px-3.5 py-2.5 text-center whitespace-nowrap min-w-[90px]">
+                  <th className="px-2.5 py-2 whitespace-nowrap min-w-[120px]">Documento</th>
+                  <th className="px-2.5 py-2 whitespace-nowrap min-w-[110px]">Localidade</th>
+                  <th className="px-2.5 py-2 min-w-[160px]">Contato</th>
+                  <th className="px-2.5 py-2 text-center whitespace-nowrap min-w-[80px]">
                     Projetos
                   </th>
-                  <th className="px-3.5 py-2.5 whitespace-nowrap min-w-[100px]">Status</th>
+                  <th className="px-2.5 py-2 whitespace-nowrap min-w-[90px]">Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-200">
@@ -137,38 +137,48 @@ export default function ClientsPage() {
                       onClick={() => navigate(`/clientes/${item.id}`)}
                       className="cursor-pointer hover:bg-[#FFF6EC]/50 transition-colors"
                     >
-                      <td className="px-3.5 py-2.5">
+                      <td className="px-2.5 py-2">
                         <div className="flex items-center gap-2">
-                          <p className="font-semibold text-[#4B4B4B]">{item.razao_social}</p>
+                          <p
+                            className="font-semibold text-neutral-900 text-xs truncate max-w-[240px]"
+                            title={item.razao_social}
+                          >
+                            {item.razao_social}
+                          </p>
                           {item.origem === 'NFS-e' && (
-                            <CrmBadge tone="orange" className="text-[10px] py-0 px-1.5">
+                            <CrmBadge tone="orange" className="text-[10px] py-0 px-1.5 shrink-0">
                               NFS-e
                             </CrmBadge>
                           )}
                         </div>
-                        <p className="mt-0.5 text-xs text-[#8A8A8A]">
+                        <p className="text-[11px] text-neutral-500 truncate max-w-[240px]">
                           {item.segmento || 'Segmento não informado'}
                         </p>
                       </td>
-                      <td className="mono-value px-3.5 py-2.5 text-xs">{item.cnpj_cpf || '—'}</td>
-                      <td className="px-3.5 py-2.5 text-xs">
+                      <td className="mono-value font-mono tabular-nums px-2.5 py-2 text-xs whitespace-nowrap">
+                        {item.cnpj_cpf || '—'}
+                      </td>
+                      <td className="px-2.5 py-2 text-xs text-neutral-700 whitespace-nowrap">
                         {item.municipio}
                         {item.uf ? ` / ${item.uf}` : ''}
                       </td>
-                      <td className="px-3.5 py-2.5 text-xs text-[#737373]">
-                        <span className="flex items-center gap-1">
-                          <Mail className="h-3 w-3" />
-                          {item.email || '—'}
+                      <td className="px-2.5 py-2 text-xs text-neutral-600">
+                        <span
+                          className="flex items-center gap-1 truncate max-w-[180px]"
+                          title={item.email}
+                        >
+                          <Mail className="h-3 w-3 text-neutral-400 shrink-0" />
+                          <span className="truncate">{item.email || '—'}</span>
                         </span>
-                        <span className="mt-0.5 flex items-center gap-1">
-                          <Phone className="h-3 w-3" />
-                          {item.telefone || '—'}
+                        <span className="mt-0.5 flex items-center gap-1 font-mono tabular-nums text-[11px]">
+                          <Phone className="h-3 w-3 text-neutral-400 shrink-0" />
+                          <span>{item.telefone || '—'}</span>
                         </span>
                       </td>
-                      <td className="mono-value px-3.5 py-2.5 text-center font-bold text-neutral-900">
+                      <td className="mono-value font-mono tabular-nums px-2.5 py-2 text-center font-bold text-neutral-900 text-xs">
                         {count}
                       </td>
-                      <td className="px-3.5 py-2.5">
+                      <td className="px-2.5 py-2 whitespace-nowrap">
                         <CrmBadge
                           tone={
                             item.status === 'cliente'

@@ -1797,16 +1797,16 @@ export function ExtratosComprovantesTab({
         <div className="crm-card overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
-              <thead className="bg-neutral-50 text-neutral-500 font-semibold border-b border-neutral-200">
+              <thead className="bg-neutral-50/95 text-neutral-600 font-bold border-b border-neutral-200">
                 <tr>
-                  {canWrite && <th className="px-2.5 py-2.5 w-8 text-center">Sel.</th>}
-                  <th className="px-3 py-2.5 whitespace-nowrap min-w-[95px]">Data</th>
-                  <th className="px-3 py-2.5 min-w-[240px]">Descrição da Movimentação</th>
-                  <th className="px-3 py-2.5 min-w-[170px]">Conta Contábil</th>
-                  <th className="px-3 py-2.5 whitespace-nowrap min-w-[110px]">Documento Ref.</th>
-                  <th className="px-3 py-2.5 text-right whitespace-nowrap min-w-[110px]">Valor</th>
-                  <th className="px-3 py-2.5 text-center whitespace-nowrap min-w-[90px]">Status</th>
-                  <th className="px-3 py-2.5 text-right whitespace-nowrap min-w-[160px]">
+                  {canWrite && <th className="px-2 py-2 w-7 text-center">Sel.</th>}
+                  <th className="px-2.5 py-2 whitespace-nowrap min-w-[90px]">Data</th>
+                  <th className="px-2.5 py-2 min-w-[220px]">Descrição da Movimentação</th>
+                  <th className="px-2.5 py-2 min-w-[160px]">Conta Contábil</th>
+                  <th className="px-2.5 py-2 whitespace-nowrap min-w-[100px]">Documento Ref.</th>
+                  <th className="px-2.5 py-2 text-right whitespace-nowrap min-w-[105px]">Valor</th>
+                  <th className="px-2.5 py-2 text-center whitespace-nowrap min-w-[85px]">Status</th>
+                  <th className="px-2.5 py-2 text-right whitespace-nowrap min-w-[150px]">
                     Ação / Vínculo
                   </th>
                 </tr>
@@ -1819,7 +1819,7 @@ export function ExtratosComprovantesTab({
                   return (
                     <tr
                       key={tx.id}
-                      className={`hover:bg-neutral-50/80 transition-colors ${
+                      className={`hover:bg-neutral-50/90 transition-colors ${
                         isChecked
                           ? 'bg-orange-50/50'
                           : tx.status_conciliacao === 'conciliado'
@@ -1828,7 +1828,7 @@ export function ExtratosComprovantesTab({
                       }`}
                     >
                       {canWrite && (
-                        <td className="px-2.5 py-2.5 text-center">
+                        <td className="px-2 py-2 text-center">
                           {isPendente ? (
                             <input
                               type="checkbox"
@@ -1843,19 +1843,22 @@ export function ExtratosComprovantesTab({
                         </td>
                       )}
 
-                      <td className="px-3 py-2.5 whitespace-nowrap font-mono text-neutral-800">
+                      <td className="px-2.5 py-2 whitespace-nowrap font-mono tabular-nums text-neutral-800 text-xs">
                         {formatDate(tx.data)}
                       </td>
 
-                      <td className="px-3 py-2.5">
-                        <div className="space-y-1 max-w-[360px]">
-                          <p className="font-semibold text-neutral-900 line-clamp-1">
+                      <td className="px-2.5 py-2">
+                        <div className="space-y-0.5 max-w-[360px]">
+                          <p
+                            className="font-semibold text-neutral-900 line-clamp-1 text-xs"
+                            title={tx?.descricao || ''}
+                          >
                             {tx?.descricao || '—'}
                           </p>
-                          {/* REQUISITO 2: Observações visíveis diretamente na linha com indicação clara */}
+                          {/* Observações visíveis diretamente na linha com indicação clara */}
                           {tx?.observacoes ? (
                             <p
-                              className="text-[11px] text-neutral-600 bg-neutral-50 px-1.5 py-0.5 rounded border border-neutral-200 line-clamp-2"
+                              className="text-[10px] text-neutral-600 bg-neutral-50 px-1.5 py-0.5 rounded border border-neutral-200 line-clamp-2"
                               title={tx.observacoes}
                             >
                               <span className="font-semibold text-neutral-700">Obs:</span>{' '}
@@ -1869,7 +1872,7 @@ export function ExtratosComprovantesTab({
                         </div>
                       </td>
 
-                      <td className="px-3 py-2.5">
+                      <td className="px-2.5 py-2">
                         {tx?.id ? (
                           <ContaContabilBadgeInline
                             colecao="extratos_transacoes"
@@ -1900,13 +1903,13 @@ export function ExtratosComprovantesTab({
                         )}
                       </td>
 
-                      <td className="px-3 py-2.5 whitespace-nowrap text-neutral-500 font-mono text-[11px]">
+                      <td className="px-2.5 py-2 whitespace-nowrap text-neutral-500 font-mono tabular-nums text-[11px]">
                         {tx?.documento_ref || '—'}
                       </td>
 
-                      <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                      <td className="px-2.5 py-2 text-right whitespace-nowrap">
                         <span
-                          className={`mono-value font-bold text-sm ${
+                          className={`mono-value font-mono tabular-nums font-bold text-xs sm:text-sm ${
                             tx.tipo === 'entrada' ? 'text-emerald-700' : 'text-rose-700'
                           }`}
                         >
@@ -1914,7 +1917,7 @@ export function ExtratosComprovantesTab({
                         </span>
                       </td>
 
-                      <td className="px-3 py-2.5 text-center whitespace-nowrap">
+                      <td className="px-2.5 py-2 text-center whitespace-nowrap">
                         {tx.status_conciliacao === 'conciliado' ? (
                           <CrmBadge tone="green">Conciliado</CrmBadge>
                         ) : tx.status_conciliacao === 'ignorado' ? (
@@ -1924,7 +1927,7 @@ export function ExtratosComprovantesTab({
                         )}
                       </td>
 
-                      <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                      <td className="px-2.5 py-2 text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-1.5">
                           {tx.status_conciliacao === 'pendente' && canWrite && (
                             <>

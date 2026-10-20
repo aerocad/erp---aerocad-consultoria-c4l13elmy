@@ -182,26 +182,51 @@
     scrollbar-color: #a8a8a8 #f1f1f1;
   }
 
-  /* Tabelas densas de ERP com melhor aproveitamento e densidade equilibrada */
+  /* Tabelas corporativas densas AEROCAD: aproveitamento horizontal máximo e tipografia equilibrada */
+  table {
+    @apply w-full text-left text-xs border-collapse;
+  }
   table th {
-    @apply text-[11px] sm:text-xs font-bold text-neutral-700 tracking-tight;
+    @apply text-[11px] font-bold text-neutral-600 bg-neutral-50/95 border-b border-neutral-200 tracking-tight;
   }
   table td {
-    @apply text-[11px] sm:text-xs text-neutral-800 leading-snug;
+    @apply text-xs text-neutral-800 leading-snug border-b border-neutral-100;
   }
 
-  /* Otimização de tabelas corporativas AEROCAD: melhor aproveitamento horizontal, alinhamentos e padding equilibrado */
+  /* Classes utilitárias compartilhadas para tabelas do ERP */
   .crm-data-table {
     @apply w-full text-left text-xs border-collapse;
   }
-  .crm-data-table th {
-    @apply px-3 py-2.5 font-bold text-neutral-600 bg-neutral-50/90 border-b border-neutral-200 uppercase text-[10px] sm:text-[11px] tracking-wide whitespace-nowrap;
+  .crm-data-table th,
+  .crm-table-th {
+    @apply px-2.5 sm:px-3 py-2 font-bold text-neutral-600 bg-neutral-50/95 border-b border-neutral-200 uppercase text-[10px] sm:text-[11px] tracking-wide whitespace-nowrap;
   }
-  .crm-data-table td {
-    @apply px-3 py-2.5 text-xs text-neutral-800 align-middle border-b border-neutral-100;
+  .crm-data-table td,
+  .crm-table-td {
+    @apply px-2.5 sm:px-3 py-2 text-xs text-neutral-800 align-middle border-b border-neutral-100;
   }
-  .crm-data-table tr:hover td {
-    @apply bg-neutral-50/70;
+  .crm-data-table tr:hover td,
+  .crm-table-row:hover td {
+    @apply bg-neutral-50/80;
+  }
+
+  /* Células numéricas monetárias com fonte monoespaçada tabular e alinhamento à direita */
+  .crm-col-num,
+  .table-num-cell {
+    @apply font-mono tabular-nums text-right whitespace-nowrap font-semibold;
+  }
+
+  /* Truncamento com limite horizontal adaptável */
+  .crm-col-truncate {
+    @apply truncate max-w-[220px] sm:max-w-[280px] lg:max-w-[340px];
+  }
+  .crm-col-truncate-sm {
+    @apply truncate max-w-[140px] sm:max-w-[180px] lg:max-w-[220px];
+  }
+
+  /* Container de tabela com rolagem suave e sem margem direita artificial */
+  .crm-table-wrapper {
+    @apply w-full overflow-x-auto rounded-lg border border-neutral-200/90 bg-white shadow-sm;
   }
 }
 

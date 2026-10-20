@@ -1219,12 +1219,12 @@ export function PlanoContasTab({
                       </div>
 
                       {/* Tabela de Contas Analíticas (Nível 3) */}
-                      <div className="border border-neutral-200 rounded-md overflow-hidden">
+                      <div className="border border-neutral-200 rounded-md overflow-hidden bg-white">
                         <table className="w-full text-left text-xs border-collapse">
                           <thead>
-                            <tr className="bg-neutral-100/70 text-neutral-700 font-semibold border-b border-neutral-200 text-[11px]">
-                              <th className="py-2 px-2.5 w-[10%]">Código</th>
-                              <th className="py-2 px-2.5 w-[42%]">Nome da Conta Contábil</th>
+                            <tr className="bg-neutral-50/95 text-neutral-600 font-bold border-b border-neutral-200 text-[11px]">
+                              <th className="py-2 px-2.5 w-[11%]">Código</th>
+                              <th className="py-2 px-2.5 w-[41%]">Nome da Conta Contábil</th>
                               <th className="py-2 px-2.5 w-[12%] text-center">Classificação</th>
                               <th className="py-2 px-2.5 w-[12%] text-center">Lançamentos</th>
                               <th className="py-2 px-2.5 w-[13%] text-right">Volume (R$)</th>
@@ -1238,20 +1238,22 @@ export function PlanoContasTab({
                               return (
                                 <tr
                                   key={conta.codigo}
-                                  className="hover:bg-neutral-50/70 transition-colors"
+                                  className="hover:bg-neutral-50/80 transition-colors"
                                 >
                                   {/* Código */}
-                                  <td className="py-2 px-2.5 font-mono font-bold text-neutral-900">
-                                    <span className="bg-neutral-100 px-1.5 py-0.5 rounded text-[11px]">
+                                  <td className="py-2 px-2.5 font-mono tabular-nums font-bold text-neutral-900 whitespace-nowrap">
+                                    <span className="bg-neutral-100 px-1.5 py-0.5 rounded text-[11px] border border-neutral-200/80">
                                       {conta.codigo}
                                     </span>
                                   </td>
 
                                   {/* Nome */}
                                   <td className="py-2 px-2.5">
-                                    <div className="font-medium text-neutral-800">{conta.nome}</div>
+                                    <div className="font-semibold text-neutral-900 text-xs">
+                                      {conta.nome}
+                                    </div>
                                     {conta.descricao && (
-                                      <div className="text-[11px] text-neutral-400">
+                                      <div className="text-[11px] text-neutral-400 truncate max-w-md">
                                         {conta.descricao}
                                       </div>
                                     )}
@@ -1262,7 +1264,7 @@ export function PlanoContasTab({
                                     {conta.fixoOuVariavel ? (
                                       <Badge
                                         variant="outline"
-                                        className={`text-[10px] py-0 px-2 capitalize ${
+                                        className={`text-[10px] py-0 px-2 capitalize font-semibold ${
                                           conta.fixoOuVariavel === 'fixo'
                                             ? 'bg-blue-50 text-blue-700 border-blue-200'
                                             : 'bg-amber-50 text-amber-700 border-amber-200'
@@ -1289,7 +1291,7 @@ export function PlanoContasTab({
                                             totalValor: conta.totalValor,
                                           })
                                         }
-                                        className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition cursor-pointer"
+                                        className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition cursor-pointer font-mono tabular-nums"
                                         title="Clique para ver os lançamentos individuais desta conta"
                                       >
                                         {conta.qtdLancamentos} registro
@@ -1301,7 +1303,7 @@ export function PlanoContasTab({
                                   </td>
 
                                   {/* Volume */}
-                                  <td className="py-2 px-2.5 text-right font-mono font-medium text-neutral-700 whitespace-nowrap">
+                                  <td className="py-2 px-2.5 text-right font-mono tabular-nums font-semibold text-neutral-900 whitespace-nowrap text-xs">
                                     {temLancamentos ? formatCurrency(conta.totalValor) : '—'}
                                   </td>
 
