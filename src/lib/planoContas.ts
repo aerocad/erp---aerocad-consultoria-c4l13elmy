@@ -60,31 +60,65 @@ export const PLANO_CONTAS_AEROCAD: ItemPlanoContas[] = [
   },
   {
     codigo: '1.2.4',
-    nome: 'Softwares de Engenharia e Licenças CAD/BIM',
-    natureza: 'ativo',
-    grupo: 'Ativo Não Circulante / Intangível',
-    descricao: 'Licenças perpétuas e assinaturas técnicas ativadas',
-  },
-  {
-    codigo: '1.2.5',
     nome: 'Veículos e Frotas Operacionais de Campo',
     natureza: 'ativo',
     grupo: 'Ativo Não Circulante / Imobilizado',
     descricao: 'Veículos utilitários e caminhonetes de vistoria aeroportuária',
   },
   {
-    codigo: '1.2.6',
+    codigo: '1.2.5',
     nome: 'Bens Imóveis e Instalações',
     natureza: 'ativo',
     grupo: 'Ativo Não Circulante / Imobilizado',
     descricao: 'Sede corporativa, salas comerciais e benfeitorias',
   },
   {
-    codigo: '1.2.7',
+    codigo: '1.2.6',
     nome: 'Mobiliário e Equipamentos de Escritório',
     natureza: 'ativo',
     grupo: 'Ativo Não Circulante / Imobilizado',
     descricao: 'Mesas, cadeiras ergonômicas, ar-condicionado e copa',
+  },
+  // Subgrupo: Ativo Não Circulante / Ativo Intangível (CPC 04 / NBC TG 04)
+  {
+    codigo: '1.2.7',
+    nome: 'Marcas e Patentes (Taxas de Registro e Concessão INPI)',
+    natureza: 'ativo',
+    grupo: 'Ativo Não Circulante / Intangível',
+    descricao:
+      'Capitalização de taxas federais do INPI para registro, depósito, concessão e prorrogação de marcas e patentes da AEROCAD',
+  },
+  {
+    codigo: '1.2.8',
+    nome: 'Software e Programas Proprietários (Desenvolvimento AEGIS)',
+    natureza: 'ativo',
+    grupo: 'Ativo Não Circulante / Intangível',
+    descricao:
+      'Custos capitalizados de desenvolvimento e evolução do software proprietário AEGIS e ferramentas internas AEROCAD',
+  },
+  {
+    codigo: '1.2.9',
+    nome: 'Softwares Técnicos, Licenças Perpétuas CAD/BIM e Sistemas',
+    natureza: 'ativo',
+    grupo: 'Ativo Não Circulante / Intangível',
+    descricao:
+      'Licenças de uso perpétuas, softwares CAD/GIS/BIM e sistemas operacionais permanentes ativados',
+  },
+  {
+    codigo: '1.2.10',
+    nome: 'Direitos Autorais e Propriedade Intelectual',
+    natureza: 'ativo',
+    grupo: 'Ativo Não Circulante / Intangível',
+    descricao:
+      'Direitos patrimoniais sobre metodologias técnicas, acervo intelectual e publicações consultivas protegidas',
+  },
+  {
+    codigo: '1.2.11',
+    nome: 'Fundo de Comércio / Goodwill e Outros Intangíveis',
+    natureza: 'ativo',
+    grupo: 'Ativo Não Circulante / Intangível',
+    descricao:
+      'Ágio por expectativa de rentabilidade futura, carteira de clientes adquirida e outros ativos intangíveis',
   },
 
   // 2. PASSIVO
@@ -447,6 +481,39 @@ export function classificarTransacaoExtrato(tx: {
     return PLANO_CONTAS_AEROCAD.find((i) => i.codigo === '2.1.1')!
   }
 
+  // 5.1 Taxas e Ativos Intangíveis (INPI / Marcas / Patentes / AEGIS)
+  if (
+    texto.includes('inpi') ||
+    texto.includes('marca') ||
+    texto.includes('marcas') ||
+    texto.includes('patente') ||
+    texto.includes('patentes') ||
+    texto.includes('taxa inpi') ||
+    texto.includes('registro de marca') ||
+    texto.includes('deposito de marca') ||
+    texto.includes('concessao de marca') ||
+    texto.includes('taxa de patente')
+  ) {
+    return PLANO_CONTAS_AEROCAD.find((i) => i.codigo === '1.2.7')!
+  }
+
+  if (
+    texto.includes('aegis') ||
+    texto.includes('desenvolvimento aegis') ||
+    texto.includes('software proprio') ||
+    texto.includes('desenvolvimento de software')
+  ) {
+    return PLANO_CONTAS_AEROCAD.find((i) => i.codigo === '1.2.8')!
+  }
+
+  if (
+    texto.includes('direito autoral') ||
+    texto.includes('direitos autorais') ||
+    texto.includes('propriedade intelectual')
+  ) {
+    return PLANO_CONTAS_AEROCAD.find((i) => i.codigo === '1.2.10')!
+  }
+
   // 6. Contas de consumo (energia, condomínio, telecom)
   if (
     texto.includes('ceb brasilia') ||
@@ -636,16 +703,25 @@ export function classificarAtivoPatrimonio(at: { categoria?: string }): ItemPlan
       return PLANO_CONTAS_AEROCAD.find((i) => i.codigo === '1.2.2')!
     case 'computador_hardware':
       return PLANO_CONTAS_AEROCAD.find((i) => i.codigo === '1.2.3')!
-    case 'software_licenca':
-      return PLANO_CONTAS_AEROCAD.find((i) => i.codigo === '1.2.4')!
     case 'veiculo':
-      return PLANO_CONTAS_AEROCAD.find((i) => i.codigo === '1.2.5')!
+      return PLANO_CONTAS_AEROCAD.find((i) => i.codigo === '1.2.4')!
     case 'imovel':
     case 'terreno':
-      return PLANO_CONTAS_AEROCAD.find((i) => i.codigo === '1.2.6')!
+      return PLANO_CONTAS_AEROCAD.find((i) => i.codigo === '1.2.5')!
     case 'mobiliario':
+      return PLANO_CONTAS_AEROCAD.find((i) => i.codigo === '1.2.6')!
+    case 'marca_patente':
+      return PLANO_CONTAS_AEROCAD.find((i) => i.codigo === '1.2.7')!
+    case 'software_proprio_aegis':
+      return PLANO_CONTAS_AEROCAD.find((i) => i.codigo === '1.2.8')!
+    case 'software_licenca':
+      return PLANO_CONTAS_AEROCAD.find((i) => i.codigo === '1.2.9')!
+    case 'direito_autoral':
+      return PLANO_CONTAS_AEROCAD.find((i) => i.codigo === '1.2.10')!
+    case 'goodwill_intangivel':
+      return PLANO_CONTAS_AEROCAD.find((i) => i.codigo === '1.2.11')!
     case 'outro_ativo':
     default:
-      return PLANO_CONTAS_AEROCAD.find((i) => i.codigo === '1.2.7')!
+      return PLANO_CONTAS_AEROCAD.find((i) => i.codigo === '1.2.6')!
   }
 }

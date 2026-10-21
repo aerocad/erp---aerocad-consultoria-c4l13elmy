@@ -371,24 +371,51 @@ export function RelatoriosContabeisAvancadosTab({
 
     const totalAtivoCirculante = totalDisponibilidades + totalContasReceber
 
-    // 1.2 ATIVO NÃO CIRCULANTE (Ativos e Patrimônio Permanente)
+    // 1.2 ATIVO NÃO CIRCULANTE (Imobilizado e Ativos Intangíveis)
+    const ehIntangivel = (cat?: string) =>
+      cat === 'marca_patente' ||
+      cat === 'software_proprio_aegis' ||
+      cat === 'direito_autoral' ||
+      cat === 'goodwill_intangivel' ||
+      cat === 'software_licenca'
+
     const ativosCalc = ativosPatrimonio.map((at) => {
-      const calc = calcularDepreciacaoLinear(
-        at.valor_aquisicao,
-        at.data_aquisicao,
-        at.vida_util_meses || DEPRECIACAO_PADRAO[at.categoria]?.vidaUtilMeses || 120,
-        at.valor_residual || 0,
-      )
+      const vidaUtilConfig =
+        at.categoria === 'terreno' || at.categoria === 'goodwill_intangivel'
+          ? 0
+          : at.vida_util_meses !== undefined
+            ? at.vida_util_meses
+            : (DEPRECIACAO_PADRAO[at.categoria]?.vidaUtilMeses ?? 120)
+
+      const calc =
+        at.categoria === 'terreno' || at.categoria === 'goodwill_intangivel' || vidaUtilConfig === 0
+          ? { depreciacaoAcumulada: 0, valorContabilAtual: at.valor_aquisicao }
+          : calcularDepreciacaoLinear(
+              at.valor_aquisicao,
+              at.data_aquisicao,
+              vidaUtilConfig,
+              at.valor_residual || 0,
+            )
+
       return {
         ...at,
         custoHistorico: at.valor_aquisicao,
         depreciacao: calc.depreciacaoAcumulada,
         valorLiquido: calc.valorContabilAtual,
+        ehIntangivel: ehIntangivel(at.categoria),
       }
     })
     const totalCustoHistoricoAtivos = ativosCalc.reduce((acc, a) => acc + a.custoHistorico, 0)
     const totalDepreciacaoAcumulada = ativosCalc.reduce((acc, a) => acc + a.depreciacao, 0)
     const totalAtivoNaoCirculante = totalCustoHistoricoAtivos - totalDepreciacaoAcumulada
+
+    // Segregação Contábil (Imobilizado vs Intangível)
+    const ativosImobilizados = ativosCalc.filter((a) => !a.ehIntangivel)
+    const ativosIntangiveis = ativosCalc.filter((a) => a.ehIntangivel)
+    const totalImobilizadoLiquido = ativosImobilizados.reduce((acc, a) => acc + a.valorLiquido, 0)
+    const totalIntangivelLiquido = ativosIntangiveis.reduce((acc, a) => acc + a.valorLiquido, 0)
+    const totalCustoIntangivel = ativosIntangiveis.reduce((acc, a) => acc + a.custoHistorico, 0)
+    const totalAmortizacaoIntangivel = ativosIntangiveis.reduce((acc, a) => acc + a.depreciacao, 0)
 
     const totalAtivo = totalAtivoCirculante + totalAtivoNaoCirculante
 
@@ -425,6 +452,12 @@ export function RelatoriosContabeisAvancadosTab({
       totalCustoHistoricoAtivos,
       totalDepreciacaoAcumulada,
       totalAtivoNaoCirculante,
+      totalImobilizadoLiquido,
+      totalIntangivelLiquido,
+      totalCustoIntangivel,
+      totalAmortizacaoIntangivel,
+      qtdIntangiveis: ativosIntangiveis.length,
+      qtdImobilizados: ativosImobilizados.length,
       totalAtivo,
       totalPassivoCirculante,
       resultadoAcumuladoHistorico,
@@ -922,19 +955,31 @@ export function RelatoriosContabeisAvancadosTab({
         },
         {
           grupo: 'ATIVO NÃO CIRCULANTE',
-          subgrupo: 'Custo Histórico dos Ativos e Equipamentos',
+          subgrupo: '1.2.1 Ativo Imobilizado Líquido',
+          conta_bancaria: '—',
+          valor: balancoData.totalImobilizadoLiquido,
+        },
+        {
+          grupo: 'ATIVO NÃO CIRCULANTE',
+          subgrupo: '1.2.2 Ativo Intangível Líquido (Marcas/Patentes INPI, AEGIS)',
+          conta_bancaria: '—',
+          valor: balancoData.totalIntangivelLiquido,
+        },
+        {
+          grupo: 'ATIVO NÃO CIRCULANTE',
+          subgrupo: 'Custo Histórico Total dos Ativos (Imobilizado + Intangível)',
           conta_bancaria: '—',
           valor: balancoData.totalCustoHistoricoAtivos,
         },
         {
           grupo: 'ATIVO NÃO CIRCULANTE',
-          subgrupo: '(-) Depreciação Linear Acumulada Contábil',
+          subgrupo: '(-) Depreciação / Amortização Linear Acumulada',
           conta_bancaria: '—',
           valor: -balancoData.totalDepreciacaoAcumulada,
         },
         {
           grupo: 'TOTAL DO ATIVO NÃO CIRCULANTE',
-          subgrupo: 'Valor Contábil Líquido dos Bens',
+          subgrupo: 'Valor Contábil Líquido Total dos Bens e Intangíveis',
           conta_bancaria: '—',
           valor: balancoData.totalAtivoNaoCirculante,
         },
@@ -1139,9 +1184,11 @@ export function RelatoriosContabeisAvancadosTab({
     <tr><td>1. ATIVO CIRCULANTE (Disponibilidades + Contas a Receber)</td><td class="right bold">${formatCurrency(balancoData.totalAtivoCirculante)}</td></tr>
     <tr><td>• Disponibilidades Bancárias PJ</td><td class="right">${formatCurrency(balancoData.totalDisponibilidades)}</td></tr>
     <tr><td>• Contas a Receber de Clientes</td><td class="right">${formatCurrency(balancoData.totalContasReceber)}</td></tr>
-    <tr><td>1.2 ATIVO NÃO CIRCULANTE (Imobilizado Líquido)</td><td class="right bold">${formatCurrency(balancoData.totalAtivoNaoCirculante)}</td></tr>
-    <tr><td>• Custo Histórico de Aquisição</td><td class="right">${formatCurrency(balancoData.totalCustoHistoricoAtivos)}</td></tr>
-    <tr><td>• (-) Depreciação Linear Acumulada</td><td class="right">- ${formatCurrency(balancoData.totalDepreciacaoAcumulada)}</td></tr>
+    <tr><td>1.2 ATIVO NÃO CIRCULANTE (Imobilizado & Intangível)</td><td class="right bold">${formatCurrency(balancoData.totalAtivoNaoCirculante)}</td></tr>
+    <tr><td>• 1.2.1 Ativo Imobilizado Líquido</td><td class="right">${formatCurrency(balancoData.totalImobilizadoLiquido)}</td></tr>
+    <tr><td>• 1.2.2 Ativo Intangível Líquido (Marcas/Patentes INPI, AEGIS)</td><td class="right">${formatCurrency(balancoData.totalIntangivelLiquido)}</td></tr>
+    <tr><td>• Custo Histórico Total</td><td class="right">${formatCurrency(balancoData.totalCustoHistoricoAtivos)}</td></tr>
+    <tr><td>• (-) Depreciação / Amortização Acumulada</td><td class="right">- ${formatCurrency(balancoData.totalDepreciacaoAcumulada)}</td></tr>
     <tr style="background:#FFF3E8;"><td><strong>TOTAL DO ATIVO</strong></td><td class="right bold" style="color:#FF6A13;">${formatCurrency(balancoData.totalAtivo)}</td></tr>
     <tr><td>2. PASSIVO CIRCULANTE (Fornecedores e Contas a Pagar)</td><td class="right bold">${formatCurrency(balancoData.totalPassivoCirculante)}</td></tr>
     <tr><td>2.2 PATRIMÔNIO LÍQUIDO (Capital Estimado + Lucros Acumulados)</td><td class="right bold">${formatCurrency(balancoData.patrimonioLiquidoTotal)}</td></tr>
@@ -1805,25 +1852,58 @@ export function RelatoriosContabeisAvancadosTab({
                 </div>
               </div>
 
-              {/* 1.2 Ativo Não Circulante */}
+              {/* 1.2 Ativo Não Circulante (Imobilizado e Intangível) */}
               <div className="space-y-2 pt-2">
                 <div className="bg-neutral-100/80 px-2.5 py-1 rounded text-xs font-bold text-neutral-800 flex justify-between items-center">
-                  <span>1.2 ATIVO NÃO CIRCULANTE (IMOBILIZADO & PERMANENTE)</span>
+                  <span>1.2 ATIVO NÃO CIRCULANTE (IMOBILIZADO & INTANGÍVEL)</span>
                   <span>{renderValor(balancoData.totalAtivoNaoCirculante)}</span>
                 </div>
 
-                <div className="pl-2 space-y-1 text-xs">
-                  <div className="flex justify-between py-1 border-b border-neutral-100">
-                    <span className="text-neutral-700">Bens e Equipamentos (Custo Histórico)</span>
-                    {renderValor(balancoData.totalCustoHistoricoAtivos)}
+                <div className="pl-2 space-y-1.5 text-xs">
+                  {/* Subgrupo: Imobilizado */}
+                  <div className="rounded p-1.5 bg-neutral-50/70 border border-neutral-100 space-y-1">
+                    <div className="flex justify-between font-semibold text-neutral-800">
+                      <span>1.2.1 Imobilizado Tangível Líquido</span>
+                      <span>{renderValor(balancoData.totalImobilizadoLiquido)}</span>
+                    </div>
+                    <span className="text-[10px] text-neutral-400 block pl-1">
+                      {balancoData.qtdImobilizados} bens físicos (veículos, drones, hardware CAD,
+                      estações totais)
+                    </span>
                   </div>
-                  <span className="text-[10px] text-neutral-400 pl-3 block">
-                    {balancoData.ativosCalc.length} ativos inventariados (drones, estações totais,
-                    hardware, softwares)
-                  </span>
+
+                  {/* Subgrupo: Intangível */}
+                  <div className="rounded p-1.5 bg-orange-50/50 border border-orange-100 space-y-1">
+                    <div className="flex justify-between font-semibold text-[#D65100]">
+                      <span>1.2.2 Ativo Intangível Líquido (CPC 04)</span>
+                      <span>
+                        {renderValor(
+                          balancoData.totalIntangivelLiquido,
+                          'text-[#D65100] font-mono font-semibold',
+                        )}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-[11px] text-neutral-600 pl-2">
+                      <span>• Custo Capitalizado (Marcas/Patentes INPI, AEGIS, Softwares):</span>
+                      <span>{renderValor(balancoData.totalCustoIntangivel)}</span>
+                    </div>
+                    <div className="flex justify-between text-[11px] text-amber-700 pl-2">
+                      <span>• (-) Amortização Acumulada:</span>
+                      <span>
+                        -{' '}
+                        {renderValor(
+                          balancoData.totalAmortizacaoIntangivel,
+                          'text-amber-700 font-mono',
+                        )}
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-neutral-400 block pl-2">
+                      {balancoData.qtdIntangiveis} ativos intangíveis inventariados
+                    </span>
+                  </div>
 
                   <div className="flex justify-between py-1 border-b border-neutral-100 text-amber-700 font-medium">
-                    <span>(-) Depreciação Linear Acumulada</span>
+                    <span>(-) Depreciação / Amortização Linear Total</span>
                     <span>
                       -{' '}
                       {renderValor(
@@ -1832,12 +1912,9 @@ export function RelatoriosContabeisAvancadosTab({
                       )}
                     </span>
                   </div>
-                  <span className="text-[10px] text-neutral-400 pl-3 block">
-                    Critério linear das Instruções Normativas da Receita Federal
-                  </span>
 
                   <div className="flex justify-between py-1 pt-2 font-bold text-emerald-800 bg-emerald-50/50 px-2 rounded">
-                    <span>Valor Contábil Líquido dos Ativos</span>
+                    <span>Total Ativo Não Circulante Líquido</span>
                     {renderValor(
                       balancoData.totalAtivoNaoCirculante,
                       'text-emerald-800 font-mono font-bold',
@@ -2732,18 +2809,28 @@ export function RelatoriosContabeisAvancadosTab({
                         },
                       ],
                       [
-                        { conteudo: '1.3 Bens e Equipamentos (Custo Histórico)' },
-                        { conteudo: 'Ativo Permanente', alinhamento: 'center' },
+                        { conteudo: '1.3 Imobilizado Tangível Líquido' },
+                        { conteudo: 'Bens Corpóreos', alinhamento: 'center' },
                         {
                           conteudo: mascararValores
                             ? VALOR_MASCARADO
-                            : formatCurrency(safeNumber(balancoData?.totalCustoHistoricoAtivos)),
+                            : formatCurrency(safeNumber(balancoData?.totalImobilizadoLiquido)),
                           alinhamento: 'right',
                         },
                       ],
                       [
-                        { conteudo: '1.4 (-) Depreciação Linear Acumulada' },
-                        { conteudo: 'Norma RFB Linear', alinhamento: 'center' },
+                        { conteudo: '1.4 Ativo Intangível Líquido (Marcas/Patentes INPI, AEGIS)' },
+                        { conteudo: 'CPC 04 / NBC TG 04', alinhamento: 'center' },
+                        {
+                          conteudo: mascararValores
+                            ? VALOR_MASCARADO
+                            : formatCurrency(safeNumber(balancoData?.totalIntangivelLiquido)),
+                          alinhamento: 'right',
+                        },
+                      ],
+                      [
+                        { conteudo: '1.5 (-) Depreciação / Amortização Linear Acumulada' },
+                        { conteudo: 'Norma RFB / CPC', alinhamento: 'center' },
                         {
                           conteudo: mascararValores
                             ? VALOR_MASCARADO

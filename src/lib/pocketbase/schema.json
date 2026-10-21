@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-21T18:31:13.835Z",
+  "generatedAt": "2026-10-21T23:31:17.048Z",
   "collections": [
     {
       "name": "users",
@@ -3852,7 +3852,11 @@
             "imovel",
             "mobiliario",
             "outro_ativo",
-            "terreno"
+            "terreno",
+            "marca_patente",
+            "software_proprio_aegis",
+            "direito_autoral",
+            "goodwill_intangivel"
           ]
         },
         {

@@ -505,6 +505,10 @@ export type CategoriaAtivoPatrimonial =
   | 'terreno'
   | 'imovel'
   | 'mobiliario'
+  | 'marca_patente'
+  | 'software_proprio_aegis'
+  | 'direito_autoral'
+  | 'goodwill_intangivel'
   | 'outro_ativo'
 
 export type StatusAtivoPatrimonial =

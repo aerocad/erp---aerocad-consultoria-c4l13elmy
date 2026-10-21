@@ -449,6 +449,43 @@ export const REGRAS_SEGMENTOS_ESTABELECIMENTO: RegraSegmentoInferido[] = [
     ],
   },
 
+  // 16.1 Ativos Intangíveis - Marcas e Patentes (INPI)
+  {
+    segmento: 'Ativo Intangível & Marcas (INPI)',
+    descricaoProdutoInferido:
+      'Taxa federal de registro, concessão ou depósito de marca/patente no INPI (ativo intangível capitalizável)',
+    categoria: 'equipamentos',
+    planoContasCodigo: '1.2.7',
+    planoContasNome: 'Marcas e Patentes (Taxas de Registro e Concessão INPI)',
+    palavrasChave: [
+      'inpi',
+      'instituto nacional da propriedade industrial',
+      'registro de marca',
+      'deposito de marca',
+      'concessao de marca',
+      'taxa de patente',
+      'guia gru inpi',
+      'propriedade industrial',
+      'retribuicao inpi',
+    ],
+  },
+
+  // 16.2 Ativo Intangível - Software Proprietário AEGIS
+  {
+    segmento: 'Ativo Intangível & Software Proprietário',
+    descricaoProdutoInferido:
+      'Desenvolvimento e evolução capitalizada do software proprietário AEGIS',
+    categoria: 'equipamentos',
+    planoContasCodigo: '1.2.8',
+    planoContasNome: 'Software e Programas Proprietários (Desenvolvimento AEGIS)',
+    palavrasChave: [
+      'desenvolvimento aegis',
+      'software aegis',
+      'aegis aero',
+      'desenvolvimento de software proprietario',
+    ],
+  },
+
   // 17. Cartórios e Tabelionatos
   {
     segmento: 'Cartórios & Tabelionatos',

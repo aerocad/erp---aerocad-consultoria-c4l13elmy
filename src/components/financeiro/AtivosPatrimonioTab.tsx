@@ -65,6 +65,10 @@ export const CATEGORIA_ATIVO_LABELS: Record<CategoriaAtivoPatrimonial, string> =
   terreno: 'Terreno / Imóvel (Patrimônio Fixo)',
   imovel: 'Bem Imóvel / Sede / Instalação',
   mobiliario: 'Mobiliário & Escritório',
+  marca_patente: 'Ativo Intangível: Marcas e Patentes (Taxas INPI)',
+  software_proprio_aegis: 'Ativo Intangível: Software Proprietário (AEGIS)',
+  direito_autoral: 'Ativo Intangível: Direitos Autorais & Metodologias',
+  goodwill_intangivel: 'Ativo Intangível: Fundo de Comércio / Goodwill',
   outro_ativo: 'Outro Ativo Permanente',
 }
 
@@ -75,19 +79,25 @@ export const STATUS_ATIVO_LABELS: Record<StatusAtivoPatrimonial, string> = {
   totalmente_depreciado: 'Totalmente Depreciado',
 }
 
-// Taxas anuais típicas da Receita Federal / Normas Contábeis brasileiras
+// Taxas anuais típicas da Receita Federal / Normas Contábeis brasileiras (NBC TG 04 / NBC TG 27)
 export const DEPRECIACAO_PADRAO: Record<
   CategoriaAtivoPatrimonial,
   { vidaUtilMeses: number; taxaAnual: number }
 > = {
   computador_hardware: { vidaUtilMeses: 60, taxaAnual: 20 }, // 5 anos = 20% ao ano
-  software_licenca: { vidaUtilMeses: 60, taxaAnual: 20 },
+  software_licenca: { vidaUtilMeses: 60, taxaAnual: 20 }, // 5 anos = 20% ao ano
   drone_aeronave: { vidaUtilMeses: 60, taxaAnual: 20 },
   equipamento_topografico: { vidaUtilMeses: 120, taxaAnual: 10 }, // 10 anos = 10% ao ano
   veiculo: { vidaUtilMeses: 60, taxaAnual: 20 }, // 5 anos = 20% ao ano
   terreno: { vidaUtilMeses: 0, taxaAnual: 0 }, // Terrenos não sofrem depreciação: taxa 0% (NBC TG 27)
   imovel: { vidaUtilMeses: 300, taxaAnual: 4 }, // 25 anos = 4% ao ano
   mobiliario: { vidaUtilMeses: 120, taxaAnual: 10 },
+  // Intangíveis (CPC 04 / NBC TG 04): Marcas e Goodwill têm vida útil indefinida (amortização 0, teste de impairment).
+  // Marcas e Patentes registradas no INPI têm validade legal inicial de 10 anos renováveis.
+  marca_patente: { vidaUtilMeses: 120, taxaAnual: 10 }, // 10 anos de vigência legal no INPI = 10% ao ano
+  software_proprio_aegis: { vidaUtilMeses: 60, taxaAnual: 20 }, // 5 anos = 20% ao ano (CPC 04)
+  direito_autoral: { vidaUtilMeses: 120, taxaAnual: 10 }, // 10 anos
+  goodwill_intangivel: { vidaUtilMeses: 0, taxaAnual: 0 }, // Não amortizável, sujeito a impairment
   outro_ativo: { vidaUtilMeses: 120, taxaAnual: 10 },
 }
 /**
@@ -106,8 +116,8 @@ export function calcularDepreciacaoLinear(
     return { mesesDecorridos: 0, depreciacaoAcumulada: 0, valorContabilAtual: 0 }
   }
 
-  // Regra NBC TG 27: Terrenos têm vida útil ilimitada e não sofrem depreciação
-  if (categoria === 'terreno' || vidaUtilMeses === 0) {
+  // Regra NBC TG 27 / NBC TG 04: Terrenos e Goodwill têm vida útil indefinida e não sofrem depreciação/amortização ordinária
+  if (categoria === 'terreno' || categoria === 'goodwill_intangivel' || vidaUtilMeses === 0) {
     return { mesesDecorridos: 0, depreciacaoAcumulada: 0, valorContabilAtual: valorAquisicao }
   }
 
@@ -261,12 +271,11 @@ export function AtivosPatrimonioTab({
   const ativosCalculados = useMemo(() => {
     return ativos.map((at) => {
       const vidaUtilConfig =
-        at.categoria === 'terreno'
+        at.categoria === 'terreno' || at.categoria === 'goodwill_intangivel'
           ? 0
           : at.vida_util_meses !== undefined
             ? at.vida_util_meses
             : (DEPRECIACAO_PADRAO[at.categoria]?.vidaUtilMeses ?? 120)
-
       const calc = calcularDepreciacaoLinear(
         at.valor_aquisicao,
         at.data_aquisicao,
@@ -343,7 +352,8 @@ export function AtivosPatrimonioTab({
     setEditando(ativo)
     setAnexosPendentes([])
     setBuscaCredor(ativo.fornecedor_nome || '')
-    const ehTerreno = ativo.categoria === 'terreno'
+    const ehSemDepreciacao =
+      ativo.categoria === 'terreno' || ativo.categoria === 'goodwill_intangivel'
     setFormData({
       identificador_codigo: ativo.identificador_codigo || '',
       descricao: ativo.descricao,
@@ -352,14 +362,14 @@ export function AtivosPatrimonioTab({
       quantidade_parcelas: ativo.quantidade_parcelas ? String(ativo.quantidade_parcelas) : '',
       data_aquisicao: ativo.data_aquisicao ? ativo.data_aquisicao.slice(0, 10) : '',
       valor_aquisicao: String(ativo.valor_aquisicao),
-      vida_util_meses: ehTerreno
+      vida_util_meses: ehSemDepreciacao
         ? '0'
         : String(
             ativo.vida_util_meses !== undefined
               ? ativo.vida_util_meses
               : (DEPRECIACAO_PADRAO[ativo.categoria]?.vidaUtilMeses ?? 120),
           ),
-      taxa_depreciacao_anual: ehTerreno
+      taxa_depreciacao_anual: ehSemDepreciacao
         ? '0'
         : String(
             ativo.taxa_depreciacao_anual !== undefined
