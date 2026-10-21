@@ -1680,6 +1680,8 @@ export function FinancePage() {
                 ativosPatrimonio={ativosPatrimonio.data}
                 extratosTransacoes={extratosTransacoes.data}
                 balancetes={balancetesList.data}
+                projetos={projects.data}
+                clientes={clients.data}
                 canWrite={canWrite}
                 canDelete={
                   user?.role === 'admin' ||
