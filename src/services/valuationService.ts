@@ -31,6 +31,23 @@ import { calcularDepreciacaoLinear } from '@/components/financeiro/AtivosPatrimo
 import { loadSheetJS } from '@/services/sheetjsLoader'
 import { formatCurrency, isValoresOcultos, VALOR_MASCARADO } from '@/lib/format'
 import { obterItemPlanoContasPorCodigo } from '@/lib/planoContas'
+import {
+  type AegisConfiguracaoCompleta,
+  type AegisValuationResultado,
+  type ComposicaoServicosAegis,
+  AEGIS_CONFIG_PADRAO,
+  calcularAegisValuation,
+  calcularComposicaoAerocadAegis,
+} from '@/services/aegisValuationModel'
+
+export {
+  type AegisConfiguracaoCompleta,
+  type AegisValuationResultado,
+  type ComposicaoServicosAegis,
+  AEGIS_CONFIG_PADRAO,
+  calcularAegisValuation,
+  calcularComposicaoAerocadAegis,
+}
 
 export interface MultiplosConfig {
   ebitdaConservador: number
@@ -356,6 +373,12 @@ export interface ValuationCalculado {
   }
   // 10. Diagnóstico de Confiabilidade
   confiabilidade: ConfiabilidadeDados
+  // 11. Módulo Ativo de Produto AEGIS
+  aegis: {
+    config: AegisConfiguracaoCompleta
+    resultado: AegisValuationResultado
+    composicaoEmpresa: ComposicaoServicosAegis
+  }
 }
 
 export interface ValuationRecordItem {
@@ -395,6 +418,7 @@ export function calcularValuationAerocad(params: {
   dcfConfig?: DcfParametrosConfig
   composicaoPesos?: ComposicaoPesosConfig
   ajustesSubjetivos?: AjusteSubjetivoItem[]
+  aegisConfig?: AegisConfiguracaoCompleta
 }): ValuationCalculado {
   const {
     parcelas = [],
@@ -412,6 +436,7 @@ export function calcularValuationAerocad(params: {
     dcfConfig = DCF_PADRAO,
     composicaoPesos = COMPOSICAO_PESOS_PADRAO,
     ajustesSubjetivos = [],
+    aegisConfig = AEGIS_CONFIG_PADRAO,
   } = params
 
   const anoStr = String(anoExercicio)
@@ -1358,6 +1383,20 @@ export function calcularValuationAerocad(params: {
       nivel,
       alertas,
     },
+    aegis: (() => {
+      const aegisResultado = calcularAegisValuation(aegisConfig)
+      const composicaoEmpresa = calcularComposicaoAerocadAegis({
+        valorServicosConservador: cenarioConservadorTotal,
+        valorServicosBase: cenarioMedioTotal,
+        valorServicosOtimista: cenarioOtimistaTotal,
+        aegisResultado,
+      })
+      return {
+        config: aegisConfig,
+        resultado: aegisResultado,
+        composicaoEmpresa,
+      }
+    })(),
   }
 }
 
@@ -1393,6 +1432,16 @@ export async function salvarValuation(dados: {
       valorFcd: dados.resultado.dcf.valorPatrimonialFcd,
       valorSubstantivo: dados.resultado.valorSubstantivo.valorSubstantivoAjustado,
       pesosComposicao: dados.resultado.composicaoMultimetodos.pesosConfig,
+      aegis: {
+        samBrasil: dados.resultado.aegis.resultado.samBrasilTotal,
+        tamLatam: dados.resultado.aegis.resultado.tamLatamTotal,
+        valuationHojeRef: dados.resultado.aegis.resultado.valuationHoje.referencia,
+        cenarioEscalaBase:
+          dados.resultado.aegis.resultado.cenariosEscala.base.valuationBrutoMultiplo,
+        totalComposicaoHoje:
+          dados.resultado.aegis.composicaoEmpresa.visaoServicosMaisAegisBase.base,
+        totalComposicaoEscala: dados.resultado.aegis.composicaoEmpresa.visaoCenarioEscala.base,
+      },
     },
     indicadores_apoio: dados.resultado.indicadoresApoio,
     confiabilidade_dados: dados.resultado.confiabilidade,
@@ -1445,6 +1494,8 @@ export async function excluirValuation(id: string): Promise<boolean> {
  * 6. Qualidade & Concentração
  * 7. Decomposição Despesas
  * 8. Capital de Giro & Balanço
+ * 9. Ativo AEGIS (Software Proprietário)
+ * 10. Composição Consolidada Aerocad + AEGIS
  */
 export async function exportarValuationXlsx(
   valuation: ValuationCalculado,
@@ -1917,6 +1968,199 @@ export async function exportarValuationXlsx(
   const wsCapitalGiro = xlsx.utils.aoa_to_sheet(aoaCapitalGiro)
   wsCapitalGiro['!cols'] = [{ wch: 45 }, { wch: 22 }, { wch: 30 }]
   xlsx.utils.book_append_sheet(workbook, wsCapitalGiro, 'Capital de Giro')
+
+  // 9. ABA: ATIVO AEGIS (SOFTWARE PROPRIETÁRIO QGIS / ICA 11-408)
+  const aegisRes = valuation.aegis.resultado
+  const aegisConf = valuation.aegis.config
+  const aoaAegis: unknown[][] = [
+    ['AEGIS — ATIVO ESTRATÉGICO DE SOFTWARE PROPRIETÁRIO (VALUATION DE PRODUTO)'],
+    [
+      'Plataforma plugin QGIS para automação de superfícies aeronáuticas (ICA 11-408/2020 DECEA, DXF, KMZ 3D, OPEA)',
+    ],
+    [`Emissão: ${dataEmissao} | Responsável: ${usuarioNome}`],
+    [],
+    ['DIMENSIONAMENTO DE MERCADO (SAM / TAM)', 'VALOR ANUAL (R$)', 'METODOLOGIA'],
+    [
+      'SAM Brasil (Mercado Endereçável Atendível)',
+      valFormat(aegisRes.samBrasilTotal),
+      'Soma dos 4 segmentos prioritários Brasil',
+    ],
+    [
+      'TAM LATAM (Mercado Total América Latina)',
+      valFormat(aegisRes.tamLatamTotal),
+      `Múltiplo de ${(aegisConf.premissasMercado.fatorMultiplicadorLatam || 5).toFixed(1)}x sobre o SAM Brasil`,
+    ],
+    [
+      'Sítios Endereçáveis no Brasil',
+      `${aegisConf.premissasMercado.totalSitiosBrasil.toLocaleString('pt-BR')} sítios`,
+      '4.186 aeródromos + 1.725 helipontos/helidecks',
+    ],
+    [
+      'Estados Signatários ICAO',
+      `${aegisConf.premissasMercado.totalEstadosIcao} países`,
+      'Aderência normativa ao Anexo 14 da ICAO',
+    ],
+    [],
+    [
+      'SEGMENTO DO SAM',
+      'QTD ESTIMADA',
+      'PREÇO ASSENTO/ANO (R$)',
+      'POTENCIAL ANUAL (R$)',
+      'PARTICIPAÇÃO %',
+    ],
+  ]
+  for (const s of aegisRes.segmentosDetalhados) {
+    aoaAegis.push([
+      s.nome,
+      s.quantidade,
+      valFormat(s.precoAno),
+      valFormat(s.potencialAnual),
+      `${s.participacaoSam.toFixed(1)}%`,
+    ])
+  }
+  aoaAegis.push([])
+  aoaAegis.push(['VALUATION DO AEGIS HOJE (ESTÁGIO INICIAL)', 'FAIXA (R$)', 'DESCRIÇÃO'])
+  aoaAegis.push([
+    'Piso Estágio Inicial',
+    valFormat(aegisRes.valuationHoje.minimo),
+    'Potencial mínimo com produto funcional v1.9',
+  ])
+  aoaAegis.push([
+    'Valor Central (Referência Atual)',
+    valFormat(aegisRes.valuationHoje.referencia),
+    'Ativo validado com liderança e fosso regulatório',
+  ])
+  aoaAegis.push([
+    'Teto Estágio Inicial',
+    valFormat(aegisRes.valuationHoje.maximo),
+    'Com primeiros clientes pagantes e registro no INPI',
+  ])
+  aoaAegis.push([])
+  aoaAegis.push([
+    'PROJEÇÃO EM ESCALA (3 A 5 ANOS / SAAS VERTICAL)',
+    'ARR PROJETADO (R$)',
+    'MÚLTIPLO ARR',
+    'VALUATION BRUTO (R$)',
+    'DESCONTO RISCO',
+    'VALUATION AJUSTADO (R$)',
+  ])
+  aoaAegis.push([
+    'Cenário Conservador (10% SAM, 3 anos)',
+    valFormat(aegisRes.cenariosEscala.conservador.arrProjetado),
+    `${aegisRes.cenariosEscala.conservador.multiploAplicado}x`,
+    valFormat(aegisRes.cenariosEscala.conservador.valuationBrutoMultiplo),
+    `${(aegisRes.cenariosEscala.conservador.fatorDesconto * 100).toFixed(0)}%`,
+    valFormat(aegisRes.cenariosEscala.conservador.valuationComDescontoEstagio),
+  ])
+  aoaAegis.push([
+    'Cenário Base (25% SAM, 5 anos)',
+    valFormat(aegisRes.cenariosEscala.base.arrProjetado),
+    `${aegisRes.cenariosEscala.base.multiploAplicado}x`,
+    valFormat(aegisRes.cenariosEscala.base.valuationBrutoMultiplo),
+    `${(aegisRes.cenariosEscala.base.fatorDesconto * 100).toFixed(0)}%`,
+    valFormat(aegisRes.cenariosEscala.base.valuationComDescontoEstagio),
+  ])
+  aoaAegis.push([
+    'Cenário Otimista (45% SAM, 5 anos)',
+    valFormat(aegisRes.cenariosEscala.otimista.arrProjetado),
+    `${aegisRes.cenariosEscala.otimista.multiploAplicado}x`,
+    valFormat(aegisRes.cenariosEscala.otimista.valuationBrutoMultiplo),
+    `${(aegisRes.cenariosEscala.otimista.fatorDesconto * 100).toFixed(0)}%`,
+    valFormat(aegisRes.cenariosEscala.otimista.valuationComDescontoEstagio),
+  ])
+  aoaAegis.push([])
+  aoaAegis.push(['ANÁLISE DE DRIVERS DE VALOR (7 PILARES)', 'IMPACTO', 'CATEGORIA', 'DESCRIÇÃO'])
+  for (const d of aegisConf.drivers) {
+    aoaAegis.push([d.titulo, d.impacto.toUpperCase(), d.categoria.toUpperCase(), d.descricao])
+  }
+  aoaAegis.push([])
+  aoaAegis.push(['MATRIZ DE RISCOS & MITIGAÇÕES', 'SEVERIDADE', 'DESCRIÇÃO', 'MITIGAÇÃO ADOTADA'])
+  for (const r of aegisConf.riscos) {
+    aoaAegis.push([r.titulo, r.severidade.toUpperCase(), r.descricao, r.mitigacao])
+  }
+  aoaAegis.push([])
+  aoaAegis.push([
+    'RESSALVA OBRIGATÓRIA',
+    'Apoio técnico à decisão. Não substitui parecer das autoridades (DECEA/ANAC). Premissas dependem de validação da administração.',
+  ])
+
+  const wsAegis = xlsx.utils.aoa_to_sheet(aoaAegis)
+  wsAegis['!cols'] = [{ wch: 45 }, { wch: 22 }, { wch: 22 }, { wch: 25 }, { wch: 20 }, { wch: 25 }]
+  xlsx.utils.book_append_sheet(workbook, wsAegis, 'AEGIS - Ativo Produto')
+
+  // 10. ABA: COMPOSIÇÃO CONSOLIDADA AEROCAD + AEGIS
+  const comp = valuation.aegis.composicaoEmpresa
+  const aoaConsolidada: unknown[][] = [
+    ['COMPOSIÇÃO ESTRATÉGICA FINAL — AEROCAD (SERVIÇOS) + AEGIS (SOFTWARE)'],
+    ['Efeito multiplicador do software proprietário sobre o valor patrimonial da Aerocad'],
+    [],
+    [
+      'VISÃO ESTRATÉGICA',
+      'CONSERVADOR (R$)',
+      'BASE / REFERÊNCIA (R$)',
+      'OTIMISTA (R$)',
+      'GANHO % S/ SERVIÇOS',
+      'MULTIPLICADOR',
+    ],
+    [
+      '1. Somente Operação de Serviços (Situação Atual)',
+      valFormat(comp.visaoSomenteServicos.conservador),
+      valFormat(comp.visaoSomenteServicos.base),
+      valFormat(comp.visaoSomenteServicos.otimista),
+      '0.0%',
+      '1.00x',
+    ],
+    [
+      '2. Serviços + AEGIS Hoje (Base Inicial)',
+      valFormat(comp.visaoServicosMaisAegisBase.conservador),
+      valFormat(comp.visaoServicosMaisAegisBase.base),
+      valFormat(comp.visaoServicosMaisAegisBase.otimista),
+      `+${comp.visaoServicosMaisAegisBase.ganhoPercentualSobreServicos.toFixed(1)}%`,
+      `${(comp.visaoServicosMaisAegisBase.base / (comp.visaoSomenteServicos.base || 1)).toFixed(2)}x`,
+    ],
+    [
+      '3. Cenário de Escala (Serviços + AEGIS 3 a 5 anos)',
+      valFormat(comp.visaoCenarioEscala.conservador),
+      valFormat(comp.visaoCenarioEscala.base),
+      valFormat(comp.visaoCenarioEscala.otimista),
+      `+${comp.visaoCenarioEscala.ganhoPercentualSobreServicos.toFixed(1)}%`,
+      `${comp.visaoCenarioEscala.multiplicadorTotalSobreServicos.toFixed(2)}x`,
+    ],
+    [],
+    ['DESDOBRAMENTO DOS ATIVOS COMBINADOS', 'VALOR ATUAL (R$)', 'VALOR EM ESCALA (R$)'],
+    [
+      'Valor dos Serviços Aerocad (4 Métodos Ponderados)',
+      valFormat(comp.valorServicosBase),
+      valFormat(comp.valorServicosBase),
+    ],
+    [
+      'Valor do Ativo AEGIS (Software Plugin QGIS)',
+      valFormat(comp.valorAegisHoje),
+      valFormat(comp.valorAegisEscala),
+    ],
+    [
+      'VALOR TOTAL CONSOLIDADO AEROCAD',
+      valFormat(comp.visaoServicosMaisAegisBase.base),
+      valFormat(comp.visaoCenarioEscala.base),
+    ],
+    [],
+    [
+      'FAIXA DE NEGOCIAÇÃO RECOMENDADA',
+      `${formatCurrency(comp.visaoServicosMaisAegisBase.conservador)} a ${formatCurrency(comp.visaoServicosMaisAegisBase.otimista)} (Hoje)`,
+      `${formatCurrency(comp.visaoCenarioEscala.conservador)} a ${formatCurrency(comp.visaoCenarioEscala.otimista)} (Escala)`,
+    ],
+  ]
+
+  const wsConsolidada = xlsx.utils.aoa_to_sheet(aoaConsolidada)
+  wsConsolidada['!cols'] = [
+    { wch: 46 },
+    { wch: 22 },
+    { wch: 24 },
+    { wch: 22 },
+    { wch: 20 },
+    { wch: 16 },
+  ]
+  xlsx.utils.book_append_sheet(workbook, wsConsolidada, 'Consolidação Final')
 
   const filename = `valuation_aerocad_avancado_${valuation.anoExercicio}_${new Date()
     .toISOString()

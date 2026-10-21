@@ -60,13 +60,17 @@ import {
   MULTIPLOS_PADRAO,
   DCF_PADRAO,
   COMPOSICAO_PESOS_PADRAO,
+  AEGIS_CONFIG_PADRAO,
   type MultiplosConfig,
   type DcfParametrosConfig,
   type ComposicaoPesosConfig,
   type AjusteSubjetivoItem,
+  type AegisConfiguracaoCompleta,
   type ValuationCalculado,
   type ValuationRecordItem,
 } from '@/services/valuationService'
+import { AegisValuationSection } from '@/components/financeiro/AegisValuationSection'
+import { Rocket } from 'lucide-react'
 import { obterDadosEmpresa } from '@/services/empresaService'
 import type {
   ParcelaRecord,
@@ -106,6 +110,7 @@ type SubAbaValuation =
   | 'sensibilidade'
   | 'despesas_receita'
   | 'composicao_pesos'
+  | 'aegis_ativo'
   | 'comparador_historico'
 
 export function ValuationTab({
@@ -168,6 +173,9 @@ export function ValuationTab({
   // Composição Ponderada dos Métodos
   const [composicaoPesos, setComposicaoPesos] =
     useState<ComposicaoPesosConfig>(COMPOSICAO_PESOS_PADRAO)
+
+  // Premissas e Configuração do Ativo Estratégico AEGIS
+  const [aegisConfig, setAegisConfig] = useState<AegisConfiguracaoCompleta>(AEGIS_CONFIG_PADRAO)
 
   // Ajustes Subjetivos / Intangíveis (Goodwill)
   const [ajustes, setAjustes] = useState<AjusteSubjetivoItem[]>([
@@ -253,6 +261,7 @@ export function ValuationTab({
       dcfConfig,
       composicaoPesos,
       ajustesSubjetivos: ajustes,
+      aegisConfig,
     })
   }, [
     parcelas,
@@ -270,6 +279,7 @@ export function ValuationTab({
     dcfConfig,
     composicaoPesos,
     ajustes,
+    aegisConfig,
   ])
 
   // Dados para Gráficos
@@ -530,7 +540,7 @@ export function ValuationTab({
               className="border-neutral-300 hover:border-emerald-600 text-neutral-700 hover:text-emerald-700 font-semibold"
             >
               <FileSpreadsheet className="h-4 w-4 mr-1.5 text-emerald-600" />
-              Exportar XLSX (8 Abas)
+              Exportar XLSX (10 Abas)
             </Button>
 
             <Button
@@ -638,6 +648,19 @@ export function ValuationTab({
         >
           <Sliders className="h-3.5 w-3.5" />
           Composição dos 4 Métodos
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setSubAbaAtiva('aegis_ativo')}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition ${
+            subAbaAtiva === 'aegis_ativo'
+              ? 'bg-[#FF6A13] text-white shadow-xs'
+              : 'text-[#D65100] hover:bg-orange-50 font-bold'
+          }`}
+        >
+          <Rocket className="h-3.5 w-3.5" />
+          AEGIS — Ativo de Produto
         </button>
 
         <button
@@ -2204,6 +2227,20 @@ export function ValuationTab({
       )}
 
       {/* ========================================================================= */}
+      {/* SUB-ABA: AEGIS — ATIVO ESTRATÉGICO DE PRODUTO / SOFTWARE PROPRIETÁRIO */}
+      {/* ========================================================================= */}
+      {subAbaAtiva === 'aegis_ativo' && (
+        <AegisValuationSection
+          aegisConfig={aegisConfig}
+          onChangeConfig={setAegisConfig}
+          resultado={valuation.aegis.resultado}
+          composicaoEmpresa={valuation.aegis.composicaoEmpresa}
+          canWrite={canWrite}
+          anoExercicio={anoSelecionado}
+        />
+      )}
+
+      {/* ========================================================================= */}
       {/* SUB-ABA 7: COMPARADOR DE AVALIAÇÕES SALVAS NO HISTÓRICO */}
       {/* ========================================================================= */}
       {subAbaAtiva === 'comparador_historico' && (
@@ -2767,6 +2804,36 @@ export function ValuationTab({
                     valorFormatado: formatCurrency(valuation.patrimonio.patrimonioLiquidoContabil),
                     cor: 'neutro',
                   },
+                  {
+                    rotulo: 'Ativo AEGIS (Software Hoje)',
+                    valorFormatado: formatCurrency(
+                      valuation.aegis.resultado.valuationHoje.referencia,
+                    ),
+                    destaque: true,
+                    cor: 'laranja',
+                  },
+                  {
+                    rotulo: 'Consolidado c/ AEGIS Hoje',
+                    valorFormatado: formatCurrency(
+                      valuation.aegis.composicaoEmpresa.visaoServicosMaisAegisBase.base,
+                    ),
+                    destaque: true,
+                    cor: 'laranja',
+                  },
+                  {
+                    rotulo: 'Consolidado em Escala (3-5a)',
+                    valorFormatado: formatCurrency(
+                      valuation.aegis.composicaoEmpresa.visaoCenarioEscala.base,
+                    ),
+                    destaque: true,
+                    cor: 'verde',
+                  },
+                  {
+                    rotulo: 'Poder Multiplicador AEGIS',
+                    valorFormatado: `${valuation.aegis.composicaoEmpresa.visaoCenarioEscala.multiplicadorTotalSobreServicos.toFixed(2)}x`,
+                    destaque: true,
+                    cor: 'verde',
+                  },
                 ]}
                 secoes={[
                   {
@@ -3040,8 +3107,257 @@ export function ValuationTab({
                       ]),
                     },
                   },
+                  {
+                    titulo:
+                      '6. AEGIS — Ativo Estratégico de Software Proprietário (Dimensionamento SAM & Cenários ARR)',
+                    subtitulo: `Plataforma plugin QGIS v1.9.384 para automação ICA 11-408/2020 DECEA, DXF oficial, KMZ 3D e OPEA (${valuation.aegis.config.premissasMercado.totalSitiosBrasil.toLocaleString('pt-BR')} sítios no Brasil)`,
+                    tabela: {
+                      colunas: [
+                        { cabecalho: 'Segmento do SAM Brasil', largura: '36%' },
+                        { cabecalho: 'Qtd.', alinhamento: 'center' },
+                        { cabecalho: 'Preço Assento/Ano', alinhamento: 'right' },
+                        { cabecalho: 'Potencial Anual (SAM)', alinhamento: 'right' },
+                        { cabecalho: 'Part. % SAM', alinhamento: 'center' },
+                      ],
+                      linhas: valuation.aegis.resultado.segmentosDetalhados.map((s) => [
+                        { conteudo: s.nome },
+                        { conteudo: s.quantidade.toString(), alinhamento: 'center' },
+                        { conteudo: formatCurrency(s.precoAno), alinhamento: 'right' },
+                        {
+                          conteudo: formatCurrency(s.potencialAnual),
+                          alinhamento: 'right',
+                          destaque: true,
+                        },
+                        { conteudo: `${s.participacaoSam.toFixed(1)}%`, alinhamento: 'center' },
+                      ]),
+                      linhaTotal: [
+                        { conteudo: 'TOTAL SAM BRASIL (TAM LATAM ≈ 5x SAM)', destaque: true },
+                        { conteudo: '—', alinhamento: 'center' },
+                        { conteudo: '—', alinhamento: 'right' },
+                        {
+                          conteudo: formatCurrency(valuation.aegis.resultado.samBrasilTotal),
+                          alinhamento: 'right',
+                          destaque: true,
+                        },
+                        { conteudo: '100.0%', alinhamento: 'center' },
+                      ],
+                    },
+                  },
+                  {
+                    titulo:
+                      '7. Projeção de ARR do AEGIS em Escala & Múltiplos SaaS Vertical (5x a 8x)',
+                    subtitulo:
+                      'Valuation por ARR projetado em 3 a 5 anos com desconto de risco e estágio inicial',
+                    tabela: {
+                      colunas: [
+                        { cabecalho: 'Cenário de Escala', largura: '28%' },
+                        { cabecalho: 'Captura SAM %', alinhamento: 'center' },
+                        { cabecalho: 'ARR Projetado', alinhamento: 'right' },
+                        { cabecalho: 'Múltiplo ARR', alinhamento: 'center' },
+                        { cabecalho: 'Valuation Bruto', alinhamento: 'right' },
+                        { cabecalho: 'Valuation Ajustado', alinhamento: 'right' },
+                      ],
+                      linhas: [
+                        [
+                          { conteudo: 'Conservador (Piso de Escala, 3 anos)' },
+                          {
+                            conteudo: `${(valuation.aegis.resultado.cenariosEscala.conservador.percentualCapturaSam * 100).toFixed(0)}%`,
+                            alinhamento: 'center',
+                          },
+                          {
+                            conteudo: formatCurrency(
+                              valuation.aegis.resultado.cenariosEscala.conservador.arrProjetado,
+                            ),
+                            alinhamento: 'right',
+                          },
+                          {
+                            conteudo: `${valuation.aegis.resultado.cenariosEscala.conservador.multiploAplicado}x`,
+                            alinhamento: 'center',
+                          },
+                          {
+                            conteudo: formatCurrency(
+                              valuation.aegis.resultado.cenariosEscala.conservador
+                                .valuationBrutoMultiplo,
+                            ),
+                            alinhamento: 'right',
+                          },
+                          {
+                            conteudo: formatCurrency(
+                              valuation.aegis.resultado.cenariosEscala.conservador
+                                .valuationComDescontoEstagio,
+                            ),
+                            alinhamento: 'right',
+                            destaque: true,
+                          },
+                        ],
+                        [
+                          { conteudo: 'Base (Equilibrado / Referência, 5 anos)', destaque: true },
+                          {
+                            conteudo: `${(valuation.aegis.resultado.cenariosEscala.base.percentualCapturaSam * 100).toFixed(0)}%`,
+                            alinhamento: 'center',
+                          },
+                          {
+                            conteudo: formatCurrency(
+                              valuation.aegis.resultado.cenariosEscala.base.arrProjetado,
+                            ),
+                            alinhamento: 'right',
+                          },
+                          {
+                            conteudo: `${valuation.aegis.resultado.cenariosEscala.base.multiploAplicado}x`,
+                            alinhamento: 'center',
+                          },
+                          {
+                            conteudo: formatCurrency(
+                              valuation.aegis.resultado.cenariosEscala.base.valuationBrutoMultiplo,
+                            ),
+                            alinhamento: 'right',
+                          },
+                          {
+                            conteudo: formatCurrency(
+                              valuation.aegis.resultado.cenariosEscala.base
+                                .valuationComDescontoEstagio,
+                            ),
+                            alinhamento: 'right',
+                            destaque: true,
+                          },
+                        ],
+                        [
+                          { conteudo: 'Otimista / Acelerado (5 anos)' },
+                          {
+                            conteudo: `${(valuation.aegis.resultado.cenariosEscala.otimista.percentualCapturaSam * 100).toFixed(0)}%`,
+                            alinhamento: 'center',
+                          },
+                          {
+                            conteudo: formatCurrency(
+                              valuation.aegis.resultado.cenariosEscala.otimista.arrProjetado,
+                            ),
+                            alinhamento: 'right',
+                          },
+                          {
+                            conteudo: `${valuation.aegis.resultado.cenariosEscala.otimista.multiploAplicado}x`,
+                            alinhamento: 'center',
+                          },
+                          {
+                            conteudo: formatCurrency(
+                              valuation.aegis.resultado.cenariosEscala.otimista
+                                .valuationBrutoMultiplo,
+                            ),
+                            alinhamento: 'right',
+                          },
+                          {
+                            conteudo: formatCurrency(
+                              valuation.aegis.resultado.cenariosEscala.otimista
+                                .valuationComDescontoEstagio,
+                            ),
+                            alinhamento: 'right',
+                            destaque: true,
+                          },
+                        ],
+                      ],
+                    },
+                  },
+                  {
+                    titulo:
+                      '8. Composição Estratégica Consolidada: Aerocad (Serviços) + Ativo AEGIS (Software)',
+                    subtitulo:
+                      'Demonstrativo do poder multiplicador do AEGIS sobre o valor da companhia nas três visões estratégicas',
+                    tabela: {
+                      colunas: [
+                        { cabecalho: 'Visão Estratégica de Negociação', largura: '38%' },
+                        { cabecalho: 'Piso Conservador', alinhamento: 'right' },
+                        { cabecalho: 'Base / Referência', alinhamento: 'right' },
+                        { cabecalho: 'Teto Otimista', alinhamento: 'right' },
+                        { cabecalho: 'Ganho s/ Serviços %', alinhamento: 'center' },
+                      ],
+                      linhas: [
+                        [
+                          { conteudo: '1. Somente Operação de Serviços (Situação Atual)' },
+                          {
+                            conteudo: formatCurrency(
+                              valuation.aegis.composicaoEmpresa.visaoSomenteServicos.conservador,
+                            ),
+                            alinhamento: 'right',
+                          },
+                          {
+                            conteudo: formatCurrency(
+                              valuation.aegis.composicaoEmpresa.visaoSomenteServicos.base,
+                            ),
+                            alinhamento: 'right',
+                          },
+                          {
+                            conteudo: formatCurrency(
+                              valuation.aegis.composicaoEmpresa.visaoSomenteServicos.otimista,
+                            ),
+                            alinhamento: 'right',
+                          },
+                          { conteudo: '0.0%', alinhamento: 'center' },
+                        ],
+                        [
+                          {
+                            conteudo: '2. Serviços + AEGIS Hoje (Base Inicial Recomendada)',
+                            destaque: true,
+                          },
+                          {
+                            conteudo: formatCurrency(
+                              valuation.aegis.composicaoEmpresa.visaoServicosMaisAegisBase
+                                .conservador,
+                            ),
+                            alinhamento: 'right',
+                          },
+                          {
+                            conteudo: formatCurrency(
+                              valuation.aegis.composicaoEmpresa.visaoServicosMaisAegisBase.base,
+                            ),
+                            alinhamento: 'right',
+                            destaque: true,
+                          },
+                          {
+                            conteudo: formatCurrency(
+                              valuation.aegis.composicaoEmpresa.visaoServicosMaisAegisBase.otimista,
+                            ),
+                            alinhamento: 'right',
+                          },
+                          {
+                            conteudo: `+${valuation.aegis.composicaoEmpresa.visaoServicosMaisAegisBase.ganhoPercentualSobreServicos.toFixed(1)}%`,
+                            alinhamento: 'center',
+                            destaque: true,
+                          },
+                        ],
+                        [
+                          {
+                            conteudo: '3. Cenário de Escala Consolidado (3 a 5 Anos)',
+                            destaque: true,
+                          },
+                          {
+                            conteudo: formatCurrency(
+                              valuation.aegis.composicaoEmpresa.visaoCenarioEscala.conservador,
+                            ),
+                            alinhamento: 'right',
+                          },
+                          {
+                            conteudo: formatCurrency(
+                              valuation.aegis.composicaoEmpresa.visaoCenarioEscala.base,
+                            ),
+                            alinhamento: 'right',
+                            destaque: true,
+                          },
+                          {
+                            conteudo: formatCurrency(
+                              valuation.aegis.composicaoEmpresa.visaoCenarioEscala.otimista,
+                            ),
+                            alinhamento: 'right',
+                          },
+                          {
+                            conteudo: `${valuation.aegis.composicaoEmpresa.visaoCenarioEscala.multiplicadorTotalSobreServicos.toFixed(2)}x (+${valuation.aegis.composicaoEmpresa.visaoCenarioEscala.ganhoPercentualSobreServicos.toFixed(0)}%)`,
+                            alinhamento: 'center',
+                            destaque: true,
+                          },
+                        ],
+                      ],
+                    },
+                  },
                 ]}
-                observacoesFinais={`Relatório gerado pelo CRM AEROCAD — Uso interno da diretoria executiva. Classificação de Confiabilidade Contábil: ${valuation.confiabilidade.percentualConfiabilidade}% (${valuation.confiabilidade.nivel.toUpperCase()}). Concentração Top 1 Cliente: ${valuation.qualidadeReceita.percentualTop1.toFixed(1)}% | Top 3: ${valuation.qualidadeReceita.percentualTop3.toFixed(1)}% (Índice HHI: ${valuation.qualidadeReceita.indiceHHI}). Todos os cálculos refletem as demonstrações contábeis e lançamentos registrados até ${new Date().toLocaleDateString('pt-BR')}.`}
+                observacoesFinais={`Relatório gerado pelo CRM AEROCAD — Uso interno da diretoria executiva. RESSALVA OBRIGATÓRIA: Os produtos e estimativas do AEGIS constituem apoio técnico à decisão e não substituem a análise e os pareceres das autoridades regulatórias aeronáuticas (DECEA/COMAER, ANAC e órgãos municipais). A responsabilidade técnica é do RT mediante ART/RRT. Os números de mercado marcados dependem de validação formal pela administração e não constituem aconselhamento financeiro ou garantia de aprovação. Índice de Confiança do Ativo AEGIS: ${valuation.aegis.resultado.indiceConfianca.score}% (${valuation.aegis.resultado.indiceConfianca.nivel.toUpperCase()}). Todos os cálculos refletem as demonstrações contábeis e lançamentos registrados até ${new Date().toLocaleDateString('pt-BR')}.`}
               />
             </div>
           </div>
