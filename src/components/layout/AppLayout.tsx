@@ -572,7 +572,7 @@ export default function AppLayout() {
           </div>
         </header>
 
-        <main key={ocultarValores ? 'oculto' : 'visivel'} className="flex-1">
+        <main className="flex-1">
           {/* Layout de máxima largura útil no desktop com margens laterais compactas (16px a 24px) para exibição densa de tabelas */}
           <div className="mx-auto w-full max-w-[1920px] 2xl:max-w-[2160px] px-4 py-4 sm:px-5 sm:py-5 lg:px-6 lg:py-5">
             <Outlet />

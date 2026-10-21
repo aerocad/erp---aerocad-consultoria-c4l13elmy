@@ -15,8 +15,9 @@ import { lazy, Suspense } from 'react'
 
 import { PageLoading } from '@/components/common/States'
 
-import DashboardPage from '@/pages/DashboardPage'
 import LoginPage from '@/pages/auth/LoginPage'
+
+const DashboardPage = lazy(() => import('@/pages/DashboardPage'))
 
 const ClientDetailPage = lazy(() => import('@/pages/ClientDetailPage'))
 const ClientsPage = lazy(() => import('@/pages/ClientsPage'))

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-21T00:42:38.599Z",
+  "generatedAt": "2026-10-21T01:09:16.047Z",
   "collections": [
     {
       "name": "users",
@@ -1287,7 +1287,8 @@
         "CREATE INDEX `idx_projetos_sort_order` ON `projetos` (sort_order)",
         "CREATE INDEX `idx_projetos_prioridade` ON `projetos` (prioridade)",
         "CREATE INDEX `idx_projetos_coordenador` ON `projetos` (coordenador_colaborador)",
-        "CREATE INDEX `idx_projetos_analista` ON `projetos` (analista_colaborador)"
+        "CREATE INDEX `idx_projetos_analista` ON `projetos` (analista_colaborador)",
+        "CREATE INDEX `idx_projetos_status_trilha` ON `projetos` (status, trilha)"
       ]
     },
     {
@@ -1531,7 +1532,8 @@
       "indexes": [
         "CREATE INDEX idx_exigencias_processo ON exigencias (processo)",
         "CREATE INDEX idx_exigencias_status ON exigencias (status)",
-        "CREATE INDEX idx_exigencias_prazo ON exigencias (prazo)"
+        "CREATE INDEX idx_exigencias_prazo ON exigencias (prazo)",
+        "CREATE INDEX `idx_exigencias_status_prazo` ON `exigencias` (status, prazo)"
       ]
     },
     {
@@ -1809,7 +1811,8 @@
         "CREATE INDEX idx_parcelas_projeto ON parcelas (projeto)",
         "CREATE INDEX idx_parcelas_cliente ON parcelas (cliente)",
         "CREATE INDEX idx_parcelas_status ON parcelas (status)",
-        "CREATE INDEX idx_parcelas_vencimento ON parcelas (vencimento)"
+        "CREATE INDEX idx_parcelas_vencimento ON parcelas (vencimento)",
+        "CREATE INDEX `idx_parcelas_status_venc` ON `parcelas` (status, vencimento)"
       ]
     },
     {
@@ -1969,7 +1972,8 @@
       "indexes": [
         "CREATE INDEX idx_ordens_projeto ON ordens_servico (projeto)",
         "CREATE INDEX `idx_ordens_prestador_usuario` ON `ordens_servico` (prestador_usuario)",
-        "CREATE INDEX `idx_ordens_status` ON `ordens_servico` (status)"
+        "CREATE INDEX `idx_ordens_status` ON `ordens_servico` (status)",
+        "CREATE INDEX `idx_ordens_status_prazo` ON `ordens_servico` (status, prazo)"
       ]
     },
     {

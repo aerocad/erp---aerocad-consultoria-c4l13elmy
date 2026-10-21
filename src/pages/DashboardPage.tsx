@@ -1,47 +1,22 @@
-import { useEffect, useMemo } from 'react'
-import {
-  AlertTriangle,
-  ArrowRight,
-  Banknote,
-  BriefcaseBusiness,
-  FileCheck2,
-  FolderKanban,
-  TimerReset,
-  UserCheck,
-  CheckCircle2,
-  Clock,
-  AlertCircle,
-} from 'lucide-react'
-import { Link, useNavigate } from 'react-router-dom'
-
+import { memo, useEffect, useMemo, useState, lazy, Suspense } from 'react'
 import { CrmBadge } from '@/components/common/CrmBadge'
 import { ErrorState, PageLoading } from '@/components/common/States'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { Progress } from '@/components/ui/progress'
 import { useAlertas } from '@/contexts/AlertasContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { useFinanceiroVisibilidade } from '@/contexts/FinanceiroVisibilidadeContext'
 import { useCrmData } from '@/hooks/use-crm-data'
-import {
-  isUserAdmin,
-  osStatusColors,
-  osStatusLabels,
-  stageColors,
-  stageLabels,
-  trailLabels,
-  userHasAnyRole,
-} from '@/lib/crm'
-import {
-  formatCurrency,
-  formatDate,
-  formatDateBrasilia,
-  formatDateLong,
-  initials,
-  relativeTime,
-} from '@/lib/format'
+import { isUserAdmin, userHasAnyRole } from '@/lib/crm'
+import { formatDateBrasilia, formatDateLong } from '@/lib/format'
 import { montarSaudacao } from '@/lib/saudacao'
 import { AlertasWidget } from '@/components/common/AlertasWidget'
-import { AssistenteSecaoDrawer } from '@/components/chat/AssistenteSecaoDrawer'
+
+import { KpiCardsSection } from '@/components/dashboard/KpiCardsSection'
+import { FunilResumidoCard } from '@/components/dashboard/FunilResumidoCard'
+import { ProjetosTrilhaCard } from '@/components/dashboard/ProjetosTrilhaCard'
+import { OrdensServicoSection } from '@/components/dashboard/OrdensServicoSection'
+import { UpcomingSection } from '@/components/dashboard/UpcomingSection'
+import { TimelineSection } from '@/components/dashboard/TimelineSection'
+
 import type {
   AtividadeRecord,
   ExigenciaRecord,
@@ -51,6 +26,13 @@ import type {
   ProjetoRecord,
 } from '@/types/crm'
 
+// Carregamento sob demanda do assistente de IA para liberar a thread principal no primeiro render
+const AssistenteSecaoDrawer = lazy(() =>
+  import('@/components/chat/AssistenteSecaoDrawer').then((mod) => ({
+    default: mod.AssistenteSecaoDrawer,
+  })),
+)
+
 const SUGESTOES_PAINEL = [
   'Qual o resumo geral dos KPIs e oportunidades abertas hoje?',
   'Quantas exigências regulatórias estão vencendo nos próximos 7 dias?',
@@ -58,73 +40,105 @@ const SUGESTOES_PAINEL = [
   'Quantos projetos ativos temos por trilha (OPEA vs Registro)?',
 ]
 
+// TTL em cache da API do dashboard: 30 segundos
+const DASHBOARD_CACHE_TTL_MS = 30_000
+
 export default function DashboardPage() {
   const { ocultarValores } = useFinanceiroVisibilidade()
   const { user } = useAuth()
   const { alertas, dispensados, reload: reloadAlertas, loading: loadingAlertas } = useAlertas()
-  const navigate = useNavigate()
+
+  // Controla se montamos as seções secundárias de forma preguiçosa para acelerar o first-paint
+  const [secondaryReady, setSecondaryReady] = useState(false)
+  useEffect(() => {
+    // Permite que a tela inicial pinte os KPIs e o topo antes de disparar atividades/ordens/assistente
+    const timer = setTimeout(() => {
+      setSecondaryReady(true)
+    }, 40)
+    return () => clearTimeout(timer)
+  }, [])
+
+  // 1. Coleções Essenciais (KPIs, Funil, Projetos, Exigências)
   const opportunities = useCrmData<OportunidadeRecord>('oportunidades', {
     expand: 'cliente,responsavel',
     sort: '-updated',
     realtime: true,
+    ttlMs: DASHBOARD_CACHE_TTL_MS,
   })
   const requirements = useCrmData<ExigenciaRecord>('exigencias', {
     expand: 'processo,processo.projeto',
     sort: 'prazo',
     realtime: true,
+    ttlMs: DASHBOARD_CACHE_TTL_MS,
   })
   const installments = useCrmData<ParcelaRecord>('parcelas', {
     expand: 'projeto,cliente',
     sort: 'vencimento',
     realtime: true,
+    ttlMs: DASHBOARD_CACHE_TTL_MS,
   })
   const projects = useCrmData<ProjetoRecord>('projetos', {
     filter: 'arquivado != true',
     sort: '-created',
     realtime: true,
+    ttlMs: DASHBOARD_CACHE_TTL_MS,
   })
+
+  // 2. Coleções Secundárias / Lazy (Atividades recentes e Ordens de serviço)
+  const isInternal = userHasAnyRole(user, ['admin', 'tecnico', 'comercial'])
+  const isAdmin = isUserAdmin(user)
+
   const activities = useCrmData<AtividadeRecord>('atividades', {
     expand: 'usuario',
     sort: '-created',
     realtime: true,
+    enabled: secondaryReady,
+    ttlMs: DASHBOARD_CACHE_TTL_MS,
   })
   const ordensServico = useCrmData<OrdemServicoRecord>('ordens_servico', {
     expand: 'projeto,prestador_usuario',
     sort: '-created',
     realtime: true,
+    enabled: secondaryReady && isInternal,
+    ttlMs: DASHBOARD_CACHE_TTL_MS,
   })
-  const loadingEssential = opportunities.loading && requirements.loading && projects.loading
 
-  const hasAnyData =
+  // Render progressivo: se qualquer coleção essencial responder, renderiza a tela
+  const hasAnyEssentialData =
     opportunities.data.length > 0 ||
     requirements.data.length > 0 ||
     projects.data.length > 0 ||
     installments.data.length > 0
 
-  const loading = loadingEssential && !hasAnyData
+  const loadingEssential =
+    opportunities.loading && requirements.loading && projects.loading && !hasAnyEssentialData
 
-  const error = !hasAnyData && (opportunities.error || requirements.error || projects.error)
+  const error =
+    !hasAnyEssentialData && (opportunities.error || requirements.error || projects.error)
 
-  // Revalidação por foco de janela, visibilidade e intervalo de segurança (30s)
-  useEffect(() => {
-    const revalidarTudo = () => {
-      void opportunities.reload()
-      void requirements.reload()
-      void installments.reload()
-      void projects.reload()
+  // Recarga inteligente manual
+  const handleReloadAll = () => {
+    void opportunities.reload()
+    void requirements.reload()
+    void installments.reload()
+    void projects.reload()
+    if (secondaryReady) {
       void ordensServico.reload()
       void activities.reload()
-      reloadAlertas()
     }
+    reloadAlertas()
+  }
 
+  // Polling espaçado e foco com throttle de 30s
+  useEffect(() => {
     let lastRevalidation = Date.now()
-    const MIN_INTERVAL_MS = 15_000
+    const MIN_INTERVAL_MS = 30_000
 
     const throttledRevalidar = () => {
       const now = Date.now()
       if (now - lastRevalidation < MIN_INTERVAL_MS) return
       lastRevalidation = now
-      revalidarTudo()
+      handleReloadAll()
     }
 
     const handleFocus = () => throttledRevalidar()
@@ -137,8 +151,9 @@ export default function DashboardPage() {
     window.addEventListener('focus', handleFocus)
     document.addEventListener('visibilitychange', handleVisibilityChange)
 
-    // Polling espaçado de segurança: 60s (já temos useRealtime ativo em cada coleção)
-    const timer = setInterval(revalidarTudo, 60000)
+    const timer = setInterval(() => {
+      throttledRevalidar()
+    }, 120_000)
 
     return () => {
       window.removeEventListener('focus', handleFocus)
@@ -153,142 +168,111 @@ export default function DashboardPage() {
     ordensServico.reload,
     activities.reload,
     reloadAlertas,
+    secondaryReady,
   ])
 
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const in7 = new Date(today)
-  in7.setDate(in7.getDate() + 7)
-  const in30 = new Date(today)
-  in30.setDate(in30.getDate() + 30)
-  const openOpps = opportunities.data.filter((item) => !['ganho', 'perdido'].includes(item.etapa))
-  const openValue = openOpps.reduce((sum, item) => sum + item.valor_estimado, 0)
-  const dueRequirements = requirements.data.filter(
-    (item) => item.status === 'pendente' && item.prazo && new Date(item.prazo) <= in7,
-  ).length
-  const thisMonth = installments.data.filter((item) => {
-    const date = new Date(item.vencimento)
-    return (
-      item.status !== 'paga' &&
-      date.getMonth() === today.getMonth() &&
-      date.getFullYear() === today.getFullYear()
-    )
-  })
-  const monthReceivable = thisMonth.reduce((sum, item) => sum + item.valor, 0)
-  const sentProposalsOpps = opportunities.data.filter((item) => item.etapa === 'proposta_enviada')
-  const sentProposalsCount = sentProposalsOpps.length
-  const sentProposalsValue = sentProposalsOpps.reduce((sum, item) => sum + item.valor_estimado, 0)
-  const maxStage = Math.max(
-    1,
-    ...Object.keys(stageLabels).map(
-      (stage) => opportunities.data.filter((item) => item.etapa === stage).length,
-    ),
-  )
+  // Cálculos de prazos e métricas memoizados
+  const today = useMemo(() => {
+    const d = new Date()
+    d.setHours(0, 0, 0, 0)
+    return d
+  }, [])
 
-  // Cálculos de Ordens de Serviço de Terceiros
-  const isAdmin = isUserAdmin(user)
-  const isInternal = userHasAnyRole(user, ['admin', 'tecnico', 'comercial'])
+  const in7 = useMemo(() => {
+    const d = new Date(today)
+    d.setDate(d.getDate() + 7)
+    return d
+  }, [today])
 
-  const osPendentesAceite = ordensServico.data.filter((o) =>
-    ['atribuida', 'emitida', 'rascunho'].includes(o.status),
-  )
-  const osEmExecucao = ordensServico.data.filter((o) => o.status === 'em_execucao')
-  const osVencidas = ordensServico.data.filter((o) => {
-    if (['concluida', 'cancelada', 'recusada'].includes(o.status)) return false
-    if (!o.prazo) return false
-    return new Date(o.prazo) < today
-  })
-  const totalCustoTerceiros = isAdmin
-    ? ordensServico.data
-        .filter((o) => o.status !== 'cancelada' && o.status !== 'recusada')
-        .reduce((sum, o) => sum + (Number(o.valor_interno) || 0), 0)
-    : 0
+  const in30 = useMemo(() => {
+    const d = new Date(today)
+    d.setDate(d.getDate() + 30)
+    return d
+  }, [today])
 
-  const upcoming = useMemo(
-    () =>
-      [
-        ...requirements.data
-          .filter(
-            (item) => item.status === 'pendente' && item.prazo && new Date(item.prazo) <= in30,
-          )
-          .map((item) => ({
-            id: `e-${item.id}`,
-            date: item.prazo,
-            title: item.descricao,
-            code: item.expand?.processo?.numero_protocolo || 'Exigência',
-            path: `/processos/${item.processo}`,
-            type: 'Exigência',
-          })),
-        ...installments.data
-          .filter(
-            (item) =>
-              item.status !== 'paga' && item.vencimento && new Date(item.vencimento) <= in30,
-          )
-          .map((item) => ({
-            id: `p-${item.id}`,
-            date: item.vencimento,
-            title: item.descricao,
-            code: item.expand?.projeto?.numero || 'Parcela',
-            path: `/financeiro?projeto=${item.projeto}`,
-            type: 'Parcela',
-          })),
-      ]
-        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-        .slice(0, 8),
-    [requirements.data, installments.data, in30],
-  )
+  // KPIs calculados
+  const { openCount, openValue, sentCount, sentValue } = useMemo(() => {
+    let openC = 0
+    let openV = 0
+    let sentC = 0
+    let sentV = 0
 
-  const kpis = useMemo(
-    () => [
-      {
-        label: 'Oportunidades abertas',
-        value: String(openOpps.length),
-        sub: formatCurrency(openValue),
-        icon: FolderKanban,
-        tone: 'orange',
-      },
-      {
-        label: 'Propostas enviadas',
-        value: String(sentProposalsCount),
-        sub:
-          sentProposalsValue > 0
-            ? `${formatCurrency(sentProposalsValue)} · aguardando retorno`
-            : 'aguardando retorno',
-        icon: FileCheck2,
-        tone: 'gray',
-      },
-      {
-        label: 'Exigências em 7 dias',
-        value: String(dueRequirements),
-        sub: dueRequirements ? 'requerem atenção' : 'sem urgências',
-        icon: AlertTriangle,
-        tone: dueRequirements ? 'red' : 'green',
-      },
-      {
-        label: 'Receber no mês',
-        value: formatCurrency(monthReceivable),
-        sub: `${thisMonth.length} parcela(s)`,
-        icon: Banknote,
-        tone: 'green',
-      },
-    ],
-    [
-      openOpps.length,
-      openValue,
-      sentProposalsCount,
-      sentProposalsValue,
-      dueRequirements,
-      monthReceivable,
-      thisMonth.length,
-      ocultarValores,
-    ],
-  )
+    for (const opp of opportunities.data) {
+      if (!['ganho', 'perdido'].includes(opp.etapa)) {
+        openC += 1
+        openV += opp.valor_estimado || 0
+      }
+      if (opp.etapa === 'proposta_enviada') {
+        sentC += 1
+        sentV += opp.valor_estimado || 0
+      }
+    }
+    return { openCount: openC, openValue: openV, sentCount: sentC, sentValue: sentV }
+  }, [opportunities.data])
 
-  if (loading) return <PageLoading />
-  if (error) return <ErrorState onRetry={() => void opportunities.reload()} />
+  const dueRequirements = useMemo(() => {
+    return requirements.data.filter(
+      (item) => item.status === 'pendente' && item.prazo && new Date(item.prazo) <= in7,
+    ).length
+  }, [requirements.data, in7])
+
+  const { monthReceivable, monthCount } = useMemo(() => {
+    const currentMonth = today.getMonth()
+    const currentYear = today.getFullYear()
+    let sum = 0
+    let count = 0
+
+    for (const item of installments.data) {
+      if (item.status === 'paga' || !item.vencimento) continue
+      const date = new Date(item.vencimento)
+      if (date.getMonth() === currentMonth && date.getFullYear() === currentYear) {
+        sum += item.valor || 0
+        count += 1
+      }
+    }
+    return { monthReceivable: sum, monthCount: count }
+  }, [installments.data, today])
+
+  // Lista dos próximos 30 dias consolidada
+  const upcoming = useMemo(() => {
+    const list = []
+
+    for (const item of requirements.data) {
+      if (item.status === 'pendente' && item.prazo && new Date(item.prazo) <= in30) {
+        list.push({
+          id: `e-${item.id}`,
+          date: item.prazo,
+          title: item.descricao,
+          code: item.expand?.processo?.numero_protocolo || 'Exigência',
+          path: `/processos/${item.processo}`,
+          type: 'Exigência',
+        })
+      }
+    }
+
+    for (const item of installments.data) {
+      if (item.status !== 'paga' && item.vencimento && new Date(item.vencimento) <= in30) {
+        list.push({
+          id: `p-${item.id}`,
+          date: item.vencimento,
+          title: item.descricao,
+          code: item.expand?.projeto?.numero || 'Parcela',
+          path: `/financeiro?projeto=${item.projeto}`,
+          type: 'Parcela',
+        })
+      }
+    }
+
+    list.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    return list.slice(0, 8)
+  }, [requirements.data, installments.data, in30])
+
+  if (loadingEssential) return <PageLoading />
+  if (error) return <ErrorState onRetry={handleReloadAll} />
 
   return (
     <div className="space-y-6">
+      {/* Cabeçalho do Painel */}
       <div className="animate-blueprint-rise flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
         <div>
           <p className="technical-label">VISÃO GERAL · {formatDateBrasilia()}</p>
@@ -302,329 +286,78 @@ export default function DashboardPage() {
           Operação sincronizada
         </CrmBadge>
       </div>
+
       {/* Seção Alertas por Prazo */}
       {user?.role !== 'terceiro' && (
         <AlertasWidget
           alertas={alertas}
           dispensados={dispensados}
-          onReload={() => {
-            reloadAlertas()
-            void opportunities.reload()
-            void requirements.reload()
-            void ordensServico.reload()
-            void installments.reload()
-          }}
-          loading={loading || loadingAlertas}
+          onReload={handleReloadAll}
+          loading={loadingAlertas}
         />
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {kpis.map((kpi, index) => {
-          const Icon = kpi.icon
-          return (
-            <div
-              key={kpi.label}
-              className="crm-card animate-blueprint-rise p-5"
-              style={{ animationDelay: `${index * 60}ms` }}
-            >
-              <div className="flex items-start justify-between">
-                <p className="text-xs font-bold uppercase tracking-[.08em] text-[#737373]">
-                  {kpi.label}
-                </p>
-                <div
-                  className={`flex h-9 w-9 items-center justify-center rounded-lg ${kpi.tone === 'orange' ? 'bg-orange-50 text-[#FF6A13]' : kpi.tone === 'red' ? 'bg-red-50 text-red-600' : kpi.tone === 'green' ? 'bg-emerald-50 text-emerald-600' : 'bg-[#F2F2F2] text-[#737373]'}`}
-                >
-                  <Icon className="h-4 w-4" />
-                </div>
-              </div>
-              <p className="mono-value mt-4 text-2xl font-bold text-[#424242]">{kpi.value}</p>
-              <p className="mt-1 text-xs text-[#8A8A8A]">{kpi.sub}</p>
-            </div>
-          )
-        })}
-      </div>
+      {/* Grid de 4 KPIs com suporte a loading por seção */}
+      <KpiCardsSection
+        openCount={openCount}
+        openValue={openValue}
+        sentCount={sentCount}
+        sentValue={sentValue}
+        dueRequirements={dueRequirements}
+        monthReceivable={monthReceivable}
+        monthCount={monthCount}
+        loading={opportunities.loading && !opportunities.data.length}
+      />
 
+      {/* Grid Comercial & Entrega */}
       <div className="grid gap-6 xl:grid-cols-3">
-        <section className="crm-card p-5 xl:col-span-2">
-          <div className="mb-5 flex items-center justify-between">
-            <div>
-              <p className="technical-label">COMERCIAL</p>
-              <h2 className="text-lg font-bold text-[#4B4B4B]">Funil resumido</h2>
-            </div>
-            <Link to="/funil" className="flex items-center text-xs font-bold text-[#E85B06]">
-              Abrir funil <ArrowRight className="ml-1 h-3.5 w-3.5" />
-            </Link>
-          </div>
-          <div className="space-y-4">
-            {Object.entries(stageLabels).map(([stage, label]) => {
-              const rows = opportunities.data.filter((item) => item.etapa === stage)
-              const total = rows.reduce((sum, item) => sum + item.valor_estimado, 0)
-              return (
-                <button
-                  key={stage}
-                  onClick={() => navigate(`/funil?etapa=${stage}`)}
-                  className="grid w-full grid-cols-[120px_1fr_90px] items-center gap-3 text-left"
-                >
-                  <span className="text-xs font-semibold text-[#595959]">{label}</span>
-                  <span className="h-7 overflow-hidden rounded bg-[#F2F2F2]">
-                    <span
-                      className="flex h-full items-center justify-end rounded px-2 text-[10px] font-bold text-white transition-[width] duration-500"
-                      style={{
-                        width: `${Math.max(rows.length ? 12 : 0, (rows.length / maxStage) * 100)}%`,
-                        backgroundColor: stageColors[stage as keyof typeof stageLabels],
-                      }}
-                    >
-                      {rows.length || ''}
-                    </span>
-                  </span>
-                  <span className="mono-value text-right text-xs text-[#737373]">
-                    {formatCurrency(total)}
-                  </span>
-                </button>
-              )
-            })}
-          </div>
-        </section>
-        <section className="crm-card p-5">
-          <p className="technical-label">ENTREGA</p>
-          <h2 className="text-lg font-bold text-[#4B4B4B]">Projetos por trilha</h2>
-          <div className="mt-5 space-y-5">
-            {(['opea', 'registro', 'demais'] as const).map((trail) => {
-              const rows = projects.data.filter((item) => item.trilha === trail)
-              const active = rows.filter((item) => item.status === 'ativo').length
-              return (
-                <div key={trail}>
-                  <div className="mb-2 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={`h-3 w-3 ${trail === 'opea' ? 'bg-[#FF6A13]' : trail === 'registro' ? 'bg-emerald-600' : 'bg-[#737373]'}`}
-                      />
-                      <span className="text-sm font-semibold">{trailLabels[trail]}</span>
-                    </div>
-                    <span className="mono-value text-lg font-bold">{rows.length}</span>
-                  </div>
-                  <Progress
-                    value={rows.length ? (active / rows.length) * 100 : 0}
-                    className="h-2"
-                  />
-                  <p className="mt-1 text-[11px] text-[#8A8A8A]">{active} ativo(s)</p>
-                </div>
-              )
-            })}
-          </div>
-        </section>
+        <FunilResumidoCard
+          opportunities={opportunities.data}
+          loading={opportunities.loading && !opportunities.data.length}
+        />
+        <ProjetosTrilhaCard
+          projects={projects.data}
+          loading={projects.loading && !projects.data.length}
+        />
       </div>
 
-      {/* Seção Exclusiva: Gestão de Ordens de Serviço de Terceiros (Diretoria / Admin / Equipe Técnica) */}
+      {/* Seção Exclusiva: Gestão de Ordens de Serviço de Terceiros */}
       {isInternal && (
-        <section className="crm-card overflow-hidden">
-          <div className="flex flex-col justify-between gap-3 border-b px-5 py-4 sm:flex-row sm:items-center">
-            <div>
-              <p className="technical-label flex items-center gap-1.5 text-[#FF6A13]">
-                <UserCheck className="h-3.5 w-3.5" />
-                PRESTADORES TERCEIRIZADOS
-              </p>
-              <h2 className="text-lg font-bold text-[#4B4B4B]">Ordens de Serviço em Campo</h2>
-            </div>
-            {isAdmin && (
-              <div className="text-left sm:text-right">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800 bg-amber-100 px-2.5 py-0.5 rounded-full">
-                  Valores Confidenciais (Admin)
-                </span>
-                <p className="font-mono text-sm font-bold text-amber-900 mt-0.5">
-                  Total Alocado: {formatCurrency(totalCustoTerceiros)}
-                </p>
-              </div>
-            )}
-          </div>
-
-          <div className="grid grid-cols-1 divide-y sm:grid-cols-3 sm:divide-x sm:divide-y-0 border-b bg-neutral-50/50">
-            <div className="p-4 text-center sm:text-left">
-              <span className="text-[11px] font-bold uppercase tracking-wide text-blue-700">
-                Pendentes de Aceite
-              </span>
-              <p className="font-mono text-2xl font-bold text-blue-900 mt-1">
-                {osPendentesAceite.length}
-              </p>
-              <p className="text-xs text-[#737373] mt-0.5">Aguardando início do prestador</p>
-            </div>
-            <div className="p-4 text-center sm:text-left">
-              <span className="text-[11px] font-bold uppercase tracking-wide text-amber-700">
-                Em Execução
-              </span>
-              <p className="font-mono text-2xl font-bold text-amber-900 mt-1">
-                {osEmExecucao.length}
-              </p>
-              <p className="text-xs text-[#737373] mt-0.5">Trabalhos em andamento</p>
-            </div>
-            <div className="p-4 text-center sm:text-left">
-              <span className="text-[11px] font-bold uppercase tracking-wide text-rose-700">
-                Prazos Vencidos / Alerta
-              </span>
-              <p className="font-mono text-2xl font-bold text-rose-900 mt-1">{osVencidas.length}</p>
-              <p className="text-xs text-[#737373] mt-0.5">Requerem cobrança técnica</p>
-            </div>
-          </div>
-
-          <div className="divide-y">
-            {ordensServico.data.slice(0, 6).map((os) => {
-              const statusCfg = osStatusColors[os.status] || {
-                bg: 'bg-neutral-100',
-                text: 'text-neutral-700',
-                border: 'border-neutral-200',
-              }
-              const prestadorDisplay =
-                os.expand?.prestador_usuario?.name || os.prestador || 'Prestador não alocado'
-              const isVencida =
-                !['concluida', 'cancelada', 'recusada'].includes(os.status) &&
-                os.prazo &&
-                new Date(os.prazo) < today
-
-              return (
-                <div
-                  key={os.id}
-                  className="flex flex-col justify-between gap-3 p-4 sm:flex-row sm:items-center hover:bg-[#FFF6EC]/50 transition"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-mono text-xs font-bold text-[#D65100]">
-                        {os.expand?.projeto?.numero || 'AEROCAD OS'}
-                      </span>
-                      <span className="text-sm font-semibold text-[#333]">
-                        {os.titulo || os.descricao.slice(0, 60)}
-                      </span>
-                      <span
-                        className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold ${statusCfg.bg} ${statusCfg.text} ${statusCfg.border}`}
-                      >
-                        {osStatusLabels[os.status] || os.status}
-                      </span>
-                      {isVencida && (
-                        <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-700">
-                          Vencida
-                        </span>
-                      )}
-                    </div>
-
-                    <p className="mt-1 text-xs text-[#666]">
-                      Prestador: <strong className="text-[#333]">{prestadorDisplay}</strong>
-                      {os.expand?.projeto?.nome && ` · Projeto: ${os.expand.projeto.nome}`}
-                      {os.prazo && ` · Prazo: ${formatDate(os.prazo)}`}
-                    </p>
-                  </div>
-
-                  <div className="flex items-center gap-4">
-                    {isAdmin && os.valor_interno !== undefined && os.valor_interno !== null && (
-                      <div className="text-right">
-                        <p className="font-mono text-xs font-bold text-amber-900">
-                          {formatCurrency(os.valor_interno)}
-                        </p>
-                        <p className="text-[10px] text-amber-700 uppercase font-semibold">
-                          Custo interno
-                        </p>
-                      </div>
-                    )}
-                    {os.projeto && (
-                      <Link
-                        to={`/projetos/${os.projeto}`}
-                        className="text-xs font-semibold text-[#FF6A13] hover:underline"
-                      >
-                        Ver no projeto →
-                      </Link>
-                    )}
-                  </div>
-                </div>
-              )
-            })}
-            {!ordensServico.data.length && (
-              <p className="p-8 text-center text-sm text-[#8A8A8A]">
-                Nenhuma ordem de serviço interna de terceiros cadastrada no momento.
-              </p>
-            )}
-          </div>
-        </section>
+        <OrdensServicoSection
+          ordensServico={ordensServico.data}
+          isAdmin={isAdmin}
+          loading={ordensServico.loading && !ordensServico.data.length}
+        />
       )}
 
+      {/* Grid Vencimentos Próximos & Atividade Recente */}
       <div className="grid gap-6 xl:grid-cols-3">
-        <section className="crm-card overflow-hidden xl:col-span-2">
-          <div className="border-b px-5 py-4">
-            <p className="technical-label">PRÓXIMOS 30 DIAS</p>
-            <h2 className="text-lg font-bold text-[#4B4B4B]">Vencimentos e alertas</h2>
-          </div>
-          {upcoming.length ? (
-            <div className="divide-y">
-              {upcoming.map((item, index) => (
-                <Link
-                  key={item.id}
-                  to={item.path}
-                  className="animate-blueprint-rise flex min-h-16 items-center gap-4 px-5 py-3 hover:bg-[#FFF6EC]"
-                  style={{ animationDelay: `${index * 45}ms` }}
-                >
-                  <div className="flex h-10 w-12 shrink-0 flex-col items-center justify-center rounded border border-[#FFD2B3] bg-orange-50 font-mono text-[#D65100]">
-                    <span className="text-[10px] uppercase">
-                      {new Date(item.date)
-                        .toLocaleDateString('pt-BR', { month: 'short', timeZone: 'UTC' })
-                        .replace('.', '')}
-                    </span>
-                    <span className="text-base font-bold leading-none">
-                      {new Date(item.date).toLocaleDateString('pt-BR', {
-                        day: '2-digit',
-                        timeZone: 'UTC',
-                      })}
-                    </span>
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-[#4B4B4B]">{item.title}</p>
-                    <p className="mono-value mt-0.5 text-xs text-[#8A8A8A]">{item.code}</p>
-                  </div>
-                  <CrmBadge tone={item.type === 'Exigência' ? 'amber' : 'green'}>
-                    {item.type}
-                  </CrmBadge>
-                </Link>
-              ))}
-            </div>
-          ) : (
-            <p className="p-8 text-center text-sm text-[#8A8A8A]">
-              Nenhum vencimento nos próximos 30 dias.
-            </p>
-          )}
-        </section>
-        <section className="crm-card overflow-hidden">
-          <div className="border-b px-5 py-4">
-            <p className="technical-label">TIMELINE</p>
-            <h2 className="text-lg font-bold text-[#4B4B4B]">Atividade recente</h2>
-          </div>
-          <div className="divide-y">
-            {activities.data.slice(0, 8).map((activity) => (
-              <div key={activity.id} className="flex gap-3 px-5 py-3">
-                <Avatar className="h-8 w-8">
-                  <AvatarFallback className="bg-[#FFF0E5] text-[10px] font-bold text-[#D65100]">
-                    {initials(activity.expand?.usuario?.name)}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="min-w-0">
-                  <p className="text-xs leading-relaxed text-[#595959]">{activity.texto}</p>
-                  <p className="mt-1 text-[10px] text-[#9A9A9A]">
-                    {relativeTime(activity.created)}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
+        <UpcomingSection
+          items={upcoming}
+          loading={(requirements.loading || installments.loading) && !upcoming.length}
+        />
+        <TimelineSection
+          activities={activities.data}
+          loading={activities.loading && !activities.data.length}
+        />
       </div>
 
-      {/* Assistente de IA Nativo da Seção Painel */}
-      <AssistenteSecaoDrawer
-        agentSlug="assistente-painel"
-        titulo="Assistente do Painel"
-        subtitulo="Visão geral executiva, KPIs e prazos em tempo real"
-        secaoNome="Painel Executivo"
-        areaPermissao="painel"
-        sugestoes={SUGESTOES_PAINEL}
-        placeholder="Pergunte sobre KPIs, exigências, oportunidades ou projetos..."
-        descricaoModo="consulta indicadores, prazos e contagens consolidadas do CRM em tempo real."
-        floatingButtonLabel="Assistente do Painel"
-      />
+      {/* Assistente de IA Nativo da Seção Painel (Lazy Suspense) */}
+      {secondaryReady && (
+        <Suspense fallback={null}>
+          <AssistenteSecaoDrawer
+            agentSlug="assistente-painel"
+            titulo="Assistente do Painel"
+            subtitulo="Visão geral executiva, KPIs e prazos em tempo real"
+            secaoNome="Painel Executivo"
+            areaPermissao="painel"
+            sugestoes={SUGESTOES_PAINEL}
+            placeholder="Pergunte sobre KPIs, exigências, oportunidades ou projetos..."
+            descricaoModo="consulta indicadores, prazos e contagens consolidadas do CRM em tempo real."
+            floatingButtonLabel="Assistente do Painel"
+          />
+        </Suspense>
+      )}
     </div>
   )
 }

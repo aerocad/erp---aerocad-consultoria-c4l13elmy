@@ -36,39 +36,48 @@ export function AlertasProvider({ children }: { children: ReactNode }) {
 
   const isTerceiro = user?.role === 'terceiro'
 
-  // Carrega coleções para o motor de alertas apenas se não for terceiro
+  // Carrega coleções para o motor de alertas com TTL de 30s para reaproveitamento entre páginas e dashboard
   const propostas = useCrmData<PropostaRecord>('propostas', {
     realtime: !isTerceiro,
+    ttlMs: 30_000,
   })
   const exigencias = useCrmData<ExigenciaRecord>('exigencias', {
-    expand: 'processo',
+    expand: 'processo,processo.projeto',
     realtime: !isTerceiro,
+    ttlMs: 30_000,
   })
   const parcelas = useCrmData<ParcelaRecord>('parcelas', {
     expand: 'projeto,cliente',
     realtime: !isTerceiro,
+    ttlMs: 30_000,
   })
   const ordensServico = useCrmData<OrdemServicoRecord>('ordens_servico', {
     expand: 'projeto,prestador_usuario',
     realtime: !isTerceiro,
+    ttlMs: 30_000,
   })
   const processos = useCrmData<ProcessoRecord>('processos', {
     expand: 'projeto',
     realtime: !isTerceiro,
+    ttlMs: 30_000,
   })
   const projetos = useCrmData<ProjetoRecord>('projetos', {
     filter: 'arquivado != true',
     realtime: !isTerceiro,
+    ttlMs: 30_000,
   })
   const oportunidades = useCrmData<OportunidadeRecord>('oportunidades', {
     realtime: !isTerceiro,
+    ttlMs: 30_000,
   })
   const atividades = useCrmData<AtividadeRecord>('atividades', {
     realtime: !isTerceiro,
+    ttlMs: 30_000,
   })
   const dispensados = useCrmData<AlertaDispensadoRecord>('alertas_dispensados', {
     filter: user?.id ? `usuario = '${user.id}'` : undefined,
     realtime: !isTerceiro,
+    ttlMs: 30_000,
   })
 
   const alertas = useMemo(() => {
