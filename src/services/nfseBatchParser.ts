@@ -26,6 +26,7 @@ export interface ResultadoProcessamentoLoteNfse {
   arquivosProcessados: ArquivoLoteEstatistica[]
   totalArquivosLidos: number
   totalNotasExtraidas: number
+  totalDuplicadasNoLote?: number
   temPlanilhas: boolean
   linhasPlanilhaBrutas?: Record<string, unknown>[]
   colunasDetectadasPlanilha?: string[]
@@ -410,7 +411,7 @@ export async function processarArquivosEmLote(
   }
 
   // Deduplicar notas dentro do lote para evitar duplicidade de notas repetidas em múltiplos XMLs/zips
-  const { unicas } = deduplicarNotasLote(todasNotas)
+  const { unicas, duplicadasNoLote } = deduplicarNotasLote(todasNotas)
 
   return {
     notas: unicas,
@@ -418,6 +419,7 @@ export async function processarArquivosEmLote(
     arquivosProcessados,
     totalArquivosLidos: files.length,
     totalNotasExtraidas: unicas.length,
+    totalDuplicadasNoLote: duplicadasNoLote,
     temPlanilhas,
     linhasPlanilhaBrutas,
     colunasDetectadasPlanilha,

@@ -22,6 +22,7 @@ export interface NfseExecucaoResultado {
   totalNotas: number
   vinculadas: number
   atualizadas: number
+  duplicadasPuladas: number
   orfas: NotaCorrelacionada[]
   clientesCriados: number
   clientesAtualizados: number
@@ -170,6 +171,7 @@ export async function executarGravacaoNfse(
     totalNotas: notasCorrelacionadas.length,
     vinculadas: 0,
     atualizadas: 0,
+    duplicadasPuladas: 0,
     orfas: [],
     clientesCriados: 0,
     clientesAtualizados: 0,
@@ -230,7 +232,8 @@ export async function executarGravacaoNfse(
     }
 
     if (jaImportada && !opcoes.atualizarExistentes) {
-      reportar(`NFS-e ${nota.numero} já cadastrada (ignorada)`)
+      resultado.duplicadasPuladas++
+      reportar(`NFS-e ${nota.numero} já cadastrada (pulada por duplicidade)`)
       continue
     }
 
@@ -352,6 +355,7 @@ export async function executarGravacaoNfse(
         totalNotas: resultado.totalNotas,
         vinculadas: resultado.vinculadas,
         atualizadas: resultado.atualizadas,
+        duplicadasPuladas: resultado.duplicadasPuladas,
         clientesCriados: resultado.clientesCriados,
         clientesAtualizados: resultado.clientesAtualizados,
         orfas: resultado.orfas.length,

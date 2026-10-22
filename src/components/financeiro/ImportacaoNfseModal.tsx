@@ -98,6 +98,7 @@ export function ImportacaoNfseModal({
   const [arquivosNaoReconhecidos, setArquivosNaoReconhecidos] = useState<ArquivoNaoReconhecido[]>(
     [],
   )
+  const [duplicadasNoLoteQtd, setDuplicadasNoLoteQtd] = useState(0)
   const [temPlanilhasNoLote, setTemPlanilhasNoLote] = useState(false)
   const [resumoArquivosTexto, setResumoArquivosTexto] = useState('')
 
@@ -178,6 +179,7 @@ export function ImportacaoNfseModal({
       setContextoDb(contexto)
       setArquivosProcessados(resLote.arquivosProcessados)
       setArquivosNaoReconhecidos(resLote.arquivosNaoReconhecidos)
+      setDuplicadasNoLoteQtd(resLote.totalDuplicadasNoLote || 0)
       setTemPlanilhasNoLote(resLote.temPlanilhas)
       setTodasNotasExtraidas(resLote.notas)
 
@@ -385,6 +387,7 @@ export function ImportacaoNfseModal({
       const detalhesMsg = [
         `${res.vinculadas} notas vinculadas`,
         res.atualizadas > 0 ? `${res.atualizadas} atualizadas` : null,
+        res.duplicadasPuladas > 0 ? `${res.duplicadasPuladas} duplicadas puladas` : null,
         res.clientesCriados > 0 ? `${res.clientesCriados} novo(s) cliente(s) criado(s)` : null,
         res.clientesAtualizados > 0 ? `${res.clientesAtualizados} cliente(s) atualizado(s)` : null,
       ]
@@ -1447,6 +1450,28 @@ export function ImportacaoNfseModal({
                   </p>
                 </div>
               </div>
+
+              {resultadoFinal.duplicadasPuladas > 0 && (
+                <div className="crm-card p-4 bg-orange-50/70 border-orange-200">
+                  <div className="flex items-center gap-2 text-orange-900 font-bold text-xs">
+                    <CheckCircle2 className="h-4 w-4 text-[#FF6A13]" />
+                    {resultadoFinal.duplicadasPuladas} Nota(s) Duplicada(s) Pulada(s) com Sucesso
+                  </div>
+                  <p className="text-xs text-[#666] mt-1">
+                    Essas notas fiscais já existiam cadastradas no CRM AEROCAD e foram ignoradas com
+                    segurança para não inflar receitas nem duplicar contas a receber.
+                  </p>
+                </div>
+              )}
+
+              {duplicadasNoLoteQtd > 0 && (
+                <div className="crm-card p-3 bg-neutral-50 text-neutral-600 text-xs">
+                  <span>
+                    Deduplicação interna do pacote: <strong>{duplicadasNoLoteQtd}</strong> nota(s)
+                    repetida(s) dentro do arquivo foram descartadas antes do processamento.
+                  </span>
+                </div>
+              )}
 
               {resultadoFinal.orfas.length > 0 && (
                 <div className="crm-card p-4 bg-sky-50/40 border-sky-200">
