@@ -12,6 +12,7 @@ import {
   RotateCcw,
   Search,
   Trash2,
+  CopySlash,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -91,6 +92,8 @@ interface ContasReceberTabProps {
   onReloadParcelas: () => Promise<void> | void
   onReloadContasReceber: () => Promise<void> | void
   filtroBuscaInicial?: string
+  totalDuplicadas?: number
+  onAbrirTriagemDuplicadas?: () => void
 }
 
 export function ContasReceberTab({
@@ -102,6 +105,8 @@ export function ContasReceberTab({
   onReloadParcelas,
   onReloadContasReceber,
   filtroBuscaInicial,
+  totalDuplicadas = 0,
+  onAbrirTriagemDuplicadas,
 }: ContasReceberTabProps) {
   const { user } = useAuth()
   const [busca, setBusca] = useState(filtroBuscaInicial || '')
@@ -573,6 +578,24 @@ export function ContasReceberTab({
               ))}
             </SelectContent>
           </Select>
+
+          {onAbrirTriagemDuplicadas && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onAbrirTriagemDuplicadas}
+              className="h-9 text-xs border-amber-300 bg-amber-50/50 hover:bg-amber-100/70 text-amber-900 shrink-0 font-medium"
+              title="Triagem e deduplicação de Notas Fiscais emitidas em duplicidade"
+            >
+              <CopySlash className="mr-1.5 h-3.5 w-3.5 text-amber-600" />
+              Triagem de Duplicatas
+              {totalDuplicadas > 0 && (
+                <span className="ml-1.5 inline-flex items-center justify-center rounded-full bg-amber-600 px-1.5 py-0.2 text-[10px] font-bold text-white">
+                  {totalDuplicadas}
+                </span>
+              )}
+            </Button>
+          )}
 
           {canWrite && (
             <Button

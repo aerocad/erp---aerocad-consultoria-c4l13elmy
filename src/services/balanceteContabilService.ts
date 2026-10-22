@@ -307,7 +307,7 @@ export function calcularBalanceteVerificacao({
   })
 
   // -------------------------------------------------------------
-  // PATRIMÔNIO LÍQUIDO / CAPITAL SOCIAL / RESULTADOS (CONTA 2.4)
+  // PATRIMÔNIO LÍQUIDO / CAPITAL SOCIAL / RESULTADOS (GRUPO 2.3)
   // -------------------------------------------------------------
   const passivoCirculanteLiquido = fornSaldoFinal + empCirculanteFinal - encargosApropriarCirculante
   const passivoNaoCirculanteLiquido = empNaoCirculanteFinal - encargosApropriarNaoCirculante
@@ -535,7 +535,7 @@ export function calcularBalanceteVerificacao({
   }
 
   linhas.push({
-    codigo: '2.4',
+    codigo: '2.3',
     descricao: 'PATRIMÔNIO LÍQUIDO',
     grau: 2,
     natureza: 'C',
@@ -547,8 +547,8 @@ export function calcularBalanceteVerificacao({
   })
 
   linhas.push({
-    codigo: '2.2.1',
-    descricao: 'Capital Social Subscrito e Integralizado',
+    codigo: '2.3.1',
+    descricao: 'Capital Social Subscrito',
     grau: 3,
     natureza: 'C',
     saldoAnterior: capitalSocial,
@@ -559,14 +559,62 @@ export function calcularBalanceteVerificacao({
   })
 
   linhas.push({
-    codigo: '2.2.2',
-    descricao: 'Lucros e Resultados Acumulados do Exercício',
+    codigo: '2.3.2',
+    descricao: '(–) Capital Social a Integralizar',
+    grau: 3,
+    natureza: 'D',
+    saldoAnterior: 0,
+    debitos: 0,
+    creditos: 0,
+    saldoFinal: 0,
+    saldoFinalNatureza: 'D',
+  })
+
+  linhas.push({
+    codigo: '2.3.3',
+    descricao: 'Reservas de Capital',
+    grau: 3,
+    natureza: 'C',
+    saldoAnterior: 0,
+    debitos: 0,
+    creditos: 0,
+    saldoFinal: 0,
+    saldoFinalNatureza: 'C',
+  })
+
+  linhas.push({
+    codigo: '2.3.4',
+    descricao: 'Lucros ou Prejuízos Acumulados',
     grau: 3,
     natureza: 'C',
     saldoAnterior: lucrosAcumulados,
     debitos: 0,
     creditos: 0,
     saldoFinal: lucrosAcumulados,
+    saldoFinalNatureza: 'C',
+  })
+
+  linhas.push({
+    codigo: '2.3.5',
+    descricao: 'Lucros a Destinar / Distribuição de Lucros Antecipada',
+    grau: 3,
+    natureza: 'D',
+    saldoAnterior: 0,
+    debitos: 0,
+    creditos: 0,
+    saldoFinal: 0,
+    saldoFinalNatureza: 'D',
+  })
+
+  linhas.push({
+    codigo: '2.3.6',
+    descricao: 'Reserva Legal e Estatutária',
+    grau: 3,
+    natureza: 'C',
+    saldoAnterior: 0,
+    debitos: 0,
+    creditos: 0,
+    saldoFinal: 0,
     saldoFinalNatureza: 'C',
   })
 

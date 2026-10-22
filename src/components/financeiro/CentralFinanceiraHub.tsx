@@ -17,6 +17,7 @@ import {
   Calculator,
   ExternalLink,
   Landmark,
+  CopySlash,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/lib/format'
@@ -70,6 +71,8 @@ export interface CentralFinanceiraHubProps {
   totalParcelasProjetos: number
   totalNotasOrfas: number
   podeAcessarValuation?: boolean
+  totalDuplicadas?: number
+  onAbrirModalDuplicadas?: () => void
 }
 
 interface HubCardConfig {
@@ -115,6 +118,8 @@ export function CentralFinanceiraHub(
     totalParcelasProjetos,
     totalNotasOrfas,
     podeAcessarValuation = true,
+    totalDuplicadas = 0,
+    onAbrirModalDuplicadas,
     onAbrirEmNovaJanela,
   } = props
   const cards: HubCardConfig[] = [
@@ -534,6 +539,40 @@ export function CentralFinanceiraHub(
           </span>
         </div>
       </div>
+
+      {/* Card/Banner de Ação Rápida de Duplicadas Detectadas */}
+      {totalDuplicadas > 0 && onAbrirModalDuplicadas && (
+        <div className="mb-4 p-3 sm:p-4 rounded-xl bg-gradient-to-r from-amber-50 to-orange-50 border-2 border-amber-300 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-white shadow-sm">
+              <CopySlash className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-bold text-amber-950">
+                  Notas Fiscais Duplicadas Detectadas
+                </span>
+                <span className="inline-flex items-center justify-center px-2 py-0.5 text-xs font-black rounded-full bg-amber-600 text-white animate-pulse">
+                  {totalDuplicadas} {totalDuplicadas === 1 ? 'duplicada' : 'duplicadas'}
+                </span>
+              </div>
+              <p className="text-xs text-amber-800 mt-0.5">
+                Existem emissões com o mesmo número de NF/cliente duplicadas no sistema. Faça a
+                triagem e desduplicação com segurança.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onAbrirModalDuplicadas}
+            className="shrink-0 inline-flex items-center gap-2 px-3.5 py-2 text-xs font-bold text-white bg-[#FF6A13] hover:bg-[#E05A0B] rounded-lg shadow-sm transition-colors cursor-pointer"
+          >
+            <CopySlash className="h-4 w-4" />
+            Abrir Triagem de Duplicatas
+            <ArrowRight className="h-3.5 w-3.5 ml-0.5" />
+          </button>
+        </div>
+      )}
 
       {/* Grid de Cartões Principais (2 colunas mobile, 3 tablet, 4 desktop) */}
       <div className="relative grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-4">

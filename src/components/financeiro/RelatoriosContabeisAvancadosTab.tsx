@@ -468,8 +468,13 @@ export function RelatoriosContabeisAvancadosTab({
       totalEmprestimosNaoCirculante - totalJurosApropriarNaoCirculante
     const passivoExigivelTotal = passivoCirculanteTotal + passivoNaoCirculanteTotal
 
-    // 1.4 PATRIMÔNIO LÍQUIDO
-    // Capital Social Simbólico / Integralizado padrão da consultoria + Resultado Acumulado Histórico
+    // 1.4 PATRIMÔNIO LÍQUIDO (GRUPO 2.3 OFICIAL DO PLANO AEROCAD)
+    // 2.3.1 Capital Social Subscrito (Credora)
+    // 2.3.2 (-) Capital a Integralizar (Devedora/Retificadora)
+    // 2.3.3 Reservas de Capital (Credora)
+    // 2.3.4 Lucros ou Prejuízos Acumulados (Credora/Devedora)
+    // 2.3.5 (-) Lucros a Destinar / Distribuição Antecipada (Devedora/Retificadora)
+    // 2.3.6 Reserva Legal e Estatutária (Credora)
     const totalReceitasHistoricas =
       parcelas
         .filter((p) => p.status === 'paga')
@@ -482,9 +487,23 @@ export function RelatoriosContabeisAvancadosTab({
       .reduce((acc, cp) => acc + (cp.valor || 0), 0)
     const resultadoAcumuladoHistorico = totalReceitasHistoricas - totalDespesasHistoricas
 
-    // Para o fechamento do Balanço: PL = Ativo Total - Passivo Total
+    // Fechamento exato pela Equação Fundamental: PL = Ativo Total - Passivo Exigível Total
     const patrimonioLiquidoTotal = totalAtivo - passivoExigivelTotal
-    const capitalSocialEstimado = Math.max(0, patrimonioLiquidoTotal - resultadoAcumuladoHistorico)
+    const pl231CapitalSocial = Math.min(Math.max(0, patrimonioLiquidoTotal), 50000)
+    const pl232CapitalAIntegralizar = 0
+    const pl233ReservasCapital = 0
+    const pl234LucrosPrejuizosAcumulados = patrimonioLiquidoTotal - pl231CapitalSocial
+    const pl235DistribuicaoAntecipada = 0
+    const pl236ReservaLegal = 0
+
+    // Subtotal do PL = 2.3.1 − 2.3.2 + 2.3.3 + 2.3.4 − 2.3.5 + 2.3.6
+    const plSubtotalCalculado =
+      pl231CapitalSocial -
+      pl232CapitalAIntegralizar +
+      pl233ReservasCapital +
+      pl234LucrosPrejuizosAcumulados -
+      pl235DistribuicaoAntecipada +
+      pl236ReservaLegal
 
     return {
       saldosPorConta,
@@ -511,7 +530,14 @@ export function RelatoriosContabeisAvancadosTab({
       totalJurosApropriarNaoCirculante,
       passivoExigivelTotal,
       resultadoAcumuladoHistorico,
-      capitalSocialEstimado,
+      capitalSocialEstimado: pl231CapitalSocial,
+      pl231CapitalSocial,
+      pl232CapitalAIntegralizar,
+      pl233ReservasCapital,
+      pl234LucrosPrejuizosAcumulados,
+      pl235DistribuicaoAntecipada,
+      pl236ReservaLegal,
+      plSubtotalCalculado,
       patrimonioLiquidoTotal,
       totalPassivoEPL: passivoExigivelTotal + patrimonioLiquidoTotal,
     }
@@ -1157,20 +1183,50 @@ export function RelatoriosContabeisAvancadosTab({
             ]
           : []),
         {
-          grupo: 'PATRIMÔNIO LÍQUIDO',
-          subgrupo: 'Capital Social Integralizado Estimado',
+          grupo: '2.3 PATRIMÔNIO LÍQUIDO',
+          subgrupo: '2.3.1 Capital Social Subscrito',
           conta_bancaria: '—',
-          valor: balancoData.capitalSocialEstimado,
+          valor: balancoData.pl231CapitalSocial,
         },
         {
-          grupo: 'PATRIMÔNIO LÍQUIDO',
-          subgrupo: 'Lucros / Resultados Acumulados da Consultoria',
+          grupo: '2.3 PATRIMÔNIO LÍQUIDO',
+          subgrupo: '2.3.2 (–) Capital a Integralizar',
           conta_bancaria: '—',
-          valor: balancoData.resultadoAcumuladoHistorico,
+          valor: -balancoData.pl232CapitalAIntegralizar,
+        },
+        {
+          grupo: '2.3 PATRIMÔNIO LÍQUIDO',
+          subgrupo: '2.3.3 Reservas de Capital',
+          conta_bancaria: '—',
+          valor: balancoData.pl233ReservasCapital,
+        },
+        {
+          grupo: '2.3 PATRIMÔNIO LÍQUIDO',
+          subgrupo: '2.3.4 Lucros ou Prejuízos Acumulados',
+          conta_bancaria: '—',
+          valor: balancoData.pl234LucrosPrejuizosAcumulados,
+        },
+        {
+          grupo: '2.3 PATRIMÔNIO LÍQUIDO',
+          subgrupo: '2.3.5 (–) Lucros a Destinar / Distribuição Antecipada',
+          conta_bancaria: '—',
+          valor: -balancoData.pl235DistribuicaoAntecipada,
+        },
+        {
+          grupo: '2.3 PATRIMÔNIO LÍQUIDO',
+          subgrupo: '2.3.6 Reserva Legal e Estatutária',
+          conta_bancaria: '—',
+          valor: balancoData.pl236ReservaLegal,
+        },
+        {
+          grupo: '2.3 PATRIMÔNIO LÍQUIDO',
+          subgrupo: 'SUBTOTAL DO PATRIMÔNIO LÍQUIDO (PL)',
+          conta_bancaria: '—',
+          valor: balancoData.patrimonioLiquidoTotal,
         },
         {
           grupo: 'TOTAL DO PASSIVO E PATRIMÔNIO LÍQUIDO',
-          subgrupo: 'Fechamento Contábil (Passivo + PL)',
+          subgrupo: 'Fechamento Contábil (Passivo Total + PL)',
           conta_bancaria: contaAtivaNome,
           valor: balancoData.totalPassivoEPL,
         },
@@ -1363,8 +1419,16 @@ export function RelatoriosContabeisAvancadosTab({
     <tr><td>• Custo Histórico Total</td><td class="right">${formatCurrency(balancoData.totalCustoHistoricoAtivos)}</td></tr>
     <tr><td>• (-) Depreciação / Amortização Acumulada</td><td class="right">- ${formatCurrency(balancoData.totalDepreciacaoAcumulada)}</td></tr>
     <tr style="background:#FFF3E8;"><td><strong>TOTAL DO ATIVO</strong></td><td class="right bold" style="color:#FF6A13;">${formatCurrency(balancoData.totalAtivo)}</td></tr>
-    <tr><td>2. PASSIVO CIRCULANTE (Fornecedores e Contas a Pagar)</td><td class="right bold">${formatCurrency(balancoData.totalPassivoCirculante)}</td></tr>
-    <tr><td>2.2 PATRIMÔNIO LÍQUIDO (Capital Estimado + Lucros Acumulados)</td><td class="right bold">${formatCurrency(balancoData.patrimonioLiquidoTotal)}</td></tr>
+    <tr><td>2.1 PASSIVO CIRCULANTE (Fornecedores e Contas a Pagar)</td><td class="right bold">${formatCurrency(balancoData.totalPassivoCirculante)}</td></tr>
+    ${balancoData.totalPassivoNaoCirculante > 0 ? `<tr><td>2.2 PASSIVO NÃO CIRCULANTE (Longo Prazo Líquido)</td><td class="right bold">${formatCurrency(balancoData.totalPassivoNaoCirculante)}</td></tr>` : ''}
+    <tr style="background:#F8FAFC;"><td colspan="2"><strong>2.3 PATRIMÔNIO LÍQUIDO (PL)</strong></td></tr>
+    <tr><td>• 2.3.1 Capital Social Subscrito</td><td class="right">${formatCurrency(balancoData.pl231CapitalSocial)}</td></tr>
+    <tr><td>• 2.3.2 (–) Capital a Integralizar</td><td class="right">(${formatCurrency(balancoData.pl232CapitalAIntegralizar)})</td></tr>
+    <tr><td>• 2.3.3 Reservas de Capital</td><td class="right">${formatCurrency(balancoData.pl233ReservasCapital)}</td></tr>
+    <tr><td>• 2.3.4 Lucros ou Prejuízos Acumulados</td><td class="right">${formatCurrency(balancoData.pl234LucrosPrejuizosAcumulados)}</td></tr>
+    <tr><td>• 2.3.5 (–) Lucros a Destinar / Distribuição Antecipada</td><td class="right">(${formatCurrency(balancoData.pl235DistribuicaoAntecipada)})</td></tr>
+    <tr><td>• 2.3.6 Reserva Legal e Estatutária</td><td class="right">${formatCurrency(balancoData.pl236ReservaLegal)}</td></tr>
+    <tr style="background:#EEF2F6;"><td><strong>SUBTOTAL DO PATRIMÔNIO LÍQUIDO</strong></td><td class="right bold">${formatCurrency(balancoData.patrimonioLiquidoTotal)}</td></tr>
     <tr style="background:#F2F2F2;"><td><strong>TOTAL DO PASSIVO + PATRIMÔNIO LÍQUIDO</strong></td><td class="right bold">${formatCurrency(balancoData.totalPassivoEPL)}</td></tr>
   </table>
 </body>
@@ -2142,55 +2206,122 @@ export function RelatoriosContabeisAvancadosTab({
                 </div>
               </div>
 
-              {/* 2.2 Patrimônio Líquido */}
+              {/* 2.3 Patrimônio Líquido */}
               <div className="space-y-2 pt-2">
-                <div className="bg-neutral-100/80 px-2.5 py-1 rounded text-xs font-bold text-neutral-800 flex justify-between items-center">
-                  <span>2.2 PATRIMÔNIO LÍQUIDO (PL)</span>
-                  <span>{renderValor(balancoData.patrimonioLiquidoTotal)}</span>
+                <div className="bg-[#FFF6EC] border border-[#FFD2B3] px-2.5 py-1.5 rounded text-xs font-black text-[#D65100] flex justify-between items-center">
+                  <span>2.3 PATRIMÔNIO LÍQUIDO</span>
+                  <span className="font-mono font-bold">
+                    {renderValor(
+                      balancoData.patrimonioLiquidoTotal,
+                      'text-[#D65100] font-mono font-bold',
+                    )}
+                  </span>
                 </div>
 
                 <div className="pl-2 space-y-1 text-xs">
                   <div className="flex justify-between py-1 border-b border-neutral-100">
-                    <span className="text-neutral-700">Capital Social Integralizado Estimado</span>
-                    {renderValor(balancoData.capitalSocialEstimado)}
+                    <span className="text-neutral-700 font-medium">
+                      2.3.1 Capital Social Subscrito
+                    </span>
+                    {renderValor(balancoData.pl231CapitalSocial)}
+                  </div>
+
+                  <div className="flex justify-between py-1 border-b border-neutral-100 text-neutral-600">
+                    <span className="text-neutral-700">
+                      2.3.2 (–) Capital Social a Integralizar
+                    </span>
+                    <span className="font-mono">
+                      (
+                      {renderValor(
+                        balancoData.pl232CapitalAIntegralizar,
+                        'text-neutral-600 font-mono',
+                      )}
+                      )
+                    </span>
                   </div>
 
                   <div className="flex justify-between py-1 border-b border-neutral-100">
-                    <span className="text-neutral-700">
-                      Resultado Acumulado Histórico (Receitas − Despesas)
+                    <span className="text-neutral-700">2.3.3 Reservas de Capital</span>
+                    {renderValor(balancoData.pl233ReservasCapital)}
+                  </div>
+
+                  <div className="flex justify-between py-1 border-b border-neutral-100">
+                    <span className="text-neutral-700 font-medium">
+                      2.3.4 Lucros ou Prejuízos Acumulados
                     </span>
                     {renderValor(
-                      balancoData.resultadoAcumuladoHistorico,
-                      balancoData.resultadoAcumuladoHistorico >= 0
+                      balancoData.pl234LucrosPrejuizosAcumulados,
+                      balancoData.pl234LucrosPrejuizosAcumulados >= 0
                         ? 'text-emerald-700 font-mono font-bold'
                         : 'text-rose-700 font-mono font-bold',
                     )}
                   </div>
-                  <span className="text-[10px] text-neutral-400 pl-3 block">
-                    Superávit acumulado das operações de engenharia e consultoria
-                  </span>
 
-                  <div className="flex justify-between py-1 pt-2 font-bold text-blue-900 bg-blue-50/50 px-2 rounded">
-                    <span>Total do Patrimônio Líquido</span>
+                  <div className="flex justify-between py-1 border-b border-neutral-100 text-neutral-600">
+                    <span className="text-neutral-700">
+                      2.3.5 (–) Lucros a Destinar / Distribuição Antecipada
+                    </span>
+                    <span className="font-mono">
+                      (
+                      {renderValor(
+                        balancoData.pl235DistribuicaoAntecipada,
+                        'text-neutral-600 font-mono',
+                      )}
+                      )
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between py-1 border-b border-neutral-100">
+                    <span className="text-neutral-700">2.3.6 Reserva Legal e Estatutária</span>
+                    {renderValor(balancoData.pl236ReservaLegal)}
+                  </div>
+
+                  <div className="flex justify-between py-1.5 pt-2 font-bold text-[#D65100] bg-orange-50/60 px-2 rounded border border-orange-100">
+                    <span>Subtotal do Patrimônio Líquido (PL)</span>
                     {renderValor(
                       balancoData.patrimonioLiquidoTotal,
-                      'text-blue-900 font-mono font-bold',
+                      'text-[#D65100] font-mono font-bold',
                     )}
                   </div>
                 </div>
               </div>
 
-              {/* Equação Fundamental do Balanço */}
-              <div className="p-3 bg-neutral-50 rounded-lg border border-neutral-200 text-[11px] text-neutral-600 space-y-1">
-                <div className="flex items-center justify-between font-bold text-neutral-800">
-                  <span>Equação Fundamental: Ativo = Passivo + PL</span>
-                  <CrmBadge tone="green">Equilíbrio Fechado</CrmBadge>
+              {/* Equação Fundamental do Balanço: Ativo = Passivo Circulante + Passivo Não Circulante + PL */}
+              {Math.abs(balancoData.totalAtivo - balancoData.totalPassivoEPL) < 0.05 ? (
+                <div className="p-3 bg-emerald-50/80 rounded-lg border border-emerald-300 text-[11px] text-emerald-950 space-y-1">
+                  <div className="flex items-center justify-between font-bold text-emerald-900">
+                    <span className="flex items-center gap-1.5">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                      Balanço Equilibrado: Ativo Total {formatCurrency(balancoData.totalAtivo)} =
+                      Passivo + PL {formatCurrency(balancoData.totalPassivoEPL)}
+                    </span>
+                    <CrmBadge tone="green">Equilíbrio Fechado</CrmBadge>
+                  </div>
+                  <p className="text-[10px] text-emerald-800">
+                    Ativo Total: <strong>{renderValor(balancoData.totalAtivo)}</strong> ≡ Passivo
+                    Circulante ({renderValor(balancoData.totalPassivoCirculante)}) + Passivo Não
+                    Circulante ({renderValor(balancoData.totalPassivoNaoCirculante)}) + PL (
+                    {renderValor(balancoData.patrimonioLiquidoTotal)})
+                  </p>
                 </div>
-                <p className="text-[10px]">
-                  Ativo Total: <strong>{renderValor(balancoData.totalAtivo)}</strong> ≡ Passivo +
-                  PL: <strong>{renderValor(balancoData.totalPassivoEPL)}</strong>
-                </p>
-              </div>
+              ) : (
+                <div className="p-3 bg-amber-50 rounded-lg border border-amber-300 text-[11px] text-amber-950 space-y-1">
+                  <div className="flex items-center justify-between font-bold text-amber-900">
+                    <span className="flex items-center gap-1.5">
+                      <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+                      Divergência Contábil Detectada: Diferença de{' '}
+                      {formatCurrency(
+                        Math.abs(balancoData.totalAtivo - balancoData.totalPassivoEPL),
+                      )}
+                    </span>
+                    <CrmBadge tone="amber">Atenção</CrmBadge>
+                  </div>
+                  <p className="text-[10px] text-amber-800">
+                    Ativo Total: <strong>{renderValor(balancoData.totalAtivo)}</strong> ≠ Passivo +
+                    PL: <strong>{renderValor(balancoData.totalPassivoEPL)}</strong>
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -3047,24 +3178,93 @@ export function RelatoriosContabeisAvancadosTab({
                           alinhamento: 'right',
                         },
                       ],
+                      ...(safeNumber(balancoData?.totalPassivoNaoCirculante) > 0
+                        ? [
+                            [
+                              { conteudo: '2.2 Passivo Não Circulante (Longo Prazo Líquido)' },
+                              { conteudo: 'Exigível LP', alinhamento: 'center' as const },
+                              {
+                                conteudo: mascararValores
+                                  ? VALOR_MASCARADO
+                                  : formatCurrency(
+                                      safeNumber(balancoData?.totalPassivoNaoCirculante),
+                                    ),
+                                alinhamento: 'right' as const,
+                              },
+                            ],
+                          ]
+                        : []),
                       [
-                        { conteudo: '2.2 Capital Social Integralizado Estimado' },
-                        { conteudo: 'Patrimônio', alinhamento: 'center' },
+                        { conteudo: '2.3.1 Capital Social Subscrito' },
+                        { conteudo: 'PL Oficial', alinhamento: 'center' },
                         {
                           conteudo: mascararValores
                             ? VALOR_MASCARADO
-                            : formatCurrency(safeNumber(balancoData?.capitalSocialEstimado)),
+                            : formatCurrency(safeNumber(balancoData?.pl231CapitalSocial)),
                           alinhamento: 'right',
                         },
                       ],
                       [
-                        { conteudo: '2.3 Lucros / Resultados Acumulados' },
-                        { conteudo: 'Patrimônio', alinhamento: 'center' },
+                        { conteudo: '2.3.2 (–) Capital a Integralizar' },
+                        { conteudo: 'Retificadora PL', alinhamento: 'center' },
                         {
                           conteudo: mascararValores
                             ? VALOR_MASCARADO
-                            : formatCurrency(safeNumber(balancoData?.resultadoAcumuladoHistorico)),
+                            : `(${formatCurrency(safeNumber(balancoData?.pl232CapitalAIntegralizar))})`,
                           alinhamento: 'right',
+                        },
+                      ],
+                      [
+                        { conteudo: '2.3.3 Reservas de Capital' },
+                        { conteudo: 'PL Oficial', alinhamento: 'center' },
+                        {
+                          conteudo: mascararValores
+                            ? VALOR_MASCARADO
+                            : formatCurrency(safeNumber(balancoData?.pl233ReservasCapital)),
+                          alinhamento: 'right',
+                        },
+                      ],
+                      [
+                        { conteudo: '2.3.4 Lucros ou Prejuízos Acumulados' },
+                        { conteudo: 'PL Oficial', alinhamento: 'center' },
+                        {
+                          conteudo: mascararValores
+                            ? VALOR_MASCARADO
+                            : formatCurrency(
+                                safeNumber(balancoData?.pl234LucrosPrejuizosAcumulados),
+                              ),
+                          alinhamento: 'right',
+                        },
+                      ],
+                      [
+                        { conteudo: '2.3.5 (–) Lucros a Destinar / Distribuição Antecipada' },
+                        { conteudo: 'Retificadora PL', alinhamento: 'center' },
+                        {
+                          conteudo: mascararValores
+                            ? VALOR_MASCARADO
+                            : `(${formatCurrency(safeNumber(balancoData?.pl235DistribuicaoAntecipada))})`,
+                          alinhamento: 'right',
+                        },
+                      ],
+                      [
+                        { conteudo: '2.3.6 Reserva Legal e Estatutária' },
+                        { conteudo: 'PL Oficial', alinhamento: 'center' },
+                        {
+                          conteudo: mascararValores
+                            ? VALOR_MASCARADO
+                            : formatCurrency(safeNumber(balancoData?.pl236ReservaLegal)),
+                          alinhamento: 'right',
+                        },
+                      ],
+                      [
+                        { conteudo: 'SUBTOTAL 2.3 PATRIMÔNIO LÍQUIDO' },
+                        { conteudo: 'Fechamento PL', alinhamento: 'center' },
+                        {
+                          conteudo: mascararValores
+                            ? VALOR_MASCARADO
+                            : formatCurrency(safeNumber(balancoData?.patrimonioLiquidoTotal)),
+                          alinhamento: 'right',
+                          destaque: true,
                         },
                       ],
                     ],
