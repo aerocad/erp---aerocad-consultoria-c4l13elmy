@@ -157,6 +157,50 @@ export const PLANO_CONTAS_AEROCAD: ItemPlanoContas[] = [
     grupo: 'Passivo Circulante',
     descricao: 'Energia (CEB/Neoenergia), água, telecomunicações e condomínios',
   },
+  {
+    codigo: '2.1.6',
+    nome: 'Empréstimos Bancários a Pagar (Passivo Circulante)',
+    natureza: 'passivo',
+    grupo: 'Passivo Circulante',
+    descricao: 'Parcelas e amortizações de empréstimos bancários com vencimento em até 12 meses',
+  },
+  {
+    codigo: '2.1.7',
+    nome: 'Financiamentos de Veículos e Frotas a Pagar (Passivo Circulante)',
+    natureza: 'passivo',
+    grupo: 'Passivo Circulante',
+    descricao:
+      'Parcelas de financiamento de veículos e equipamentos com vencimento em até 12 meses',
+  },
+  {
+    codigo: '2.1.8',
+    nome: '(-) Encargos Financeiros a Apropriar (Conta Redutora do Passivo Circulante)',
+    natureza: 'passivo',
+    grupo: 'Passivo Circulante',
+    descricao:
+      'Juros contratuais pré-fixados a incorrer no curto prazo (conta retificadora/redutora)',
+  },
+  {
+    codigo: '2.2.1',
+    nome: 'Empréstimos Bancários a Pagar (Passivo Não Circulante)',
+    natureza: 'passivo',
+    grupo: 'Passivo Não Circulante',
+    descricao: 'Dívidas bancárias de longo prazo com vencimento após 12 meses',
+  },
+  {
+    codigo: '2.2.2',
+    nome: 'Financiamentos de Veículos a Pagar (Passivo Não Circulante)',
+    natureza: 'passivo',
+    grupo: 'Passivo Não Circulante',
+    descricao: 'Financiamentos de bens e frotas de longo prazo com vencimento após 12 meses',
+  },
+  {
+    codigo: '2.2.3',
+    nome: '(-) Encargos Financeiros a Apropriar (Conta Redutora do Passivo Não Circulante)',
+    natureza: 'passivo',
+    grupo: 'Passivo Não Circulante',
+    descricao: 'Juros pré-fixados a incorrer no longo prazo após os próximos 12 meses',
+  },
 
   // 3. DESPESAS E CUSTOS (DRE / PONTO DE EQUILÍBRIO)
   {
@@ -245,7 +289,15 @@ export const PLANO_CONTAS_AEROCAD: ItemPlanoContas[] = [
     natureza: 'despesa',
     grupo: 'Despesas Financeiras',
     fixoOuVariavel: 'fixo',
-    descricao: 'Tarifas de manutenção, TAR PIX, boletos, IOF e juros',
+    descricao: 'Tarifas de manutenção, TAR PIX, boletos, IOF e juros de mora',
+  },
+  {
+    codigo: '3.5.2',
+    nome: 'Despesas com Juros de Empréstimos e Financiamentos (Resultado / DRE)',
+    natureza: 'despesa',
+    grupo: 'Despesas Financeiras',
+    fixoOuVariavel: 'fixo',
+    descricao: 'Juros contratuais apropriados mensalmente pelo regime de competência contábil',
   },
   {
     codigo: '3.6.1',
@@ -471,14 +523,23 @@ export function classificarTransacaoExtrato(tx: {
 
   // 5. Empréstimos e Financiamentos (Passivo)
   if (
+    texto.includes('pag fin veiculo') ||
+    texto.includes('fin veiculo') ||
+    texto.includes('bv financeira') ||
+    texto.includes('pan financiamentos') ||
+    texto.includes('santander fin')
+  ) {
+    return PLANO_CONTAS_AEROCAD.find((i) => i.codigo === '2.1.7')!
+  }
+
+  if (
     texto.includes('pronampe') ||
     texto.includes('prest emp') ||
     texto.includes('emprestimo') ||
     texto.includes('financiamento') ||
-    texto.includes('pag fin veiculo') ||
-    texto.includes('fin veiculo')
+    texto.includes('amort emp')
   ) {
-    return PLANO_CONTAS_AEROCAD.find((i) => i.codigo === '2.1.1')!
+    return PLANO_CONTAS_AEROCAD.find((i) => i.codigo === '2.1.6')!
   }
 
   // 5.1 Taxas e Ativos Intangíveis (INPI / Marcas / Patentes / AEGIS)

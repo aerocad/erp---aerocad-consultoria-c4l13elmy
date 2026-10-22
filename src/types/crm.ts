@@ -654,11 +654,91 @@ export interface ContaPagarRecord extends RecordModel {
   plano_contas_nome?: string
   classificacao_manual?: boolean
   conta_bancaria?: string
+  // Vínculo opcional com módulo de empréstimos/financiamentos
+  emprestimo_contrato_id?: string
+  emprestimo_parcela_id?: string
   expand?: {
     cliente_fornecedor?: ClienteRecord
     credor?: CredorRecord
     projeto?: ProjetoRecord
     criado_por?: UserRecord
+    conta_bancaria?: ContaBancariaRecord
+  }
+}
+
+export type TipoEmprestimoFinanciamento =
+  | 'emprestimo_bancario'
+  | 'financiamento_veiculo'
+  | 'outras_modalidades'
+
+export type MetodoAmortizacao = 'PRICE' | 'SAC' | 'PREFIXADO_MANUAL'
+
+export type StatusContratoEmprestimo = 'ativo' | 'quitado' | 'cancelado'
+
+export type StatusParcelaEmprestimo = 'pendente' | 'paga' | 'atrasada'
+
+export interface EmprestimoFinanciamentoRecord extends RecordModel {
+  numero_contrato: string
+  descricao: string
+  tipo: TipoEmprestimoFinanciamento
+  metodo_amortizacao: MetodoAmortizacao
+  credor?: string
+  banco_nome?: string
+  data_contratacao: string
+  valor_total_divida: number
+  valor_liquido_liberado: number
+  total_juros_prefixados: number
+  taxa_juros_mensal: number
+  taxa_juros_anual?: number
+  quantidade_parcelas: number
+  valor_parcela: number
+  data_primeira_parcela: string
+  conta_bancaria_debito?: string
+  // Financiamento de veículos / bens
+  bem_adquirido_descricao?: string
+  valor_total_bem?: number
+  valor_entrada?: number
+  ativo_patrimonio_vinculado?: string
+  // Saldos
+  saldo_devedor_atual: number
+  saldo_juros_a_apropriar: number
+  saldo_circulante: number
+  saldo_nao_circulante: number
+  total_amortizado: number
+  total_juros_pagos: number
+  total_juros_apropriados: number
+  status: StatusContratoEmprestimo
+  observacoes?: string
+  criado_por?: string
+  expand?: {
+    credor?: CredorRecord
+    conta_bancaria_debito?: ContaBancariaRecord
+    ativo_patrimonio_vinculado?: AtivoPatrimonioRecord
+    criado_por?: UserRecord
+  }
+}
+
+export interface EmprestimoParcelaRecord extends RecordModel {
+  contrato: string
+  numero_parcela: number
+  competencia: string // YYYY-MM
+  data_vencimento: string
+  valor_parcela: number
+  valor_principal: number
+  valor_juros: number
+  saldo_devedor_restante: number
+  classificacao_passivo: 'circulante' | 'nao_circulante'
+  status: StatusParcelaEmprestimo
+  juros_apropriados: boolean
+  data_apropriacao_juros?: string
+  data_pagamento?: string
+  valor_pago?: number
+  conta_bancaria?: string
+  conta_pagar_id?: string
+  extrato_transacao_id?: string
+  observacoes?: string
+  expand?: {
+    contrato?: EmprestimoFinanciamentoRecord
     conta_bancaria?: ContaBancariaRecord
   }
 }

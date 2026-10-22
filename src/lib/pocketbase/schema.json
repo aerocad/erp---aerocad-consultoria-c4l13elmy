@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-21T23:31:17.048Z",
+  "generatedAt": "2026-10-21T23:59:08.856Z",
   "collections": [
     {
       "name": "users",
@@ -4621,6 +4621,371 @@
         "CREATE INDEX idx_mensagens_destinatario ON mensagens (destinatario)",
         "CREATE INDEX idx_mensagens_lido ON mensagens (lido)",
         "CREATE INDEX idx_mensagens_created ON mensagens (created)"
+      ]
+    },
+    {
+      "name": "emprestimos_financiamentos",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && (@request.auth.role = 'admin' || @request.auth.roles ~ 'admin' || @request.auth.role = 'financeiro' || @request.auth.roles ~ 'financeiro')",
+        "view": "@request.auth.id != '' && (@request.auth.role = 'admin' || @request.auth.roles ~ 'admin' || @request.auth.role = 'financeiro' || @request.auth.roles ~ 'financeiro')",
+        "create": "@request.auth.id != '' && (@request.auth.role = 'admin' || @request.auth.roles ~ 'admin' || @request.auth.role = 'financeiro' || @request.auth.roles ~ 'financeiro')",
+        "update": "@request.auth.id != '' && (@request.auth.role = 'admin' || @request.auth.roles ~ 'admin' || @request.auth.role = 'financeiro' || @request.auth.roles ~ 'financeiro')",
+        "delete": "@request.auth.id != '' && (@request.auth.role = 'admin' || @request.auth.roles ~ 'admin')"
+      },
+      "fields": [
+        {
+          "name": "numero_contrato",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "descricao",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "tipo",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["emprestimo_bancario", "financiamento_veiculo", "outras_modalidades"]
+        },
+        {
+          "name": "metodo_amortizacao",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["PRICE", "SAC", "PREFIXADO_MANUAL"]
+        },
+        {
+          "name": "credor",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "credores"
+        },
+        {
+          "name": "banco_nome",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "data_contratacao",
+          "type": "date",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "valor_total_divida",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "valor_liquido_liberado",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "total_juros_prefixados",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "taxa_juros_mensal",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "taxa_juros_anual",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "quantidade_parcelas",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "valor_parcela",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "data_primeira_parcela",
+          "type": "date",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "conta_bancaria_debito",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "contas_bancarias"
+        },
+        {
+          "name": "bem_adquirido_descricao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "valor_total_bem",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "valor_entrada",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ativo_patrimonio_vinculado",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "ativos_patrimonio"
+        },
+        {
+          "name": "saldo_devedor_atual",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "saldo_juros_a_apropriar",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "saldo_circulante",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "saldo_nao_circulante",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "total_amortizado",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "total_juros_pagos",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "total_juros_apropriados",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["ativo", "quitado", "cancelado"]
+        },
+        {
+          "name": "observacoes",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "criado_por",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_emp_fin_status ON emprestimos_financiamentos (status)",
+        "CREATE INDEX idx_emp_fin_tipo ON emprestimos_financiamentos (tipo)",
+        "CREATE INDEX idx_emp_fin_data ON emprestimos_financiamentos (data_contratacao DESC)"
+      ]
+    },
+    {
+      "name": "emprestimos_parcelas",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && (@request.auth.role = 'admin' || @request.auth.roles ~ 'admin' || @request.auth.role = 'financeiro' || @request.auth.roles ~ 'financeiro')",
+        "view": "@request.auth.id != '' && (@request.auth.role = 'admin' || @request.auth.roles ~ 'admin' || @request.auth.role = 'financeiro' || @request.auth.roles ~ 'financeiro')",
+        "create": "@request.auth.id != '' && (@request.auth.role = 'admin' || @request.auth.roles ~ 'admin' || @request.auth.role = 'financeiro' || @request.auth.roles ~ 'financeiro')",
+        "update": "@request.auth.id != '' && (@request.auth.role = 'admin' || @request.auth.roles ~ 'admin' || @request.auth.role = 'financeiro' || @request.auth.roles ~ 'financeiro')",
+        "delete": "@request.auth.id != '' && (@request.auth.role = 'admin' || @request.auth.roles ~ 'admin')"
+      },
+      "fields": [
+        {
+          "name": "contrato",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "emprestimos_financiamentos"
+        },
+        {
+          "name": "numero_parcela",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "competencia",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "data_vencimento",
+          "type": "date",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "valor_parcela",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "valor_principal",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "valor_juros",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "saldo_devedor_restante",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "classificacao_passivo",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["circulante", "nao_circulante"]
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["pendente", "paga", "atrasada"]
+        },
+        {
+          "name": "juros_apropriados",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "data_apropriacao_juros",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "data_pagamento",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "valor_pago",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "conta_bancaria",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "contas_bancarias"
+        },
+        {
+          "name": "conta_pagar_id",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "extrato_transacao_id",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "observacoes",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_emp_parc_contrato ON emprestimos_parcelas (contrato)",
+        "CREATE INDEX idx_emp_parc_vencimento ON emprestimos_parcelas (data_vencimento)",
+        "CREATE INDEX idx_emp_parc_status ON emprestimos_parcelas (status)",
+        "CREATE INDEX idx_emp_parc_comp ON emprestimos_parcelas (competencia)",
+        "CREATE INDEX idx_emp_parc_aprop ON emprestimos_parcelas (juros_apropriados)"
       ]
     }
   ]

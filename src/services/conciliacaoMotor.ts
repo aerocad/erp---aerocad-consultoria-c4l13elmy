@@ -162,8 +162,15 @@ export function encontrarSugestoesConciliacao(
             (descTx.includes(numDocCp) ||
               (docRefTx && (docRefTx.includes(numDocCp) || numDocCp.includes(docRefTx))))
 
+          const ehParcelaEmprestimo =
+            Boolean(cp.emprestimo_contrato_id) ||
+            Boolean(cp.numero_documento?.startsWith('PAG-PARC-')) ||
+            Boolean(cp.plano_contas_codigo === '2.1.6' || cp.plano_contas_codigo === '2.1.7')
+
           let confianca: 'alta' | 'media' | 'baixa' =
-            matchDoc || (diffDias <= 1 && matchBeneficiario)
+            matchDoc ||
+            (diffDias <= 1 && matchBeneficiario) ||
+            (ehParcelaEmprestimo && diffDias <= 2)
               ? 'alta'
               : diffDias <= 3
                 ? 'media'
@@ -176,7 +183,7 @@ export function encontrarSugestoesConciliacao(
             tipo: 'conta_pagar',
             id: cp.id,
             titulo: `${cp.fornecedor || 'Fornecedor não identificado'} — ${cp.descricao || 'Despesa'}`,
-            detalhe: `Vencimento: ${dataVencStr}${cp.status === 'pago' ? ' (Já quitado)' : ''}${matchDoc ? ' · Número de documento idêntico' : matchBeneficiario ? ' · Beneficiário coincide' : ''}`,
+            detalhe: `Vencimento: ${dataVencStr}${cp.status === 'pago' ? ' (Já quitado)' : ''}${ehParcelaEmprestimo ? ' · [Empréstimo/Financiamento]' : ''}${matchDoc ? ' · Número de documento idêntico' : matchBeneficiario ? ' · Beneficiário coincide' : ''}`,
             valor: cp.valor || 0,
             dataReferencia: dataRef || '',
             diferencaDias: diffDias,

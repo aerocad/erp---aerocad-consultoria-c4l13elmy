@@ -136,6 +136,7 @@ import { CapturaRapidaMobileModal } from '@/components/financeiro/CapturaRapidaM
 import { useIsMobile } from '@/hooks/use-mobile'
 import { CredoresTab } from '@/components/financeiro/CredoresTab'
 import { ContasBancariasTab } from '@/components/financeiro/ContasBancariasTab'
+import { EmprestimosFinanciamentosTab } from '@/components/financeiro/EmprestimosFinanciamentosTab'
 import { ContasReceberTab } from '@/components/financeiro/ContasReceberTab'
 import { FluxoCaixaTab } from '@/components/financeiro/FluxoCaixaTab'
 import { ExtratosComprovantesTab } from '@/components/financeiro/ExtratosComprovantesTab'
@@ -198,12 +199,14 @@ export function FinancePage() {
     sort: '-referencia',
   })
   const contasBancarias = useCrmData<any>('contas_bancarias', {
-    sort: 'apelido',
+    sort: 'banco_nome',
   })
   const ativosPatrimonio = useCrmData<any>('ativos_patrimonio', {
-    sort: '-data_aquisicao',
+    sort: '-created',
   })
-
+  const emprestimosFinanciamentosData = useCrmData<any>('emprestimos_financiamentos', {
+    sort: '-created',
+  })
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState(params.get('status') || 'todos')
   const [month, setMonth] = useState('todos')
@@ -1300,6 +1303,12 @@ export function FinancePage() {
         totalContasBancariasAtivas={
           contasBancarias.data.filter((c: any) => c.ativo !== false).length
         }
+        totalContratosEmprestimos={
+          emprestimosFinanciamentosData.data.filter((e: any) => e.status !== 'cancelado').length
+        }
+        saldoDevedorEmprestimos={emprestimosFinanciamentosData.data
+          .filter((e: any) => e.status !== 'cancelado')
+          .reduce((acc: number, e: any) => acc + (e.saldo_devedor_atual || 0), 0)}
         saldoMesCorrente={saldoMesCorrente}
         mesCorrenteNome={mesCorrenteNome}
         qtdExtratosPendentes={qtdExtratosPendentes}
@@ -1546,6 +1555,17 @@ export function FinancePage() {
             }}
           />
         </div>
+      ) : activeTab === 'emprestimos_financiamentos' ? (
+        <div className="mt-5">
+          <EmprestimosFinanciamentosTab
+            contasBancarias={contasBancarias.data}
+            credores={credores.data}
+            ativosPatrimonio={ativosPatrimonio.data}
+            userRole={user?.role}
+            usuarioNome={user?.name || user?.email || 'Usuário AEROCAD'}
+            onNavigateTab={(tab: any) => setActiveTab(tab)}
+          />
+        </div>
       ) : activeTab === 'contas_bancarias' ? (
         <div className="mt-5">
           <ContasBancariasTab
@@ -1644,12 +1664,14 @@ export function FinancePage() {
             contasBancarias={contasBancarias.data}
             ativosPatrimonio={ativosPatrimonio.data}
             extratos={extratos.data}
+            emprestimosFinanciamentos={emprestimosFinanciamentosData.data}
             userRole={user?.role}
             usuarioNome={user?.name || user?.email || 'Usuário AEROCAD'}
             onNavigateTab={(tab) => {
               if (
                 tab === 'contas_pagar' ||
                 tab === 'contas_receber' ||
+                tab === 'emprestimos_financiamentos' ||
                 tab === 'fluxo_caixa' ||
                 tab === 'extratos' ||
                 tab === 'balancetes' ||

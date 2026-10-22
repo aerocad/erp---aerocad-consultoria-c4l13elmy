@@ -101,6 +101,7 @@ export interface RelatoriosContabeisAvancadosTabProps {
   contasBancarias: ContaBancariaRecord[]
   ativosPatrimonio: AtivoPatrimonioRecord[]
   extratos?: ExtratoRecord[]
+  emprestimosFinanciamentos?: EmprestimoFinanciamentoRecord[]
   userRole?: string
   usuarioNome?: string
   onNavigateTab?: (tab: string) => void
@@ -123,6 +124,7 @@ export function RelatoriosContabeisAvancadosTab({
   contasBancarias,
   ativosPatrimonio,
   extratos: extratosProp = [],
+  emprestimosFinanciamentos: emprestimosProp,
   userRole,
   usuarioNome = 'Usuário AEROCAD',
   onNavigateTab,
@@ -136,6 +138,9 @@ export function RelatoriosContabeisAvancadosTab({
 
   // Lista de extratos bancários com fallback via PocketBase se não passado como prop
   const [extratosList, setExtratosList] = useState<ExtratoRecord[]>(extratosProp)
+  const [emprestimosList, setEmprestimosList] = useState<EmprestimoFinanciamentoRecord[]>(
+    emprestimosProp || [],
+  )
 
   useEffect(() => {
     if (extratosProp && extratosProp.length > 0) {
@@ -147,6 +152,17 @@ export function RelatoriosContabeisAvancadosTab({
         .catch(() => {})
     }
   }, [extratosProp])
+
+  useEffect(() => {
+    if (emprestimosProp && emprestimosProp.length > 0) {
+      setEmprestimosList(emprestimosProp)
+    } else {
+      pb.collection('emprestimos_financiamentos')
+        .getFullList<EmprestimoFinanciamentoRecord>({ sort: '-created' })
+        .then((res) => setEmprestimosList(res))
+        .catch(() => {})
+    }
+  }, [emprestimosProp])
 
   // Modal e estado do Dossiê Contábil ZIP
   const [modalDossieAberto, setModalDossieAberto] = useState(false)
@@ -288,6 +304,7 @@ export function RelatoriosContabeisAvancadosTab({
       contasReceber,
       contasBancarias,
       ativosPatrimonio,
+      emprestimosFinanciamentos: emprestimosList,
       ano,
       mesesFiltro,
       periodoRotulo,
@@ -299,6 +316,7 @@ export function RelatoriosContabeisAvancadosTab({
     contasReceber,
     contasBancarias,
     ativosPatrimonio,
+    emprestimosList,
     ano,
     mesesFiltro,
     periodoRotulo,
@@ -419,11 +437,35 @@ export function RelatoriosContabeisAvancadosTab({
 
     const totalAtivo = totalAtivoCirculante + totalAtivoNaoCirculante
 
-    // 1.3 PASSIVO CIRCULANTE (Obrigações e Contas a Pagar pendentes do período)
+    // 1.3 PASSIVO CIRCULANTE & NÃO CIRCULANTE (Fornecedores + Empréstimos e Financiamentos)
     const contasPagarPendentes = contasPagarPeriodo
       .filter((cp) => cp.status === 'pendente')
       .reduce((acc, cp) => acc + (cp.valor || 0), 0)
-    const totalPassivoCirculante = contasPagarPendentes
+
+    let totalEmprestimosCirculante = 0
+    let totalEmprestimosNaoCirculante = 0
+    let totalJurosApropriarCirculante = 0
+    let totalJurosApropriarNaoCirculante = 0
+
+    emprestimosList.forEach((ef) => {
+      if (ef.status === 'cancelado') return
+      const circ = ef.saldo_circulante || 0
+      const naoCirc = ef.saldo_nao_circulante || 0
+      const tot = circ + naoCirc
+      const ratioCirc = tot > 0 ? circ / tot : 1
+      const jurosAprop = ef.saldo_juros_a_apropriar || 0
+
+      totalEmprestimosCirculante += circ
+      totalEmprestimosNaoCirculante += naoCirc
+      totalJurosApropriarCirculante += jurosAprop * ratioCirc
+      totalJurosApropriarNaoCirculante += jurosAprop * (1 - ratioCirc)
+    })
+
+    const passivoCirculanteTotal =
+      contasPagarPendentes + totalEmprestimosCirculante - totalJurosApropriarCirculante
+    const passivoNaoCirculanteTotal =
+      totalEmprestimosNaoCirculante - totalJurosApropriarNaoCirculante
+    const passivoExigivelTotal = passivoCirculanteTotal + passivoNaoCirculanteTotal
 
     // 1.4 PATRIMÔNIO LÍQUIDO
     // Capital Social Simbólico / Integralizado padrão da consultoria + Resultado Acumulado Histórico
@@ -440,7 +482,7 @@ export function RelatoriosContabeisAvancadosTab({
     const resultadoAcumuladoHistorico = totalReceitasHistoricas - totalDespesasHistoricas
 
     // Para o fechamento do Balanço: PL = Ativo Total - Passivo Total
-    const patrimonioLiquidoTotal = totalAtivo - totalPassivoCirculante
+    const patrimonioLiquidoTotal = totalAtivo - passivoExigivelTotal
     const capitalSocialEstimado = Math.max(0, patrimonioLiquidoTotal - resultadoAcumuladoHistorico)
 
     return {
@@ -459,11 +501,18 @@ export function RelatoriosContabeisAvancadosTab({
       qtdIntangiveis: ativosIntangiveis.length,
       qtdImobilizados: ativosImobilizados.length,
       totalAtivo,
-      totalPassivoCirculante,
+      totalPassivoCirculante: passivoCirculanteTotal,
+      fornecedoresCirculante: contasPagarPendentes,
+      totalEmprestimosCirculante,
+      totalJurosApropriarCirculante,
+      totalPassivoNaoCirculante: passivoNaoCirculanteTotal,
+      totalEmprestimosNaoCirculante,
+      totalJurosApropriarNaoCirculante,
+      passivoExigivelTotal,
       resultadoAcumuladoHistorico,
       capitalSocialEstimado,
       patrimonioLiquidoTotal,
-      totalPassivoEPL: totalPassivoCirculante + patrimonioLiquidoTotal,
+      totalPassivoEPL: passivoExigivelTotal + patrimonioLiquidoTotal,
     }
   }, [
     contasBancarias,
@@ -475,6 +524,7 @@ export function RelatoriosContabeisAvancadosTab({
     contasReceberPeriodo,
     contasPagarPeriodo,
     ativosPatrimonio,
+    emprestimosList,
   ])
 
   // ==========================================
@@ -534,7 +584,15 @@ export function RelatoriosContabeisAvancadosTab({
       })
       .reduce((acc, cp) => acc + (cp.valor || 0), 0)
 
-    // 2.7 Resultado Operacional (EBIT / Lucro Líquido do Período)
+    // 2.7 Juros Apropriados de Empréstimos e Financiamentos (Conta 3.5.2)
+    const despesasJurosApropriados = contasPagarPeriodo
+      .filter((cp) => {
+        const codigo = cp.plano_contas_codigo || ''
+        return codigo === '3.5.2' || cp.descricao?.includes('[ETAPA 2')
+      })
+      .reduce((acc, cp) => acc + (cp.valor || 0), 0)
+
+    // 2.8 Resultado Operacional (EBIT / Lucro Líquido do Período)
     const resultadoOperacional = margemContribuicao - despesasFixas
     const margemLiquidaPercentual =
       receitaBruta > 0 ? (resultadoOperacional / receitaBruta) * 100 : 0
@@ -607,6 +665,7 @@ export function RelatoriosContabeisAvancadosTab({
       margemContribuicao,
       indiceMargemContribuicao,
       despesasFixas,
+      despesasJurosApropriados,
       resultadoOperacional,
       margemLiquidaPercentual,
       // Comparativo
@@ -890,6 +949,63 @@ export function RelatoriosContabeisAvancadosTab({
   // ==========================================
   // EXPORTAÇÃO XLSX
   // ==========================================
+  async function handleExportarRelatorioEmprestimosXlsx() {
+    if (!emprestimosList || emprestimosList.length === 0) return
+
+    const linhas: Record<string, unknown>[] = emprestimosList.map((ef) => ({
+      numero: ef.numero_contrato,
+      tipo:
+        ef.tipo === 'emprestimo_bancario'
+          ? 'Empréstimo Bancário'
+          : ef.tipo === 'financiamento_veiculo'
+            ? 'Financiamento Veículo'
+            : 'Outras Modalidades',
+      banco: ef.banco_nome || '—',
+      dataContratacao: ef.data_contratacao ? ef.data_contratacao.slice(0, 10) : '—',
+      dividaTotal: ef.valor_total_divida,
+      valorLiberado: ef.valor_liquido_liberado,
+      jurosContratuais: ef.total_juros_prefixados,
+      jurosApropriados: ef.total_juros_apropriados,
+      jurosAApropriar: ef.saldo_juros_a_apropriar,
+      saldoDevedor: ef.saldo_devedor_atual,
+      saldoCirculante: ef.saldo_circulante,
+      saldoNaoCirculante: ef.saldo_nao_circulante,
+      totalAmortizado: ef.total_amortizado,
+      status: ef.status.toUpperCase(),
+    }))
+
+    await exportarTabelaParaXlsx({
+      nomeArquivo: `demonstrativo_emprestimos_financiamentos_${ano}_${periodo}`,
+      tituloRelatorio: `CRONOGRAMA E DEMONSTRATIVO DE JUROS DE EMPRÉSTIMOS E FINANCIAMENTOS`,
+      subtitulo: `${periodoRotulo} · Regra Contábil de Partidas Dobradas · AEROCAD Consultoria`,
+      usuarioNome,
+      userRole,
+      permitirValoresReais: podeVerValores && !ocultarGlobal,
+      colunas: [
+        { header: 'Nº Contrato', key: 'numero', width: 18 },
+        { header: 'Tipo Operação', key: 'tipo', width: 22 },
+        { header: 'Instituição Credora', key: 'banco', width: 22 },
+        { header: 'Data Contratação', key: 'dataContratacao', width: 16 },
+        { header: 'Total Dívida (R$)', key: 'dividaTotal', width: 20, tipo: 'moeda' },
+        { header: 'Principal/Liberado (R$)', key: 'valorLiberado', width: 20, tipo: 'moeda' },
+        { header: 'Juros Pré-Fixados (R$)', key: 'jurosContratuais', width: 20, tipo: 'moeda' },
+        { header: 'Juros Apropriados (R$)', key: 'jurosApropriados', width: 20, tipo: 'moeda' },
+        { header: 'Juros a Apropriar (R$)', key: 'jurosAApropriar', width: 20, tipo: 'moeda' },
+        { header: 'Saldo Devedor (R$)', key: 'saldoDevedor', width: 20, tipo: 'moeda' },
+        { header: 'Passivo Circulante (R$)', key: 'saldoCirculante', width: 20, tipo: 'moeda' },
+        {
+          header: 'Passivo Não Circulante (R$)',
+          key: 'saldoNaoCirculante',
+          width: 20,
+          tipo: 'moeda',
+        },
+        { header: 'Amortizado (R$)', key: 'totalAmortizado', width: 20, tipo: 'moeda' },
+        { header: 'Status', key: 'status', width: 14 },
+      ],
+      linhas,
+    })
+  }
+
   async function handleExportarXlsx() {
     if (secaoAtiva === 'balancete') {
       const linhas: Record<string, unknown>[] = balanceteData.linhas.map((l) => ({
@@ -991,10 +1107,54 @@ export function RelatoriosContabeisAvancadosTab({
         },
         {
           grupo: 'PASSIVO CIRCULANTE',
-          subgrupo: 'Contas a Pagar e Obrigações a Liquidar no Período',
+          subgrupo: 'Fornecedores e Contas a Pagar Comerciais',
+          conta_bancaria: contaAtivaNome,
+          valor: balancoData.fornecedoresCirculante,
+        },
+        ...(balancoData.totalEmprestimosCirculante > 0
+          ? [
+              {
+                grupo: 'PASSIVO CIRCULANTE',
+                subgrupo: 'Empréstimos e Financiamentos a Pagar (Curto Prazo)',
+                conta_bancaria: contaAtivaNome,
+                valor: balancoData.totalEmprestimosCirculante,
+              },
+              {
+                grupo: 'PASSIVO CIRCULANTE',
+                subgrupo: '(-) Encargos Financeiros a Apropriar (Circulante)',
+                conta_bancaria: '—',
+                valor: -balancoData.totalJurosApropriarCirculante,
+              },
+            ]
+          : []),
+        {
+          grupo: 'TOTAL DO PASSIVO CIRCULANTE',
+          subgrupo: 'Passivo Circulante Líquido',
           conta_bancaria: contaAtivaNome,
           valor: balancoData.totalPassivoCirculante,
         },
+        ...(balancoData.totalPassivoNaoCirculante > 0
+          ? [
+              {
+                grupo: 'PASSIVO NÃO CIRCULANTE',
+                subgrupo: 'Empréstimos e Financiamentos de Longo Prazo',
+                conta_bancaria: '—',
+                valor: balancoData.totalEmprestimosNaoCirculante,
+              },
+              {
+                grupo: 'PASSIVO NÃO CIRCULANTE',
+                subgrupo: '(-) Encargos Financeiros a Apropriar (Não Circulante)',
+                conta_bancaria: '—',
+                valor: -balancoData.totalJurosApropriarNaoCirculante,
+              },
+              {
+                grupo: 'TOTAL DO PASSIVO NÃO CIRCULANTE',
+                subgrupo: 'Exigível a Longo Prazo Líquido',
+                conta_bancaria: '—',
+                valor: balancoData.totalPassivoNaoCirculante,
+              },
+            ]
+          : []),
         {
           grupo: 'PATRIMÔNIO LÍQUIDO',
           subgrupo: 'Capital Social Integralizado Estimado',
@@ -1069,9 +1229,21 @@ export function RelatoriosContabeisAvancadosTab({
           valorAnterior: -dreData.despAnt,
         },
         {
-          rubrica: '7. (=) RESULTADO LÍQUIDO OPERACIONAL',
+          rubrica: '7. (=) RESULTADO OPERACIONAL ANTES DO RESULTADO FINANCEIRO (EBITDA)',
           conta_bancaria: contaAtivaNome,
           valorAtual: dreData.resultadoOperacional,
+          valorAnterior: dreData.resOperacionalAnterior,
+        },
+        {
+          rubrica: '8. (-) DESPESAS FINANCEIRAS / JUROS APROPRIADOS',
+          conta_bancaria: contaAtivaNome,
+          valorAtual: -dreData.despesasJurosApropriados,
+          valorAnterior: 0,
+        },
+        {
+          rubrica: '9. (=) RESULTADO LÍQUIDO DO EXERCÍCIO (DRE)',
+          conta_bancaria: contaAtivaNome,
+          valorAtual: dreData.resultadoOperacional - dreData.despesasJurosApropriados,
           valorAnterior: dreData.resOperacionalAnterior,
         },
       ]

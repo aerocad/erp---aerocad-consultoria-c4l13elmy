@@ -23,6 +23,7 @@ import { formatCurrency } from '@/lib/format'
 export type FinanceTabKey =
   | 'contas_pagar'
   | 'contas_receber'
+  | 'emprestimos_financiamentos'
   | 'credores'
   | 'contas_bancarias'
   | 'fluxo_caixa'
@@ -51,6 +52,9 @@ export interface CentralFinanceiraHubProps {
   totalCredoresAtivos?: number
   // Dados de Contas Bancárias PJ
   totalContasBancariasAtivas?: number
+  // Dados de Empréstimos e Financiamentos
+  totalContratosEmprestimos?: number
+  saldoDevedorEmprestimos?: number
   // Dados de Fluxo de Caixa
   saldoMesCorrente: number
   mesCorrenteNome: string
@@ -80,29 +84,34 @@ interface HubCardConfig {
   visible: boolean
 }
 
-export function CentralFinanceiraHub({
-  activeTab,
-  onSelectTab,
-  canWrite,
-  podeVerValores,
-  totalPagarAberto,
-  qtdPagarAtrasadas,
-  totalReceberAberto,
-  qtdReceberAtrasadas,
-  totalCredoresAtivos = 0,
-  totalContasBancariasAtivas = 0,
-  saldoMesCorrente,
-  mesCorrenteNome,
-  qtdExtratosPendentes,
-  ultimoBalanceteRef,
-  totalBalancetesEmitidos,
-  totalParcelasProjetos,
-  totalNotasOrfas,
-  podeAcessarValuation = true,
-  onAbrirEmNovaJanela,
-}: CentralFinanceiraHubProps & {
-  onAbrirEmNovaJanela?: (tab: FinanceTabKey) => void
-}) {
+export function CentralFinanceiraHub(
+  props: CentralFinanceiraHubProps & {
+    onAbrirEmNovaJanela?: (tab: FinanceTabKey) => void
+  },
+) {
+  const {
+    activeTab,
+    onSelectTab,
+    canWrite,
+    podeVerValores,
+    totalPagarAberto,
+    qtdPagarAtrasadas,
+    totalReceberAberto,
+    qtdReceberAtrasadas,
+    totalCredoresAtivos = 0,
+    totalContasBancariasAtivas = 0,
+    totalContratosEmprestimos = 0,
+    saldoDevedorEmprestimos = 0,
+    saldoMesCorrente,
+    mesCorrenteNome,
+    qtdExtratosPendentes,
+    ultimoBalanceteRef,
+    totalBalancetesEmitidos,
+    totalParcelasProjetos,
+    totalNotasOrfas,
+    podeAcessarValuation = true,
+    onAbrirEmNovaJanela,
+  } = props
   const cards: HubCardConfig[] = [
     {
       id: 'credores',
@@ -125,6 +134,30 @@ export function CentralFinanceiraHub({
         </span>
       ),
       statSubtext: 'Integração direta com Contas a Pagar',
+      visible: true,
+    },
+    {
+      id: 'emprestimos_financiamentos',
+      title: 'Empréstimos & Financiamentos',
+      subtitle: 'Contratos, amortização, apropriação de juros e reclassificação',
+      icon: Landmark,
+      accentColor: '#FF6A13',
+      iconBg: 'bg-orange-50 border-orange-200 text-[#FF6A13]',
+      iconColor: 'text-[#FF6A13]',
+      badge: (
+        <span className="inline-flex items-center gap-1 rounded-full bg-orange-50 px-2 py-0.5 text-[10px] font-bold text-[#D65100] border border-[#FFD2B3]">
+          Contábil
+        </span>
+      ),
+      statLabel: 'Saldo devedor total',
+      statValue: podeVerValores ? (
+        <span className="mono-value font-bold text-neutral-900">
+          {formatCurrency(props.saldoDevedorEmprestimos || 0)}
+        </span>
+      ) : (
+        <span className="text-neutral-400">•••••</span>
+      ),
+      statSubtext: `${props.totalContratosEmprestimos || 0} contrato(s) ativo(s) / amortização`,
       visible: true,
     },
     {

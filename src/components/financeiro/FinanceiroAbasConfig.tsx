@@ -56,6 +56,14 @@ export const ALL_FINANCE_TABS: readonly TabDefinition[] = [
     defaultVisible: true,
   },
   {
+    id: 'emprestimos_financiamentos',
+    label: 'Empréstimos & Financiamentos',
+    shortLabel: 'Empréstimos',
+    icon: Landmark,
+    description: 'Contratos, apropriação mensal de juros, parcelas e reclassificação contábil',
+    defaultVisible: true,
+  },
+  {
     id: 'contas_receber',
     label: 'Contas a Receber',
     shortLabel: 'Receber',
