@@ -56,6 +56,8 @@ export interface CentralFinanceiraHubProps {
   // Dados de Empréstimos e Financiamentos
   totalContratosEmprestimos?: number
   saldoDevedorEmprestimos?: number
+  qtdLancamentosEmprestimosSemContrato?: number
+  somaLancamentosEmprestimosSemContrato?: number
   // Dados de Fluxo de Caixa
   saldoMesCorrente: number
   mesCorrenteNome: string
@@ -103,6 +105,8 @@ export function CentralFinanceiraHub(
     totalContasBancariasAtivas = 0,
     totalContratosEmprestimos = 0,
     saldoDevedorEmprestimos = 0,
+    qtdLancamentosEmprestimosSemContrato = 0,
+    somaLancamentosEmprestimosSemContrato = 0,
     saldoMesCorrente,
     mesCorrenteNome,
     qtdExtratosPendentes,
@@ -140,25 +144,55 @@ export function CentralFinanceiraHub(
     {
       id: 'emprestimos_financiamentos',
       title: 'Empréstimos & Financiamentos',
-      subtitle: 'Contratos, amortização, apropriação de juros e reclassificação',
+      subtitle:
+        totalContratosEmprestimos === 0 && qtdLancamentosEmprestimosSemContrato > 0
+          ? `${qtdLancamentosEmprestimosSemContrato} lançamento(s) classificado(s) sem contrato cadastrado`
+          : 'Contratos, amortização, apropriação de juros e reclassificação',
       icon: Landmark,
       accentColor: '#FF6A13',
-      iconBg: 'bg-orange-50 border-orange-200 text-[#FF6A13]',
-      iconColor: 'text-[#FF6A13]',
-      badge: (
-        <span className="inline-flex items-center gap-1 rounded-full bg-orange-50 px-2 py-0.5 text-[10px] font-bold text-[#D65100] border border-[#FFD2B3]">
-          Contábil
-        </span>
-      ),
-      statLabel: 'Saldo devedor total',
+      iconBg:
+        totalContratosEmprestimos === 0 && qtdLancamentosEmprestimosSemContrato > 0
+          ? 'bg-amber-50 border-amber-300 text-amber-700'
+          : 'bg-orange-50 border-orange-200 text-[#FF6A13]',
+      iconColor:
+        totalContratosEmprestimos === 0 && qtdLancamentosEmprestimosSemContrato > 0
+          ? 'text-amber-700'
+          : 'text-[#FF6A13]',
+      badge:
+        totalContratosEmprestimos === 0 && qtdLancamentosEmprestimosSemContrato > 0 ? (
+          <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-900 border border-amber-300 animate-pulse">
+            <AlertTriangle className="h-3 w-3 text-amber-700" />
+            {qtdLancamentosEmprestimosSemContrato} sem contrato
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1 rounded-full bg-orange-50 px-2 py-0.5 text-[10px] font-bold text-[#D65100] border border-[#FFD2B3]">
+            Contábil
+          </span>
+        ),
+      statLabel:
+        totalContratosEmprestimos === 0 && qtdLancamentosEmprestimosSemContrato > 0
+          ? 'Lançamentos classificados'
+          : 'Saldo devedor total',
       statValue: podeVerValores ? (
-        <span className="mono-value font-bold text-neutral-900">
-          {formatCurrency(props.saldoDevedorEmprestimos || 0)}
-        </span>
+        totalContratosEmprestimos === 0 && qtdLancamentosEmprestimosSemContrato > 0 ? (
+          <span className="mono-value font-bold text-amber-900">
+            {formatCurrency(somaLancamentosEmprestimosSemContrato)}{' '}
+            <span className="text-[11px] font-normal text-neutral-600">
+              ({qtdLancamentosEmprestimosSemContrato} lanc.)
+            </span>
+          </span>
+        ) : (
+          <span className="mono-value font-bold text-neutral-900">
+            {formatCurrency(saldoDevedorEmprestimos)}
+          </span>
+        )
       ) : (
         <span className="text-neutral-400">•••••</span>
       ),
-      statSubtext: `${props.totalContratosEmprestimos || 0} contrato(s) ativo(s) / amortização`,
+      statSubtext:
+        totalContratosEmprestimos === 0 && qtdLancamentosEmprestimosSemContrato > 0
+          ? 'Clique para abrir e cadastrar o contrato'
+          : `${totalContratosEmprestimos} contrato(s) ativo(s) / amortização`,
       visible: canWrite,
     },
     {

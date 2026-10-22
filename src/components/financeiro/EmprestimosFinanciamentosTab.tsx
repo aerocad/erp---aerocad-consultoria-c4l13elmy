@@ -57,6 +57,7 @@ export interface EmprestimosFinanciamentosTabProps {
   userRole?: string
   usuarioNome?: string
   onNavigateTab?: (tab: string) => void
+  onReloadCentral?: () => void
 }
 
 export function EmprestimosFinanciamentosTab({
@@ -66,6 +67,7 @@ export function EmprestimosFinanciamentosTab({
   userRole,
   usuarioNome = 'Usuário AEROCAD',
   onNavigateTab,
+  onReloadCentral,
 }: EmprestimosFinanciamentosTabProps) {
   const { toast } = useToast()
   const podeVerValores = canViewFinancials(userRole)
@@ -95,7 +97,7 @@ export function EmprestimosFinanciamentosTab({
     useState<EmprestimoFinanciamentoRecord | null>(null)
 
   // Carrega dados da coleção
-  const carregarDados = async () => {
+  const carregarDados = async (notificarCentral = false) => {
     try {
       setCarregando(true)
       const [listaContratos, listaParcelas] = await Promise.all([
@@ -111,6 +113,10 @@ export function EmprestimosFinanciamentosTab({
 
       setContratos(listaContratos)
       setParcelas(listaParcelas)
+      if (notificarCentral) {
+        onReloadCentral?.()
+        window.dispatchEvent(new CustomEvent('aerocad:emprestimos-atualizados'))
+      }
     } catch (err) {
       console.warn('Aviso ao carregar empréstimos e parcelas:', err)
     } finally {
@@ -118,8 +124,12 @@ export function EmprestimosFinanciamentosTab({
     }
   }
 
+  const handleRecarregarComNotificacao = () => {
+    void carregarDados(true)
+  }
+
   useEffect(() => {
-    carregarDados()
+    carregarDados(false)
   }, [])
 
   // Atualiza status de parcelas vencidas para 'atrasada' se aplicável
@@ -345,7 +355,7 @@ export function EmprestimosFinanciamentosTab({
           <Button
             size="sm"
             variant="outline"
-            onClick={carregarDados}
+            onClick={handleRecarregarComNotificacao}
             disabled={carregando}
             className="text-xs h-8 text-neutral-700 bg-white"
             title="Recarregar saldos e parcelas"
@@ -884,7 +894,7 @@ export function EmprestimosFinanciamentosTab({
         contasBancarias={contasBancarias}
         credores={credores}
         ativosPatrimonio={ativosPatrimonio}
-        onSuccess={carregarDados}
+        onSuccess={handleRecarregarComNotificacao}
       />
 
       {/* MODAL 2: PAGAR PARCELA */}
@@ -893,7 +903,7 @@ export function EmprestimosFinanciamentosTab({
         onOpenChange={setModalPagarAberto}
         parcela={parcelaParaPagar}
         contasBancarias={contasBancarias}
-        onSuccess={carregarDados}
+        onSuccess={handleRecarregarComNotificacao}
       />
 
       {/* MODAL 3: APROPRIAR JUROS DO MÊS */}
@@ -902,7 +912,7 @@ export function EmprestimosFinanciamentosTab({
         onOpenChange={setModalApropriarAberto}
         parcelasPendentesApropriacao={parcelasPendentesApropriacao}
         contratos={contratos}
-        onSuccess={carregarDados}
+        onSuccess={handleRecarregarComNotificacao}
       />
 
       {/* MODAL 4: RECLASSIFICAR PASSIVO */}
@@ -910,7 +920,7 @@ export function EmprestimosFinanciamentosTab({
         open={modalReclassificarAberto}
         onOpenChange={setModalReclassificarAberto}
         parcelasCandidatasReclassificacao={parcelasCandidatasReclassificacao}
-        onSuccess={carregarDados}
+        onSuccess={handleRecarregarComNotificacao}
       />
 
       {/* MODAL 5: EXCLUIR E ESTORNAR CONTRATO */}
@@ -919,7 +929,7 @@ export function EmprestimosFinanciamentosTab({
         onOpenChange={setModalExcluirAberto}
         contrato={contratoParaExcluir}
         userRole={userRole}
-        onSuccess={carregarDados}
+        onSuccess={handleRecarregarComNotificacao}
       />
     </div>
   )

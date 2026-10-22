@@ -1,4 +1,12 @@
-import { Component, useMemo, useState, type ErrorInfo, type FormEvent, type ReactNode } from 'react'
+import {
+  Component,
+  useEffect,
+  useMemo,
+  useState,
+  type ErrorInfo,
+  type FormEvent,
+  type ReactNode,
+} from 'react'
 import {
   Banknote,
   BarChart3,
@@ -515,6 +523,17 @@ export function FinancePage() {
     }
   }, [installments.data, contasReceber.data, contasPagar.data])
 
+  // Listener para atualização de contratos de empréstimos e financiamentos
+  useEffect(() => {
+    const handleEmprestimosAtualizados = () => {
+      void emprestimosFinanciamentosData.reload()
+    }
+    window.addEventListener('aerocad:emprestimos-atualizados', handleEmprestimosAtualizados)
+    return () => {
+      window.removeEventListener('aerocad:emprestimos-atualizados', handleEmprestimosAtualizados)
+    }
+  }, [emprestimosFinanciamentosData])
+
   // Extratos & Comprovantes pendentes de conciliação
   const qtdExtratosPendentes = useMemo(() => {
     return extratosTransacoes.data.filter(
@@ -527,6 +546,56 @@ export function FinancePage() {
     if (!balancetesList.data || balancetesList.data.length === 0) return null
     return balancetesList.data[0]?.referencia || null
   }, [balancetesList.data])
+
+  // Lançamentos classificados em contas de empréstimos/financiamentos (2.1.6, 2.1.7, 2.2.1, 2.2.2)
+  // identificados no extrato ou contas a pagar que ainda não foram contratados no módulo
+  const { qtdLancamentosEmprestimosSemContrato, somaLancamentosEmprestimosSemContrato } =
+    useMemo(() => {
+      // Códigos típicos do plano de contas para empréstimos e financiamentos:
+      // 2.1.6: Empréstimos Bancários a Pagar
+      // 2.1.7: Financiamentos a Pagar
+      // 2.2.1: Empréstimos Bancários LP
+      // 2.2.2: Financiamentos Bancários LP
+      const codigosEmprestimos = ['2.1.6', '2.1.7', '2.2.1', '2.2.2']
+      const isContaEmprestimo = (cod?: string | null, nome?: string | null) => {
+        if (!cod && !nome) return false
+        const c = (cod || '').trim()
+        const n = (nome || '').toLowerCase()
+        if (codigosEmprestimos.some((p) => c.startsWith(p))) return true
+        if (n.includes('empréstimo') || n.includes('financiamento')) {
+          // Se pertencer ao passivo (2.x)
+          if (c.startsWith('2.')) return true
+        }
+        return false
+      }
+
+      let count = 0
+      let soma = 0
+
+      // 1. Transações de extrato classificadas
+      for (const tx of extratosTransacoes.data) {
+        if (isContaEmprestimo(tx.plano_contas_codigo, tx.plano_contas_nome)) {
+          count++
+          soma += Math.abs(tx.valor || 0)
+        }
+      }
+
+      // 2. Contas a pagar classificadas
+      for (const cp of contasPagar.data) {
+        if (
+          cp.status !== 'cancelado' &&
+          isContaEmprestimo(cp.plano_contas_codigo, cp.plano_contas_nome)
+        ) {
+          count++
+          soma += Math.abs(cp.valor || 0)
+        }
+      }
+
+      return {
+        qtdLancamentosEmprestimosSemContrato: count,
+        somaLancamentosEmprestimosSemContrato: soma,
+      }
+    }, [extratosTransacoes.data, contasPagar.data])
 
   // Opções de períodos / granularidade quando um ano está selecionado
   const PERIOD_OPTIONS = [
@@ -1309,6 +1378,8 @@ export function FinancePage() {
         saldoDevedorEmprestimos={emprestimosFinanciamentosData.data
           .filter((e: any) => e.status !== 'cancelado')
           .reduce((acc: number, e: any) => acc + (e.saldo_devedor_atual || 0), 0)}
+        qtdLancamentosEmprestimosSemContrato={qtdLancamentosEmprestimosSemContrato}
+        somaLancamentosEmprestimosSemContrato={somaLancamentosEmprestimosSemContrato}
         saldoMesCorrente={saldoMesCorrente}
         mesCorrenteNome={mesCorrenteNome}
         qtdExtratosPendentes={qtdExtratosPendentes}
@@ -1578,6 +1649,9 @@ export function FinancePage() {
             userRole={user?.role}
             usuarioNome={user?.name || user?.email || 'Usuário AEROCAD'}
             onNavigateTab={(tab: any) => setActiveTab(tab)}
+            onReloadCentral={() => {
+              void emprestimosFinanciamentosData.reload()
+            }}
           />
         </div>
       ) : activeTab === 'contas_bancarias' ? (

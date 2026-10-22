@@ -370,6 +370,16 @@ export async function reclassificarLancamentoContabil({
   const conta = obterItemPlanoContasPorCodigo(codigoNovo)
   const nomeFinal = nomeNovo || conta?.nome || 'Conta Contábil Personalizada'
 
+  // Se a observação enviada citar uma reclassificação com código desatualizado/incoerente com codigoNovo,
+  // ajustamos para garantir alinhamento exato: "Reclassificado para <nomeFinal> (código <codigoNovo>)"
+  let observacoesSanitizadas = observacoes !== undefined ? observacoes.trim() : undefined
+  if (observacoesSanitizadas && /Reclassificado para/i.test(observacoesSanitizadas)) {
+    const matchCod = observacoesSanitizadas.match(/código\s+([0-9.]+)/i)
+    if (matchCod && matchCod[1] !== codigoNovo) {
+      observacoesSanitizadas = `Reclassificado para ${nomeFinal} (código ${codigoNovo})`
+    }
+  }
+
   // 1. Atualizar registro principal no PocketBase
   const payloadUpdate: Record<string, unknown> = {
     plano_contas_codigo: codigoNovo,
@@ -377,8 +387,8 @@ export async function reclassificarLancamentoContabil({
     classificacao_manual: true,
   }
 
-  if (observacoes !== undefined) {
-    payloadUpdate.observacoes = observacoes.trim()
+  if (observacoesSanitizadas !== undefined) {
+    payloadUpdate.observacoes = observacoesSanitizadas
   }
 
   await pb.collection(colecao).update(id, payloadUpdate)
@@ -411,6 +421,9 @@ export async function reclassificarLancamentoContabil({
               plano_contas_codigo: codigoNovo,
               plano_contas_nome: nomeFinal,
               classificacao_manual: true,
+            }
+            if (observacoesSanitizadas !== undefined) {
+              payloadOutro.observacoes = observacoesSanitizadas
             }
             await pb.collection(colecao).update(outId, payloadOutro)
             idsAfetados.push(outId)
@@ -462,7 +475,7 @@ export async function reclassificarLancamentoContabil({
         colecao,
         codigo_novo: codigoNovo,
         nome_novo: nomeFinal,
-        observacoes: observacoes?.trim() || null,
+        observacoes: observacoesSanitizadas || null,
         total_afetados: totalAfetados,
       },
       detalhes_json: {
@@ -473,7 +486,7 @@ export async function reclassificarLancamentoContabil({
         codigo_novo: codigoNovo,
         nome_novo: nomeFinal,
         data_registro: dataRegistro || null,
-        observacoes: observacoes?.trim() || null,
+        observacoes: observacoesSanitizadas || null,
         total_afetados: totalAfetados,
         ids_afetados: idsAfetados,
       },
@@ -485,7 +498,7 @@ export async function reclassificarLancamentoContabil({
         plano_contas_codigo: codigoNovo,
         plano_contas_nome: nomeFinal,
         classificacao_manual: true,
-        observacoes: observacoes?.trim() || null,
+        observacoes: observacoesSanitizadas || null,
       },
       data_hora: new Date().toISOString(),
       sucesso: true,
