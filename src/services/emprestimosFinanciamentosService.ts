@@ -12,8 +12,10 @@ import type {
   EmprestimoFinanciamentoRecord,
   EmprestimoParcelaRecord,
   TipoEmprestimoFinanciamento,
-  MetodoAmortizacao,
 } from '@/types/crm'
+
+export type { MetodoAmortizacao } from '@/types/crm'
+import type { MetodoAmortizacao } from '@/types/crm'
 
 export interface DadosContratacaoEmprestimo {
   numero_contrato: string
@@ -964,5 +966,570 @@ export async function excluirContratoOperacao({
     sucesso: true,
     itensEstornados: estornados,
     mensagem: `Contrato nº ${contrato.numero_contrato} e seus lançamentos foram excluídos e estornados com sucesso.`,
+  }
+}
+
+/**
+ * Interface para os dados editáveis do contrato de empréstimo/financiamento
+ */
+export interface DadosAtualizacaoContrato {
+  contratoId: string
+  numero_contrato?: string
+  descricao?: string
+  banco_nome?: string
+  credor_id?: string
+  valor_total_divida?: number
+  valor_liquido_liberado?: number
+  total_juros_prefixados?: number
+  taxa_juros_mensal?: number
+  taxa_juros_anual?: number
+  valor_parcela?: number
+  quantidade_parcelas?: number
+  data_contratacao?: string // YYYY-MM-DD
+  data_primeira_parcela?: string // YYYY-MM-DD
+  conta_bancaria_debito?: string
+  metodo_amortizacao?: MetodoAmortizacao
+  bem_adquirido_descricao?: string
+  observacoes?: string
+}
+
+/**
+ * Recalcula e regenera o cronograma de parcelas futuras mantendo o histórico das já pagas.
+ * Conforme CPC 38 / IFRS 9 e partidas contábeis: as baixas e apropriações passadas não são desfeitas;
+ * o saldo devedor remanescente e os prazos futuros são reorganizados para frente.
+ */
+export async function editarContratoOperacao({
+  dados,
+  usuarioId,
+}: {
+  dados: DadosAtualizacaoContrato
+  usuarioId?: string
+}): Promise<{
+  contratoAtualizado: EmprestimoFinanciamentoRecord
+  parcelasAtualizadas: EmprestimoParcelaRecord[]
+  parcelasFuturasRegeneradas: number
+  mensagem: string
+}> {
+  const currentUserId = usuarioId || pb.authStore.record?.id
+  const contratoOriginal = await pb
+    .collection('emprestimos_financiamentos')
+    .getOne<EmprestimoFinanciamentoRecord>(dados.contratoId)
+
+  const todasParcelas = await pb
+    .collection('emprestimos_parcelas')
+    .getFullList<EmprestimoParcelaRecord>({
+      filter: `contrato = '${dados.contratoId}'`,
+      sort: 'numero_parcela',
+    })
+
+  const parcelasPagas = todasParcelas.filter((p) => p.status === 'paga')
+  const parcelasNaoPagas = todasParcelas.filter((p) => p.status !== 'paga')
+
+  const totalAmortizadoJaPago = parcelasPagas.reduce((acc, p) => acc + (p.valor_principal || 0), 0)
+  const totalJurosJaPagos = parcelasPagas.reduce((acc, p) => acc + (p.valor_juros || 0), 0)
+  const totalJurosJaApropriados = todasParcelas
+    .filter((p) => p.juros_apropriados)
+    .reduce((acc, p) => acc + (p.valor_juros || 0), 0)
+
+  // Novos parâmetros ou preserva os anteriores
+  const novoNumContrato = dados.numero_contrato ?? contratoOriginal.numero_contrato
+  const novaDescricao = dados.descricao ?? contratoOriginal.descricao
+  const novoBanco = dados.banco_nome ?? contratoOriginal.banco_nome
+  const novoCredor =
+    dados.credor_id !== undefined ? dados.credor_id || null : contratoOriginal.credor
+  const novoMetodo =
+    dados.metodo_amortizacao ?? (contratoOriginal.metodo_amortizacao as MetodoAmortizacao)
+  const novoTotalDivida = dados.valor_total_divida ?? contratoOriginal.valor_total_divida
+  const novoLiquido = dados.valor_liquido_liberado ?? contratoOriginal.valor_liquido_liberado
+  const novoJurosTotal = dados.total_juros_prefixados ?? contratoOriginal.total_juros_prefixados
+  const novaTaxaMensal = dados.taxa_juros_mensal ?? contratoOriginal.taxa_juros_mensal
+  const novaTaxaAnual =
+    dados.taxa_juros_anual ??
+    (dados.taxa_juros_mensal ? dados.taxa_juros_mensal * 12 : contratoOriginal.taxa_juros_anual)
+  const novoQtdParcelas = dados.quantidade_parcelas ?? contratoOriginal.quantidade_parcelas
+  const novoValorParcela = dados.valor_parcela ?? contratoOriginal.valor_parcela
+  const novaContaBancaria =
+    dados.conta_bancaria_debito !== undefined
+      ? dados.conta_bancaria_debito || null
+      : contratoOriginal.conta_bancaria_debito
+  const novaDtContratacao = dados.data_contratacao
+    ? `${dados.data_contratacao.slice(0, 10)} 12:00:00.000Z`
+    : contratoOriginal.data_contratacao
+  const novaDtPrimeira = dados.data_primeira_parcela
+    ? `${dados.data_primeira_parcela.slice(0, 10)} 12:00:00.000Z`
+    : contratoOriginal.data_primeira_parcela
+  const novoBem =
+    dados.bem_adquirido_descricao !== undefined
+      ? dados.bem_adquirido_descricao || null
+      : contratoOriginal.bem_adquirido_descricao
+  const novaObs = dados.observacoes !== undefined ? dados.observacoes : contratoOriginal.observacoes
+
+  // Verifica se parâmetros de cronograma mudaram
+  const alterouCronograma =
+    (dados.taxa_juros_mensal !== undefined &&
+      dados.taxa_juros_mensal !== contratoOriginal.taxa_juros_mensal) ||
+    (dados.quantidade_parcelas !== undefined &&
+      dados.quantidade_parcelas !== contratoOriginal.quantidade_parcelas) ||
+    (dados.valor_liquido_liberado !== undefined &&
+      dados.valor_liquido_liberado !== contratoOriginal.valor_liquido_liberado) ||
+    (dados.valor_total_divida !== undefined &&
+      dados.valor_total_divida !== contratoOriginal.valor_total_divida) ||
+    (dados.total_juros_prefixados !== undefined &&
+      dados.total_juros_prefixados !== contratoOriginal.total_juros_prefixados) ||
+    (dados.metodo_amortizacao !== undefined &&
+      dados.metodo_amortizacao !== contratoOriginal.metodo_amortizacao) ||
+    (dados.data_primeira_parcela !== undefined &&
+      dados.data_primeira_parcela.slice(0, 10) !==
+        contratoOriginal.data_primeira_parcela?.slice(0, 10))
+
+  let parcelasFuturasRegeneradas = 0
+
+  if (alterouCronograma && novoQtdParcelas > parcelasPagas.length) {
+    // 1. Exclui as parcelas não pagas que serão substituídas
+    for (const p of parcelasNaoPagas) {
+      try {
+        await pb.collection('emprestimos_parcelas').delete(p.id)
+      } catch (errDel) {
+        console.warn(`Erro ao excluir parcela não paga ${p.id} durante re-cronograma:`, errDel)
+      }
+    }
+
+    // 2. Calcula novo saldo devedor principal remanescente a ser amortizado pelas futuras
+    const principalRestante = Math.max(0, novoLiquido - totalAmortizadoJaPago)
+    const parcelasRestantesQtd = Math.max(1, novoQtdParcelas - parcelasPagas.length)
+    const proximoNumero = parcelasPagas.length + 1
+
+    // Data de vencimento da próxima parcela
+    let dataInicioFuturas = dados.data_primeira_parcela
+      ? dados.data_primeira_parcela.slice(0, 10)
+      : ''
+    if (!dataInicioFuturas || parcelasPagas.length > 0) {
+      if (parcelasPagas.length > 0) {
+        const ultPaga = parcelasPagas[parcelasPagas.length - 1]
+        const dtUlt = ultPaga.data_vencimento
+          ? ultPaga.data_vencimento.slice(0, 10)
+          : new Date().toISOString().slice(0, 10)
+        dataInicioFuturas = adicionarMesesAData(dtUlt, 1)
+      } else {
+        dataInicioFuturas = novaDtPrimeira.slice(0, 10)
+      }
+    }
+
+    // Calcula juros prefixados restantes para as parcelas futuras
+    const jurosRestantesTotal = Math.max(0, novoJurosTotal - totalJurosJaPagos)
+
+    // Simula as parcelas futuras
+    const cronogramaFuturo = gerarCronogramaParcelas({
+      valorPrincipal: principalRestante,
+      totalJurosPrefixados: jurosRestantesTotal,
+      quantidadeParcelas: parcelasRestantesQtd,
+      taxaJurosMensal: novaTaxaMensal,
+      dataPrimeiraParcela: dataInicioFuturas,
+      metodoAmortizacao: novoMetodo,
+      dataBaseContratacao: novaDtContratacao.slice(0, 10),
+    })
+
+    // Cria as novas parcelas no banco de dados com a numeração contínua
+    for (let i = 0; i < cronogramaFuturo.length; i++) {
+      const item = cronogramaFuturo[i]
+      const numParcelaReal = proximoNumero + i
+      await pb.collection('emprestimos_parcelas').create<EmprestimoParcelaRecord>({
+        contrato: dados.contratoId,
+        numero_parcela: numParcelaReal,
+        competencia: item.competencia,
+        data_vencimento: `${item.data_vencimento} 12:00:00.000Z`,
+        valor_parcela: item.valor_parcela,
+        valor_principal: item.valor_principal,
+        valor_juros: item.valor_juros,
+        saldo_devedor_restante: item.saldo_devedor_restante,
+        classificacao_passivo: item.classificacao_passivo,
+        status: 'pendente',
+        juros_apropriados: false,
+        conta_bancaria: novaContaBancaria,
+        observacoes: `Parcela ${numParcelaReal}/${novoQtdParcelas} - Contrato ${novoNumContrato} (Regenerado em ${new Date().toISOString().slice(0, 10)})`,
+      })
+      parcelasFuturasRegeneradas++
+    }
+  }
+
+  // Busca todas as parcelas atualizadas para recalcular saldos consolidados
+  const parcelasFinais = await pb
+    .collection('emprestimos_parcelas')
+    .getFullList<EmprestimoParcelaRecord>({
+      filter: `contrato = '${dados.contratoId}'`,
+      sort: 'numero_parcela',
+      expand: 'contrato,conta_bancaria',
+    })
+
+  const totalAmortizadoFinal = parcelasFinais
+    .filter((p) => p.status === 'paga')
+    .reduce((acc, p) => acc + (p.valor_principal || 0), 0)
+  const totalJurosPagosFinal = parcelasFinais
+    .filter((p) => p.status === 'paga')
+    .reduce((acc, p) => acc + (p.valor_juros || 0), 0)
+  const totalJurosApropriadosFinal = parcelasFinais
+    .filter((p) => p.juros_apropriados)
+    .reduce((acc, p) => acc + (p.valor_juros || 0), 0)
+
+  const saldoDevedorFinal = Math.max(0, novoLiquido - totalAmortizadoFinal)
+  const saldoJurosRestanteFinal = Math.max(0, novoJurosTotal - totalJurosApropriadosFinal)
+
+  const parcelasPendentes = parcelasFinais.filter((p) => p.status !== 'paga')
+  const saldoCirculanteFinal = parcelasPendentes
+    .filter((p) => p.classificacao_passivo === 'circulante')
+    .reduce((acc, p) => acc + (p.valor_principal || 0), 0)
+  const saldoNaoCirculanteFinal = parcelasPendentes
+    .filter((p) => p.classificacao_passivo === 'nao_circulante')
+    .reduce((acc, p) => acc + (p.valor_principal || 0), 0)
+
+  const statusFinal = parcelasPendentes.length === 0 ? 'quitado' : 'ativo'
+
+  // Atualiza registro do contrato
+  const contratoAtualizado = await pb
+    .collection('emprestimos_financiamentos')
+    .update<EmprestimoFinanciamentoRecord>(dados.contratoId, {
+      numero_contrato: novoNumContrato,
+      descricao: novaDescricao,
+      banco_nome: novoBanco,
+      credor: novoCredor,
+      metodo_amortizacao: novoMetodo,
+      valor_total_divida: novoTotalDivida,
+      valor_liquido_liberado: novoLiquido,
+      total_juros_prefixados: novoJurosTotal,
+      taxa_juros_mensal: novaTaxaMensal,
+      taxa_juros_anual: novaTaxaAnual,
+      quantidade_parcelas: novoQtdParcelas,
+      valor_parcela: novoValorParcela,
+      data_contratacao: novaDtContratacao,
+      data_primeira_parcela: novaDtPrimeira,
+      conta_bancaria_debito: novaContaBancaria,
+      bem_adquirido_descricao: novoBem,
+      observacoes: novaObs,
+      saldo_devedor_atual: saldoDevedorFinal,
+      saldo_juros_a_apropriar: saldoJurosRestanteFinal,
+      saldo_circulante: saldoCirculanteFinal,
+      saldo_nao_circulante: saldoNaoCirculanteFinal,
+      total_amortizado: totalAmortizadoFinal,
+      total_juros_pagos: totalJurosPagosFinal,
+      total_juros_apropriados: totalJurosApropriadosFinal,
+      status: statusFinal,
+    })
+
+  // Auditoria detalhada antes/depois
+  await registrarAuditoriaFinanceira({
+    tipoOperacao: 'atualizacao_contrato_emprestimo',
+    descricao: `[EDIÇÃO DE CONTRATO] Contrato ${novoNumContrato} (${novoBanco}) atualizado pelo administrador. Parcelas futuras regeneradas: ${parcelasFuturasRegeneradas}. Histórico de ${parcelasPagas.length} parcela(s) pagas preservado.`,
+    detalhes: {
+      contratoId: dados.contratoId,
+      alteracoes_solicitadas: dados,
+      antes: {
+        numero_contrato: contratoOriginal.numero_contrato,
+        banco_nome: contratoOriginal.banco_nome,
+        valor_total_divida: contratoOriginal.valor_total_divida,
+        valor_liquido_liberado: contratoOriginal.valor_liquido_liberado,
+        taxa_juros_mensal: contratoOriginal.taxa_juros_mensal,
+        quantidade_parcelas: contratoOriginal.quantidade_parcelas,
+        metodo_amortizacao: contratoOriginal.metodo_amortizacao,
+        saldo_devedor_atual: contratoOriginal.saldo_devedor_atual,
+      },
+      depois: {
+        numero_contrato: novoNumContrato,
+        banco_nome: novoBanco,
+        valor_total_divida: novoTotalDivida,
+        valor_liquido_liberado: novoLiquido,
+        taxa_juros_mensal: novaTaxaMensal,
+        quantidade_parcelas: novoQtdParcelas,
+        metodo_amortizacao: novoMetodo,
+        saldo_devedor_atual: saldoDevedorFinal,
+      },
+      parcelasPagasPreservadas: parcelasPagas.length,
+      parcelasFuturasRegeneradas,
+    },
+    usuarioId: currentUserId,
+  })
+
+  return {
+    contratoAtualizado,
+    parcelasAtualizadas: parcelasFinais,
+    parcelasFuturasRegeneradas,
+    mensagem: `Contrato ${novoNumContrato} atualizado com sucesso. ${parcelasFuturasRegeneradas} parcelas futuras recalculadas mantendo o histórico de pagamentos.`,
+  }
+}
+
+/**
+ * REPORTAR CONTRATO EM DIA:
+ * Atualiza todas as parcelas em atraso (vencidas e pendentes) para status "pago",
+ * gerando a mesma baixa contábil do fluxo normal de pagamento de parcela de forma idempotente.
+ */
+export async function reportarContratoEmDia({
+  contratoId,
+  dataPagamentoIso,
+  contaBancariaId,
+  formaPagamento = 'debito_automatico',
+  usuarioId,
+}: {
+  contratoId: string
+  dataPagamentoIso?: string // YYYY-MM-DD (default hoje)
+  contaBancariaId?: string
+  formaPagamento?: string
+  usuarioId?: string
+}): Promise<{
+  sucesso: boolean
+  parcelasBaixadas: number
+  totalPago: number
+  totalAmortizado: number
+  totalJuros: number
+  mensagem: string
+}> {
+  const currentUserId = usuarioId || pb.authStore.record?.id
+  const dtPagto = dataPagamentoIso || new Date().toISOString().slice(0, 10)
+  const hojeStr = new Date().toISOString().slice(0, 10)
+
+  const contrato = await pb
+    .collection('emprestimos_financiamentos')
+    .getOne<EmprestimoFinanciamentoRecord>(contratoId)
+
+  // Busca todas as parcelas do contrato
+  const todasParcelas = await pb
+    .collection('emprestimos_parcelas')
+    .getFullList<EmprestimoParcelaRecord>({
+      filter: `contrato = '${contratoId}'`,
+      sort: 'numero_parcela',
+    })
+
+  // Identifica parcelas em atraso: pendentes com vencimento < hoje ou status = 'atrasada'
+  const parcelasEmAtraso = todasParcelas.filter((p) => {
+    if (p.status === 'paga') return false
+    const venc = p.data_vencimento ? p.data_vencimento.slice(0, 10) : ''
+    return p.status === 'atrasada' || (venc && venc < hojeStr)
+  })
+
+  if (parcelasEmAtraso.length === 0) {
+    return {
+      sucesso: true,
+      parcelasBaixadas: 0,
+      totalPago: 0,
+      totalAmortizado: 0,
+      totalJuros: 0,
+      mensagem: `O contrato nº ${contrato.numero_contrato} não possui parcelas em atraso no momento.`,
+    }
+  }
+
+  let totalPago = 0
+  let totalAmortizado = 0
+  let totalJuros = 0
+  const parcelasIdsAfetadas: string[] = []
+
+  // Baixa parcela a parcela utilizando pagarParcelaOperacao para garantir estrita observância
+  // contábil (D Passivo 2.1.6/2.1.7, C Bancos 1.1.1, apropriação prévia de juros se pendente)
+  for (const p of parcelasEmAtraso) {
+    // Idempotência: se já possui conta_pagar_id e está paga, não rebaixa
+    if (p.status === 'paga' && p.conta_pagar_id) continue
+
+    await pagarParcelaOperacao({
+      parcelaId: p.id,
+      dataPagamentoIso: dtPagto,
+      valorPago: p.valor_parcela,
+      contaBancariaId: contaBancariaId || contrato.conta_bancaria_debito,
+      formaPagamento,
+    })
+
+    totalPago += p.valor_parcela || 0
+    totalAmortizado += p.valor_principal || 0
+    totalJuros += p.valor_juros || 0
+    parcelasIdsAfetadas.push(p.id)
+  }
+
+  // Auditoria
+  await registrarAuditoriaFinanceira({
+    tipoOperacao: 'reportar_contrato_em_dia',
+    descricao: `[CONTRATO EM DIA] ${parcelasEmAtraso.length} parcela(s) em atraso do contrato ${contrato.numero_contrato} foram baixadas e regularizadas pelo administrador. Total liquidado: R$ ${totalPago.toFixed(2)}.`,
+    detalhes: {
+      contratoId,
+      numero_contrato: contrato.numero_contrato,
+      dataPagamento: dtPagto,
+      contaBancariaId: contaBancariaId || contrato.conta_bancaria_debito,
+      formaPagamento,
+      quantidadeParcelasBaixadas: parcelasEmAtraso.length,
+      parcelasIdsAfetadas,
+      totalPago,
+      totalAmortizado,
+      totalJuros,
+    },
+    usuarioId: currentUserId,
+  })
+
+  return {
+    sucesso: true,
+    parcelasBaixadas: parcelasEmAtraso.length,
+    totalPago,
+    totalAmortizado,
+    totalJuros,
+    mensagem: `${parcelasEmAtraso.length} parcela(s) em atraso foram regularizadas como pagas com sucesso. Total liquidado: R$ ${totalPago.toFixed(2)}.`,
+  }
+}
+
+/**
+ * Estrutura dos dados retornados pela extração inteligente de PDF via IA
+ */
+export interface DadosExtracaoPdfEmprestimo {
+  banco_nome: string
+  numero_contrato: string
+  tipo: 'emprestimo_bancario' | 'financiamento_veiculo' | 'outras_modalidades'
+  metodo_amortizacao: MetodoAmortizacao
+  valor_total_divida: number
+  valor_liquido_liberado: number
+  total_juros_prefixados: number
+  taxa_juros_mensal: number
+  taxa_juros_anual: number
+  quantidade_parcelas: number
+  valor_parcela: number
+  valor_entrada?: number
+  bem_adquirido_descricao?: string
+  data_contratacao: string // YYYY-MM-DD
+  data_primeira_parcela: string // YYYY-MM-DD
+  parcelas?: Array<{
+    numero_parcela: number
+    data_vencimento: string
+    valor_parcela: number
+    valor_principal?: number
+    valor_juros?: number
+  }>
+  confianca?: 'alta' | 'media' | 'baixa'
+  aviso?: string | null
+}
+
+/**
+ * Envia o arquivo PDF de contrato ou carnê para o endpoint do backend /backend/v1/emprestimos/extrair-pdf
+ */
+export async function extrairPdfEmprestimoBackend(file: File): Promise<{
+  sucesso: boolean
+  dados: DadosExtracaoPdfEmprestimo
+  aviso?: string | null
+}> {
+  const formData = new FormData()
+  formData.append('arquivo', file)
+
+  const token = pb.authStore.token
+  const baseUrl = pb.baseUrl || ''
+  const response = await fetch(`${baseUrl}/backend/v1/emprestimos/extrair-pdf`, {
+    method: 'POST',
+    headers: {
+      Authorization: token ? `Bearer ${token}` : '',
+    },
+    body: formData,
+  })
+
+  if (!response.ok) {
+    const errText = await response.text()
+    let errorMsg = `Erro ${response.status} ao extrair dados do PDF.`
+    try {
+      const errJson = JSON.parse(errText)
+      if (errJson.message || errJson.error) {
+        errorMsg = errJson.message || errJson.error
+      }
+    } catch {
+      /* intentionally ignored */
+    }
+    throw new Error(errorMsg)
+  }
+
+  const resJson = await response.json()
+  return resJson
+}
+
+/**
+ * Aplica os dados do PDF importado sobrepondo um contrato existente
+ * ou criando as parcelas a partir do cronograma do PDF se fornecido.
+ */
+export async function sobreporContratoComPdf({
+  contratoId,
+  dadosExtraidos,
+  usuarioId,
+}: {
+  contratoId: string
+  dadosExtraidos: DadosExtracaoPdfEmprestimo
+  usuarioId?: string
+}): Promise<{
+  contrato: EmprestimoFinanciamentoRecord
+  mensagem: string
+}> {
+  const currentUserId = usuarioId || pb.authStore.record?.id
+  const contratoOriginal = await pb
+    .collection('emprestimos_financiamentos')
+    .getOne<EmprestimoFinanciamentoRecord>(contratoId)
+
+  // Atualiza contrato chamando editarContratoOperacao
+  const res = await editarContratoOperacao({
+    dados: {
+      contratoId,
+      numero_contrato: dadosExtraidos.numero_contrato || contratoOriginal.numero_contrato,
+      banco_nome: dadosExtraidos.banco_nome || contratoOriginal.banco_nome,
+      valor_total_divida: dadosExtraidos.valor_total_divida,
+      valor_liquido_liberado: dadosExtraidos.valor_liquido_liberado,
+      total_juros_prefixados: dadosExtraidos.total_juros_prefixados,
+      taxa_juros_mensal: dadosExtraidos.taxa_juros_mensal,
+      taxa_juros_anual: dadosExtraidos.taxa_juros_anual,
+      valor_parcela: dadosExtraidos.valor_parcela,
+      quantidade_parcelas: dadosExtraidos.quantidade_parcelas,
+      metodo_amortizacao: dadosExtraidos.metodo_amortizacao,
+      data_contratacao: dadosExtraidos.data_contratacao,
+      data_primeira_parcela: dadosExtraidos.data_primeira_parcela,
+      bem_adquirido_descricao: dadosExtraidos.bem_adquirido_descricao,
+      observacoes: `[SOBREPOSIÇÃO VIA IMPORTAÇÃO PDF] Atualizado em ${new Date().toISOString().slice(0, 10)}.`,
+    },
+    usuarioId: currentUserId,
+  })
+
+  // Se o PDF possuir cronograma explícito de parcelas, atualiza vencimentos e valores nas parcelas pendentes
+  if (dadosExtraidos.parcelas && dadosExtraidos.parcelas.length > 0) {
+    const parcelasPendentes = await pb
+      .collection('emprestimos_parcelas')
+      .getFullList<EmprestimoParcelaRecord>({
+        filter: `contrato = '${contratoId}' && status != 'paga'`,
+        sort: 'numero_parcela',
+      })
+
+    for (const pExt of dadosExtraidos.parcelas) {
+      const parcCorrespondente = parcelasPendentes.find(
+        (p) => p.numero_parcela === pExt.numero_parcela,
+      )
+      if (parcCorrespondente) {
+        const patch: Record<string, unknown> = {}
+        if (pExt.data_vencimento) {
+          patch.data_vencimento = `${pExt.data_vencimento.slice(0, 10)} 12:00:00.000Z`
+          patch.competencia = obterCompetenciaMes(pExt.data_vencimento)
+        }
+        if (pExt.valor_parcela) patch.valor_parcela = pExt.valor_parcela
+        if (pExt.valor_principal) patch.valor_principal = pExt.valor_principal
+        if (pExt.valor_juros) patch.valor_juros = pExt.valor_juros
+
+        if (Object.keys(patch).length > 0) {
+          await pb.collection('emprestimos_parcelas').update(parcCorrespondente.id, patch)
+        }
+      }
+    }
+  }
+
+  // Auditoria específica de sobreposição
+  await registrarAuditoriaFinanceira({
+    tipoOperacao: 'sobreposicao_contrato_pdf',
+    descricao: `[IMPORTAÇÃO PDF] Dados do contrato ${contratoOriginal.numero_contrato} foram sobrepostos via importação inteligente de PDF pelo administrador.`,
+    detalhes: {
+      contratoId,
+      dadosExtraidos,
+      contratoAnterior: {
+        numero_contrato: contratoOriginal.numero_contrato,
+        valor_total_divida: contratoOriginal.valor_total_divida,
+        valor_liquido_liberado: contratoOriginal.valor_liquido_liberado,
+        banco_nome: contratoOriginal.banco_nome,
+      },
+    },
+    usuarioId: currentUserId,
+  })
+
+  return {
+    contrato: res.contratoAtualizado,
+    mensagem: `Dados do contrato ${res.contratoAtualizado.numero_contrato} sobrepostos com sucesso a partir do PDF.`,
   }
 }

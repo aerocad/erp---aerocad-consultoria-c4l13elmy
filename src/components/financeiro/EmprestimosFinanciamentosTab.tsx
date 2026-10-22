@@ -15,6 +15,8 @@ import { useToast } from '@/hooks/use-toast'
 import { formatCurrency, formatDate } from '@/lib/format'
 import { canViewFinancials } from '@/lib/crm'
 import { isValoresOcultos } from '@/lib/format'
+import { isUserAdmin } from '@/lib/crm'
+import { useAuth } from '@/contexts/AuthContext'
 import type {
   EmprestimoFinanciamentoRecord,
   EmprestimoParcelaRecord,
@@ -27,6 +29,9 @@ import { PagarParcelaModal } from './PagarParcelaModal'
 import { ApropriarJurosModal } from './ApropriarJurosModal'
 import { ReclassificarPassivoModal } from './ReclassificarPassivoModal'
 import { ExcluirContratoModal } from './ExcluirContratoModal'
+import { EditarContratoModal } from './EditarContratoModal'
+import { ReportarContratoEmDiaModal } from './ReportarContratoEmDiaModal'
+import { ImportarPdfContratoModal } from './ImportarPdfContratoModal'
 import { exportarTabelaParaXlsx } from '@/services/aerocadXlsxExporter'
 import {
   Landmark,
@@ -36,18 +41,15 @@ import {
   ArrowLeftRight,
   Download,
   Search,
-  Filter,
   CheckCircle2,
   Clock,
-  AlertCircle,
-  TrendingDown,
   Trash2,
   FileSpreadsheet,
-  ChevronRight,
   DollarSign,
-  HelpCircle,
   Eye,
   RefreshCw,
+  Pencil,
+  FileUp,
 } from 'lucide-react'
 
 export interface EmprestimosFinanciamentosTabProps {
@@ -70,10 +72,12 @@ export function EmprestimosFinanciamentosTab({
   onReloadCentral,
 }: EmprestimosFinanciamentosTabProps) {
   const { toast } = useToast()
-  const podeVerValores = canViewFinancials(userRole)
+  const { user } = useAuth()
+  const podeVerValores = canViewFinancials(userRole || user?.role)
   const ocultarGlobal = isValoresOcultos()
   const mascararValores = !podeVerValores || ocultarGlobal
-  const ehAdmin = userRole === 'admin'
+  // Verificação rigorosa de admin via união de atribuições (isUserAdmin suporta user com roles múltiplas)
+  const ehAdmin = isUserAdmin(user) || userRole === 'admin'
 
   // Estados de dados
   const [contratos, setContratos] = useState<EmprestimoFinanciamentoRecord[]>([])
@@ -86,7 +90,7 @@ export function EmprestimosFinanciamentosTab({
   const [filtroStatus, setFiltroStatus] = useState<string>('todos')
   const [buscaTexto, setBuscaTexto] = useState('')
 
-  // Modais
+  // Modais existentes
   const [modalContratarAberto, setModalContratarAberto] = useState(false)
   const [modalPagarAberto, setModalPagarAberto] = useState(false)
   const [parcelaParaPagar, setParcelaParaPagar] = useState<EmprestimoParcelaRecord | null>(null)
@@ -95,6 +99,18 @@ export function EmprestimosFinanciamentosTab({
   const [modalExcluirAberto, setModalExcluirAberto] = useState(false)
   const [contratoParaExcluir, setContratoParaExcluir] =
     useState<EmprestimoFinanciamentoRecord | null>(null)
+
+  // Novos Modais (restritos ao admin): Editar Contrato, Reportar Contrato em Dia, Importar PDF
+  const [modalEditarAberto, setModalEditarAberto] = useState(false)
+  const [contratoParaEditar, setContratoParaEditar] =
+    useState<EmprestimoFinanciamentoRecord | null>(null)
+
+  const [modalEmDiaAberto, setModalEmDiaAberto] = useState(false)
+  const [contratoParaEmDia, setContratoParaEmDia] = useState<EmprestimoFinanciamentoRecord | null>(
+    null,
+  )
+
+  const [modalImportarPdfAberto, setModalImportarPdfAberto] = useState(false)
 
   // Carrega dados da coleção
   const carregarDados = async (notificarCentral = false) => {
@@ -404,6 +420,20 @@ export function EmprestimosFinanciamentosTab({
             Exportar XLSX
           </Button>
 
+          {/* BOTÃO IMPORTAR PDF (RESTRITO AO ADMIN) */}
+          {ehAdmin && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setModalImportarPdfAberto(true)}
+              className="text-xs h-8 text-[#FF6A13] border-[#FF6A13]/40 hover:bg-[#FFF6EC] bg-white font-medium shadow-sm"
+              title="Importar carnê ou contrato em PDF com extração automática via IA"
+            >
+              <FileUp className="w-3.5 h-3.5 mr-1 text-[#FF6A13]" />
+              Importar PDF
+            </Button>
+          )}
+
           <Button
             size="sm"
             onClick={() => setModalContratarAberto(true)}
@@ -696,19 +726,49 @@ export function EmprestimosFinanciamentosTab({
                             <Eye className="w-3.5 h-3.5" />
                           </Button>
 
+                          {/* AÇÕES ADMINISTRATIVAS POR CONTRATO */}
                           {ehAdmin && (
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => {
-                                setContratoParaExcluir(c)
-                                setModalExcluirAberto(true)
-                              }}
-                              className="h-7 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
-                              title="Excluir e estornar contrato contábil"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </Button>
+                            <>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setContratoParaEmDia(c)
+                                  setModalEmDiaAberto(true)
+                                }}
+                                className="h-7 px-2 text-xs text-emerald-700 border-emerald-300 hover:bg-emerald-50 bg-white"
+                                title="Reportar contrato em dia (liquidar parcelas em atraso)"
+                              >
+                                <CheckCircle2 className="w-3.5 h-3.5 mr-1 text-emerald-600" />
+                                Em Dia
+                              </Button>
+
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => {
+                                  setContratoParaEditar(c)
+                                  setModalEditarAberto(true)
+                                }}
+                                className="h-7 px-2 text-xs text-neutral-700 hover:text-[#FF6A13] hover:bg-orange-50"
+                                title="Editar dados e atualizar contrato"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </Button>
+
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => {
+                                  setContratoParaExcluir(c)
+                                  setModalExcluirAberto(true)
+                                }}
+                                className="h-7 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
+                                title="Excluir e estornar contrato contábil"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
+                            </>
                           )}
                         </div>
                       </td>
@@ -929,6 +989,38 @@ export function EmprestimosFinanciamentosTab({
         onOpenChange={setModalExcluirAberto}
         contrato={contratoParaExcluir}
         userRole={userRole}
+        onSuccess={handleRecarregarComNotificacao}
+      />
+
+      {/* MODAL 6: EDITAR CONTRATO (RESTRITO AO ADMIN) */}
+      <EditarContratoModal
+        open={modalEditarAberto}
+        onOpenChange={setModalEditarAberto}
+        contrato={contratoParaEditar}
+        contasBancarias={contasBancarias}
+        credores={credores}
+        onSuccess={handleRecarregarComNotificacao}
+      />
+
+      {/* MODAL 7: REPORTAR CONTRATO EM DIA (RESTRITO AO ADMIN) */}
+      <ReportarContratoEmDiaModal
+        open={modalEmDiaAberto}
+        onOpenChange={setModalEmDiaAberto}
+        contrato={contratoParaEmDia}
+        parcelasContrato={
+          contratoParaEmDia ? parcelas.filter((p) => p.contrato === contratoParaEmDia.id) : []
+        }
+        contasBancarias={contasBancarias}
+        onSuccess={handleRecarregarComNotificacao}
+      />
+
+      {/* MODAL 8: IMPORTAR CARNÊ / CONTRATO EM PDF (RESTRITO AO ADMIN) */}
+      <ImportarPdfContratoModal
+        open={modalImportarPdfAberto}
+        onOpenChange={setModalImportarPdfAberto}
+        contratosExistentes={contratos}
+        contasBancarias={contasBancarias}
+        credores={credores}
         onSuccess={handleRecarregarComNotificacao}
       />
     </div>
