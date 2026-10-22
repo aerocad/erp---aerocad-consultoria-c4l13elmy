@@ -681,10 +681,12 @@ function obterMapeamentoColecao(colecao: string): MapeamentoXlsxColecao | null {
             (item.conta_bancaria === '865d10p9cbxbf9i'
               ? 'BB PJ Principal'
               : item.conta_bancaria === 'biid0elu3tyhm7r'
-                ? 'Itaú-Inter PJ Operacional'
-                : item.conta_bancaria
-                  ? 'Conta PJ'
-                  : 'Não classificada')
+                ? 'Banco Inter PJ (Operacional)'
+                : item.conta_bancaria === 'feaokkvqhtr2ol1'
+                  ? 'Caixa Econômica Federal (104)'
+                  : item.conta_bancaria
+                    ? 'Conta PJ'
+                    : 'Não classificada')
           return {
             descricao: item.descricao || '',
             conta_bancaria_nome: contaNome,
@@ -744,10 +746,12 @@ function obterMapeamentoColecao(colecao: string): MapeamentoXlsxColecao | null {
             (item.conta_bancaria === '865d10p9cbxbf9i'
               ? 'BB PJ Principal'
               : item.conta_bancaria === 'biid0elu3tyhm7r'
-                ? 'Itaú-Inter PJ Operacional'
-                : item.conta_bancaria
-                  ? 'Conta PJ'
-                  : 'Não classificada')
+                ? 'Banco Inter PJ (Operacional)'
+                : item.conta_bancaria === 'feaokkvqhtr2ol1'
+                  ? 'Caixa Econômica Federal (104)'
+                  : item.conta_bancaria
+                    ? 'Conta PJ'
+                    : 'Não classificada')
           return {
             descricao: item.descricao || '',
             conta_bancaria_nome: contaNome,
@@ -809,10 +813,12 @@ function obterMapeamentoColecao(colecao: string): MapeamentoXlsxColecao | null {
             (item.conta_bancaria === '865d10p9cbxbf9i'
               ? 'BB PJ Principal'
               : item.conta_bancaria === 'biid0elu3tyhm7r'
-                ? 'Itaú-Inter PJ Operacional'
-                : item.conta_bancaria
-                  ? 'Conta PJ'
-                  : 'Não classificada')
+                ? 'Banco Inter PJ (Operacional)'
+                : item.conta_bancaria === 'feaokkvqhtr2ol1'
+                  ? 'Caixa Econômica Federal (104)'
+                  : item.conta_bancaria
+                    ? 'Conta PJ'
+                    : 'Não classificada')
           return {
             descricao: item.descricao || '',
             conta_bancaria_nome: contaNome,

@@ -50,10 +50,10 @@ export const PLANO_CONTAS_AEROCAD: ItemPlanoContas[] = [
   },
   {
     codigo: '1.1.1.02',
-    nome: 'Banco Secundário / Itaú PJ',
+    nome: 'Caixa Econômica Federal PJ (Conta Corrente)',
     natureza: 'ativo',
     grupo: 'Ativo Circulante',
-    descricao: 'Segunda conta corrente operacional PJ da AEROCAD',
+    descricao: 'Segunda conta corrente operacional PJ da AEROCAD na Caixa Econômica Federal',
   },
   {
     codigo: '1.1.2',
