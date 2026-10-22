@@ -12,30 +12,92 @@ export interface ItemPlanoContas {
   grupo: string
   fixoOuVariavel?: 'fixo' | 'variavel'
   descricao?: string
+  semUso?: boolean
 }
+
+export const GRUPOS_PLANO_CONTAS = [
+  'Ativo Circulante',
+  'Ativo Não Circulante',
+  'Passivo Circulante',
+  'Passivo Não Circulante',
+  'Patrimônio Líquido',
+  'Custos Diretos dos Projetos',
+  'Despesas Operacionais Fixas',
+  'Pessoal & Encargos',
+  'Deduções e Impostos',
+  'Despesas Financeiras',
+  'Investimentos',
+  'Receita Operacional Bruta',
+  'Receitas Financeiras',
+  'Despesas Não Operacionais',
+] as const
 
 export const PLANO_CONTAS_AEROCAD: ItemPlanoContas[] = [
   // 1. ATIVO
   {
     codigo: '1.1.1',
-    nome: 'Disponibilidades (Bancos Conta Movimento PJ)',
+    nome: 'Caixa Geral e Bancos Conta Movimento (Sintética)',
     natureza: 'ativo',
     grupo: 'Ativo Circulante',
-    descricao: 'Saldos em contas correntes e aplicações de liquidez imediata PJ',
+    descricao: 'Saldos disponíveis em contas correntes bancárias da AEROCAD',
+  },
+  {
+    codigo: '1.1.1.01',
+    nome: 'Banco Inter PJ (Conta Corrente)',
+    natureza: 'ativo',
+    grupo: 'Ativo Circulante',
+    descricao: 'Conta movimento principal PJ no Banco Inter',
+  },
+  {
+    codigo: '1.1.1.02',
+    nome: 'Banco Secundário / Itaú PJ',
+    natureza: 'ativo',
+    grupo: 'Ativo Circulante',
+    descricao: 'Segunda conta corrente operacional PJ da AEROCAD',
   },
   {
     codigo: '1.1.2',
-    nome: 'Contas a Receber de Clientes (Projetos em Andamento)',
+    nome: 'Clientes a Receber (Faturamento Emitido)',
     natureza: 'ativo',
     grupo: 'Ativo Circulante',
-    descricao: 'Faturamento emitido e medições pendentes de liquidação',
+    descricao: 'Contas a receber de clientes decorrentes de serviços faturados e parcelas a vencer',
   },
   {
     codigo: '1.1.3',
-    nome: 'Adiantamentos a Fornecedores e Equipe',
+    nome: 'Adiantamentos Concedidos a Fornecedores e Terceiros',
     natureza: 'ativo',
     grupo: 'Ativo Circulante',
-    descricao: 'Adiantamentos operacionais para diárias de campo e compras',
+    descricao: 'Valores antecipados para projetos, topografia e compras técnicas',
+  },
+  {
+    codigo: '1.1.4',
+    nome: 'Aplicações de Liquidez Imediata (CDB / Renda Fixa PJ)',
+    natureza: 'ativo',
+    grupo: 'Ativo Circulante',
+    descricao: 'Aplicações financeiras de resgate automático ou liquidez imediata PJ',
+  },
+  {
+    codigo: '1.1.5',
+    nome: 'Tributos Retidos a Compensar (IRRF, PIS, COFINS, CSLL e ISS)',
+    natureza: 'ativo',
+    grupo: 'Ativo Circulante',
+    descricao:
+      'Retenções na fonte sofridas em notas de serviços emitidas a compensar com tributos devidos',
+  },
+  {
+    codigo: '1.1.6',
+    nome: 'Adiantamentos de Viagens e Operações de Campo',
+    natureza: 'ativo',
+    grupo: 'Ativo Circulante',
+    descricao:
+      'Valores adiantados para deslocamentos, hospedagem e despesas em aeródromos a comprovar',
+  },
+  {
+    codigo: '1.1.7',
+    nome: 'Transferências Entre Contas PJ (Trânsito Financeiro)',
+    natureza: 'ativo',
+    grupo: 'Ativo Circulante',
+    descricao: 'Movimentações e aportes entre contas bancárias da própria pessoa jurídica',
   },
   {
     codigo: '1.2.1',
@@ -120,6 +182,22 @@ export const PLANO_CONTAS_AEROCAD: ItemPlanoContas[] = [
     descricao:
       'Ágio por expectativa de rentabilidade futura, carteira de clientes adquirida e outros ativos intangíveis',
   },
+  {
+    codigo: '1.2.12',
+    nome: '(–) Depreciação Acumulada - Ativo Imobilizado',
+    natureza: 'ativo',
+    grupo: 'Ativo Não Circulante',
+    descricao:
+      'Conta redutora do ativo imobilizado (desgaste de equipamentos topográficos, drones, veículos e computadores)',
+  },
+  {
+    codigo: '1.2.13',
+    nome: '(–) Amortização Acumulada - Ativo Intangível',
+    natureza: 'ativo',
+    grupo: 'Ativo Não Circulante',
+    descricao:
+      'Conta redutora de ativos intangíveis (amortização de marcas, softwares e licenças permanentes)',
+  },
 
   // 2. PASSIVO
   {
@@ -181,6 +259,20 @@ export const PLANO_CONTAS_AEROCAD: ItemPlanoContas[] = [
       'Juros contratuais pré-fixados a incorrer no curto prazo (conta retificadora/redutora)',
   },
   {
+    codigo: '2.1.9',
+    nome: 'Cartão PJ a Pagar (Cartão Corporativo)',
+    natureza: 'passivo',
+    grupo: 'Passivo Circulante',
+    descricao: 'Faturas em aberto do cartão corporativo PJ da empresa',
+  },
+  {
+    codigo: '2.1.10',
+    nome: 'Obrigações Trabalhistas e Provisões (Férias e 13º Salário)',
+    natureza: 'passivo',
+    grupo: 'Passivo Circulante',
+    descricao: 'Provisões de encargos trabalhistas acumulados da equipe técnica e administrativa',
+  },
+  {
     codigo: '2.2.1',
     nome: 'Empréstimos Bancários a Pagar (Passivo Não Circulante)',
     natureza: 'passivo',
@@ -200,6 +292,67 @@ export const PLANO_CONTAS_AEROCAD: ItemPlanoContas[] = [
     natureza: 'passivo',
     grupo: 'Passivo Não Circulante',
     descricao: 'Juros pré-fixados a incorrer no longo prazo após os próximos 12 meses',
+  },
+  {
+    codigo: '2.2.4',
+    nome: 'Empréstimos de Sócios / Mútuos Passivos',
+    natureza: 'passivo',
+    grupo: 'Passivo Não Circulante',
+    descricao: 'Aportes societários e mútuos efetuados por sócios com exigibilidade a longo prazo',
+  },
+  {
+    codigo: '2.2.5',
+    nome: 'Obrigações Fiscais e Parcelamentos de Longo Prazo',
+    natureza: 'passivo',
+    grupo: 'Passivo Não Circulante',
+    descricao:
+      'Parcelamentos tributários federais, previdenciários e municipais com prazo superior a 12 meses',
+  },
+
+  // 2.3 PATRIMÔNIO LÍQUIDO
+  {
+    codigo: '2.3.1',
+    nome: 'Capital Social Subscrito',
+    natureza: 'patrimonio_liquido',
+    grupo: 'Patrimônio Líquido',
+    descricao: 'Capital social nominal formalizado no contrato social da AEROCAD Consultoria',
+  },
+  {
+    codigo: '2.3.2',
+    nome: '(–) Capital Social a Integralizar',
+    natureza: 'patrimonio_liquido',
+    grupo: 'Patrimônio Líquido',
+    descricao:
+      'Parcela do capital social subscrito ainda pendente de realização financeira pelos sócios',
+  },
+  {
+    codigo: '2.3.3',
+    nome: 'Reservas de Capital',
+    natureza: 'patrimonio_liquido',
+    grupo: 'Patrimônio Líquido',
+    descricao: 'Aportes, doações e reservas constituídas sem contrapartida de ações ou quotas',
+  },
+  {
+    codigo: '2.3.4',
+    nome: 'Lucros ou Prejuízos Acumulados',
+    natureza: 'patrimonio_liquido',
+    grupo: 'Patrimônio Líquido',
+    descricao: 'Resultados líquidos de exercícios anteriores apurados e acumulados no balanço',
+  },
+  {
+    codigo: '2.3.5',
+    nome: 'Lucros a Destinar / Distribuição de Lucros Antecipada',
+    natureza: 'patrimonio_liquido',
+    grupo: 'Patrimônio Líquido',
+    descricao:
+      'Antecipações de lucros comprovadas do exercício aos sócios conforme apuração contábil',
+  },
+  {
+    codigo: '2.3.6',
+    nome: 'Reserva Legal e Estatutária',
+    natureza: 'patrimonio_liquido',
+    grupo: 'Patrimônio Líquido',
+    descricao: 'Parcela de lucros destinada à garantia da integridade do capital social',
   },
 
   // 3. DESPESAS E CUSTOS (DRE / PONTO DE EQUILÍBRIO)
@@ -244,6 +397,22 @@ export const PLANO_CONTAS_AEROCAD: ItemPlanoContas[] = [
     descricao: 'Postos de combustível (Cascol, Petrobras, Shell), pedágios e locações',
   },
   {
+    codigo: '3.1.6',
+    nome: 'Despesas com Ocupação, Aluguel e Condomínio Comercial',
+    natureza: 'despesa',
+    grupo: 'Despesas Operacionais Fixas',
+    fixoOuVariavel: 'fixo',
+    descricao: 'Aluguel do escritório sede, condomínio e taxas prediais',
+  },
+  {
+    codigo: '3.1.7',
+    nome: 'Despesas com Telecomunicações, Internet e Telefonia',
+    natureza: 'despesa',
+    grupo: 'Despesas Operacionais Fixas',
+    fixoOuVariavel: 'fixo',
+    descricao: 'Planos corporativos de telefonia móvel e conexões de fibra dedicada',
+  },
+  {
     codigo: '3.2.1',
     nome: 'Honorários de Engenharia e Subcontratação Técnica (Topografia/Sondagem)',
     natureza: 'despesa',
@@ -277,11 +446,21 @@ export const PLANO_CONTAS_AEROCAD: ItemPlanoContas[] = [
   },
   {
     codigo: '3.4.2',
-    nome: 'Pró-Labore de Sócios e Diretores',
+    nome: 'Pró-Labore de Sócios e Diretores (Sem Uso - Distr. Lucros em 2.3.5)',
     natureza: 'despesa',
     grupo: 'Pessoal & Encargos',
     fixoOuVariavel: 'fixo',
-    descricao: 'Remuneração societária e antecipação de lucros formalizada',
+    semUso: true,
+    descricao:
+      'Conta marcada sem uso conforme documento do Cleyton; distribuições de lucros usam 2.3.5',
+  },
+  {
+    codigo: '3.4.3',
+    nome: 'Benefícios a Empregados e Sócios (Alimentação, Transporte, Saúde)',
+    natureza: 'despesa',
+    grupo: 'Pessoal & Encargos',
+    fixoOuVariavel: 'fixo',
+    descricao: 'Vale-alimentação, vale-transporte e planos corporativos de saúde',
   },
   {
     codigo: '3.5.1',
@@ -300,12 +479,29 @@ export const PLANO_CONTAS_AEROCAD: ItemPlanoContas[] = [
     descricao: 'Juros contratuais apropriados mensalmente pelo regime de competência contábil',
   },
   {
+    codigo: '3.5.3',
+    nome: 'Despesas Financeiras Diversas e Variações Monetárias',
+    natureza: 'despesa',
+    grupo: 'Despesas Financeiras',
+    fixoOuVariavel: 'fixo',
+    descricao: 'Atualizações monetárias, despesas com protestos e multas bancárias',
+  },
+  {
     codigo: '3.6.1',
     nome: 'Aquisição de Ativos e Investimentos Patrimoniais',
     natureza: 'despesa',
     grupo: 'Investimentos',
     fixoOuVariavel: 'fixo',
-    descricao: 'Investimentos em infraestrutura, modernização e reformas',
+    semUso: true,
+    descricao: 'Ativação direta no Ativo Não Circulante (1.2); removida de sugestões automáticas',
+  },
+  {
+    codigo: '3.7.1',
+    nome: 'Outras Receitas e Despesas Não Operacionais',
+    natureza: 'despesa',
+    grupo: 'Despesas Não Operacionais',
+    fixoOuVariavel: 'variavel',
+    descricao: 'Baixas de bens inservíveis ou alienações pontuais de ativos',
   },
 
   // 4. RECEITAS (DRE)
@@ -362,6 +558,8 @@ export function obterItemPlanoContasPorCodigo(codigo?: string): ItemPlanoContas 
   const todas = [...PLANO_CONTAS_AEROCAD, ...contasExtrasEmMemoria]
   return (
     todas.find((item) => item.codigo === limpo) ||
+    todas.find((item) => item.codigo.startsWith(limpo) && !item.semUso) ||
+    todas.find((item) => limpo.startsWith(item.codigo) && !item.semUso) ||
     todas.find((item) => item.codigo.startsWith(limpo)) ||
     todas.find((item) => limpo.startsWith(item.codigo))
   )
@@ -467,16 +665,27 @@ export function classificarTransacaoExtrato(tx: {
 
   // Regras de Saídas (Despesas, Custos e Passivo)
 
-  // 1. Pró-labore e sócios
+  // 1. Distribuição de lucros aos sócios (vai para o Patrimônio Líquido 2.3.5)
   if (
     texto.includes('cleyton borges saraiva') ||
     texto.includes('antecipacao de lucros') ||
-    texto.includes('pro-labore') ||
-    texto.includes('pro labore') ||
     texto.includes('retirada socio') ||
     texto.includes('distribuicao de lucros')
   ) {
-    return PLANO_CONTAS_AEROCAD.find((i) => i.codigo === '3.4.2')!
+    return PLANO_CONTAS_AEROCAD.find((i) => i.codigo === '2.3.5')!
+  }
+
+  // 1.1 Pró-labore formal de sócios (se explicitamente pro-labore e sem lucro)
+  if (texto.includes('pro-labore') || texto.includes('pro labore')) {
+    return (
+      PLANO_CONTAS_AEROCAD.find((i) => i.codigo === '2.3.5') ||
+      PLANO_CONTAS_AEROCAD.find((i) => i.codigo === '3.4.2')!
+    )
+  }
+
+  // 1.2 Transferências entre contas PJ
+  if (texto.includes('transferencia entre contas') || texto.includes('transito financeiro')) {
+    return PLANO_CONTAS_AEROCAD.find((i) => i.codigo === '1.1.7')!
   }
 
   // 2. Combustível e veículos
