@@ -507,6 +507,26 @@ export const REGRAS_SEGMENTOS_ESTABELECIMENTO: RegraSegmentoInferido[] = [
 
   // 18. Órgãos Públicos, Tarifas e Taxas Regulatórias
   {
+    segmento: 'Simples Nacional / DAS sobre Faturamento',
+    descricaoProdutoInferido:
+      'Guia de recolhimento do Simples Nacional incidente sobre o faturamento de serviços',
+    categoria: 'impostos',
+    planoContasCodigo: '4.4.1',
+    planoContasNome: '(–) DAS sobre o Faturamento',
+    palavrasChave: [
+      'das simples',
+      'das simples nacional',
+      'guia das',
+      'simples nacional',
+      'pgdas',
+      'pgdas-d',
+      'das faturamento',
+      'das',
+    ],
+  },
+
+  // 18. Órgãos Públicos, Tarifas e Taxas Regulatórias
+  {
     segmento: 'Taxas & Órgãos Reguladores',
     descricaoProdutoInferido:
       'Taxas de fiscalização ANAC, DECEA, GRU, prefeituras e órgãos ambientais',

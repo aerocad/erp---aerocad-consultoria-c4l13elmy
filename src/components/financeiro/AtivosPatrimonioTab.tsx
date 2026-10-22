@@ -609,7 +609,12 @@ export function AtivosPatrimonioTab({
           <p className="mono-value mt-2 text-xl font-bold text-amber-700">
             - {formatCurrency(totalDepreciacaoAcumulada)}
           </p>
-          <span className="text-[11px] text-amber-600">Cálculo linear contábil conforme uso</span>
+          <span className="text-[11px] text-amber-700 flex items-center justify-between">
+            <span>Conta 3.8.1 (DRE) / 1.2.12 (Ativo)</span>
+            <span className="font-mono text-[10px] bg-amber-100 text-amber-800 px-1 py-0.5 rounded">
+              3.8.1
+            </span>
+          </span>
         </div>
 
         <div className="crm-card p-4 border-emerald-200 bg-emerald-50/40">

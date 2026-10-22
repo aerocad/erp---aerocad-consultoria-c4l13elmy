@@ -503,6 +503,15 @@ export const PLANO_CONTAS_AEROCAD: ItemPlanoContas[] = [
     fixoOuVariavel: 'variavel',
     descricao: 'Baixas de bens inservíveis ou alienações pontuais de ativos',
   },
+  {
+    codigo: '3.8.1',
+    nome: 'Despesa com Depreciação e Amortização',
+    natureza: 'despesa',
+    grupo: 'Depreciação e Amortização',
+    fixoOuVariavel: 'fixo',
+    descricao:
+      'Apropriação periódica de quotas de depreciação do imobilizado e amortização de ativos intangíveis (CPC 04 / CPC 27)',
+  },
 
   // 4. RECEITAS (DRE)
   {
@@ -536,6 +545,24 @@ export const PLANO_CONTAS_AEROCAD: ItemPlanoContas[] = [
     grupo: 'Receitas Financeiras',
     fixoOuVariavel: 'fixo',
     descricao: 'Resgates e rendimentos de CDB, fundos e juros sobre capital',
+  },
+  {
+    codigo: '4.3.1',
+    nome: 'Ganho na Alienação de Imobilizado',
+    natureza: 'receita',
+    grupo: 'Outras Receitas e Ganhos Não Operacionais',
+    fixoOuVariavel: 'variavel',
+    descricao:
+      'Resultado positivo apurado na alienação, venda ou desincorporação de bens do ativo imobilizado',
+  },
+  {
+    codigo: '4.4.1',
+    nome: '(–) DAS sobre o Faturamento',
+    natureza: 'receita',
+    grupo: 'Deduções sobre o Faturamento',
+    fixoOuVariavel: 'variavel',
+    descricao:
+      'Dedução direta da receita bruta por tributação do Simples Nacional (guia DAS calculada sobre o faturamento)',
   },
 ]
 
@@ -637,6 +664,17 @@ export function classificarTransacaoExtrato(tx: {
 
   // Regras de Entradas (Receitas e Rendimentos)
   if (isEntrada) {
+    // 4.3.1 Ganho na alienação de imobilizado / venda de veículo, equipamento, drone
+    if (
+      texto.includes('venda de veiculo') ||
+      texto.includes('alienacao de bem') ||
+      texto.includes('alienacao de imobilizado') ||
+      texto.includes('venda de ativo') ||
+      texto.includes('venda imobilizado') ||
+      texto.includes('venda equipamento')
+    ) {
+      return PLANO_CONTAS_AEROCAD.find((i) => i.codigo === '4.3.1')!
+    }
     if (
       texto.includes('cdb') ||
       texto.includes('resgate') ||
@@ -721,12 +759,29 @@ export function classificarTransacaoExtrato(tx: {
   }
 
   // 4. Tributos e Impostos
+  // 4.4.1 (–) DAS sobre o Faturamento (Simples Nacional)
+  if (
+    texto.includes('das simples') ||
+    texto.includes('das faturamento') ||
+    texto.includes('simples nacional') ||
+    texto.includes('guia das') ||
+    texto.includes('pagamento das') ||
+    texto.includes('das - simples') ||
+    texto.includes('das/simples') ||
+    texto.includes('pgdas') ||
+    texto.includes('pgdas-d') ||
+    texto === 'das' ||
+    texto.startsWith('das ') ||
+    texto.endsWith(' das') ||
+    texto.includes(' das ')
+  ) {
+    return PLANO_CONTAS_AEROCAD.find((i) => i.codigo === '4.4.1')!
+  }
+
   if (
     texto.includes('receita federal') ||
     texto.includes('imposto a pagar') ||
     texto.includes('darf') ||
-    texto.includes('das simples') ||
-    texto.includes('simples nacional') ||
     texto.includes('tributo') ||
     texto.includes('irrf') ||
     texto.includes('pis') ||
@@ -836,6 +891,16 @@ export function classificarTransacaoExtrato(tx: {
     texto.includes('auditoria')
   ) {
     return PLANO_CONTAS_AEROCAD.find((i) => i.codigo === '3.1.3')!
+  }
+
+  // 8.1 Despesa de Depreciação e Amortização
+  if (
+    texto.includes('depreciacao') ||
+    texto.includes('amortizacao') ||
+    texto.includes('quota depreciacao') ||
+    texto.includes('depreciacao contabil')
+  ) {
+    return PLANO_CONTAS_AEROCAD.find((i) => i.codigo === '3.8.1')!
   }
 
   // 9. Aluguel de Escritório e Salas

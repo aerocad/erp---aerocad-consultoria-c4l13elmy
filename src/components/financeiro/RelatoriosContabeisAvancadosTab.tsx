@@ -567,11 +567,12 @@ export function RelatoriosContabeisAvancadosTab({
       .reduce((acc, cr) => acc + (cr.valor_recebido || cr.valor || 0), 0)
     const receitaBruta = recParcelas + recAvulsas
 
-    // 2.2 Deduções e Impostos sobre Serviços (ISS, PIS/COFINS, Simples/Presumido ou cat impostos)
+    // 2.2 Deduções e Impostos sobre Serviços (ISS, PIS/COFINS, Simples/Presumido, 4.4.1 DAS sobre Faturamento ou cat impostos)
     const deducoesImpostos = contasPagarPeriodo
       .filter((cp) => {
         const codigo = cp.plano_contas_codigo || ''
-        if (codigo) return codigo.startsWith('3.3')
+        if (codigo)
+          return codigo.startsWith('3.3') || codigo === '4.4.1' || codigo.startsWith('4.4')
         return (
           cp.categoria === 'impostos' ||
           cp.descricao?.toLowerCase().includes('iss') ||
@@ -601,11 +602,15 @@ export function RelatoriosContabeisAvancadosTab({
       .filter((cp) => {
         const codigo = cp.plano_contas_codigo || ''
         if (codigo) {
-          const ehImposto = codigo.startsWith('3.3')
+          const ehImposto =
+            codigo.startsWith('3.3') || codigo === '4.4.1' || codigo.startsWith('4.4')
           const ehVariavel = codigo.startsWith('3.2') || codigo === '3.1.4' || codigo === '3.1.5'
           return !ehImposto && !ehVariavel
         }
-        const ehImposto = cp.categoria === 'impostos' || cp.descricao?.toLowerCase().includes('iss')
+        const ehImposto =
+          cp.categoria === 'impostos' ||
+          cp.descricao?.toLowerCase().includes('iss') ||
+          cp.descricao?.toLowerCase().includes('das')
         const ehVariavel = cp.categoria === 'terceirizados' || Boolean(cp.projeto)
         return !ehImposto && !ehVariavel
       })
@@ -2394,10 +2399,10 @@ export function RelatoriosContabeisAvancadosTab({
                   {/* 2. Deduções */}
                   <tr className="text-neutral-700">
                     <td className="px-4 py-2.5 pl-8 text-neutral-800">
-                      (-) Deduções da Receita & Tributos
+                      (-) Deduções da Receita & Tributos (4.4.1 DAS / 3.3 Tributos)
                     </td>
                     <td className="px-4 py-2.5 text-neutral-500 text-[11px]">
-                      ISS, DAS Simples Nacional, Retenções Federais
+                      DAS Simples Nacional (4.4.1), ISSQN, Retenções Federais
                     </td>
                     <td className="px-4 py-2.5 text-right text-rose-700 font-mono">
                       - {renderValor(dreData.deducoesImpostos, 'text-rose-700 font-mono')}

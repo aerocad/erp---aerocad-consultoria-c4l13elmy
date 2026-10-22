@@ -636,6 +636,10 @@ export function calcularBalanceteVerificacao({
     { codigo: '3.1', desc: 'Despesas Fixas e Administrativas' },
     { codigo: '3.2', desc: 'Custos Diretos e Terceirizados de Projetos' },
     { codigo: '3.3', desc: 'Impostos e Encargos sobre Faturamento' },
+    { codigo: '3.4', desc: 'Pessoal & Encargos' },
+    { codigo: '3.5', desc: 'Despesas Financeiras' },
+    { codigo: '3.7', desc: 'Outras Receitas e Despesas Não Operacionais' },
+    { codigo: '3.8', desc: 'Despesa com Depreciação e Amortização' },
   ]
 
   categoriasDesp.forEach((cat) => {
@@ -703,6 +707,32 @@ export function calcularBalanceteVerificacao({
     creditos: recCreditosPeriodo,
     saldoFinal: recCreditosPeriodo,
     saldoFinalNatureza: 'C',
+  })
+
+  // 4.3 Outras Receitas e Ganhos Não Operacionais (ex: 4.3.1 Ganho na Alienação de Imobilizado)
+  linhas.push({
+    codigo: '4.3',
+    descricao: 'Outras Receitas e Ganhos Não Operacionais (Alienação Imobilizado)',
+    grau: 2,
+    natureza: 'C',
+    saldoAnterior: 0,
+    debitos: 0,
+    creditos: 0,
+    saldoFinal: 0,
+    saldoFinalNatureza: 'C',
+  })
+
+  // 4.4 Deduções sobre o Faturamento (ex: 4.4.1 DAS sobre o Faturamento)
+  linhas.push({
+    codigo: '4.4',
+    descricao: '(–) Deduções sobre o Faturamento (DAS Simples Nacional)',
+    grau: 2,
+    natureza: 'D',
+    saldoAnterior: 0,
+    debitos: 0,
+    creditos: 0,
+    saldoFinal: 0,
+    saldoFinalNatureza: 'D',
   })
 
   // -------------------------------------------------------------
