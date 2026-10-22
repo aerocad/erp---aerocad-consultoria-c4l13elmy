@@ -366,19 +366,15 @@ export async function buscarDuplicadasNoBackend(): Promise<{
   grupos: any[]
 }> {
   try {
-    const res = await fetch('/backend/v1/nfse/duplicadas', {
+    const res = await pb.send<{
+      sucesso: boolean
+      total_grupos: number
+      total_duplicatas: number
+      grupos: any[]
+    }>('/backend/v1/nfse/duplicadas', {
       method: 'GET',
-      headers: {
-        Authorization: pb.authStore.token ? `Bearer ${pb.authStore.token}` : '',
-      },
     })
-
-    if (!res.ok) {
-      const errJson = await res.json().catch(() => ({}))
-      throw new Error(errJson.error || `Erro HTTP ${res.status}`)
-    }
-
-    return await res.json()
+    return res
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
     console.warn('Fallback: consulta backend de duplicadas indisponível, usando motor local:', msg)
@@ -406,23 +402,18 @@ export async function excluirDuplicadasViaBackend(
   excluidas: string[]
   falhas: any[]
 }> {
-  const res = await fetch('/backend/v1/nfse/excluir-duplicadas', {
+  return await pb.send<{
+    sucesso: boolean
+    total_excluidas: number
+    total_falhas: number
+    excluidas: string[]
+    falhas: any[]
+  }>('/backend/v1/nfse/excluir-duplicadas', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: pb.authStore.token ? `Bearer ${pb.authStore.token}` : '',
-    },
-    body: JSON.stringify({
+    body: {
       idsParaExcluir,
       manterId,
       justificativa,
-    }),
+    },
   })
-
-  if (!res.ok) {
-    const errJson = await res.json().catch(() => ({}))
-    throw new Error(errJson.error || errJson.message || `Erro HTTP ${res.status}`)
-  }
-
-  return await res.json()
 }
