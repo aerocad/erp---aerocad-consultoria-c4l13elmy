@@ -274,6 +274,22 @@ export function PlanoContasTab({
   }
 
   // 1. Mapear lançamentos da AEROCAD respeitando o filtro de ANO selecionado
+  // Carrega e integra contas customizadas salvas no banco
+  const [contasCustomizadas, setContasCustomizadas] = useState<
+    import('@/services/assistenteAcoesService').PlanoContasCustomizadaRecord[]
+  >([])
+
+  useEffect(() => {
+    import('@/services/assistenteAcoesService').then((m) => {
+      m.listarContasCustomizadas().then((extras) => {
+        setContasCustomizadas(extras)
+        m.obterPlanoContasCompleto().then((completo) => {
+          import('@/lib/planoContas').then((pc) => pc.registrarContasExtrasPlano(completo))
+        })
+      })
+    })
+  }, [])
+
   const todosLancamentosMapeados = useMemo<LancamentoMapeado[]>(() => {
     const lista: LancamentoMapeado[] = []
 

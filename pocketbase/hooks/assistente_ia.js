@@ -623,6 +623,7 @@ routerAdd(
       }
 
       const colecaoAlvo = auditRecord.getString('colecao_alvo')
+      const tipoOperacao = auditRecord.getString('tipo_operacao')
       let snapshots = []
       try {
         const raw = auditRecord.getString('snapshot_anterior')
@@ -631,32 +632,55 @@ routerAdd(
         snapshots = []
       }
 
-      if (!Array.isArray(snapshots) || snapshots.length === 0) {
-        return e.badRequestError('Não há snapshot anterior disponível para reverter esta operação.')
-      }
-
       let totalRestaurados = 0
       let totalFalhas = 0
 
-      for (let i = 0; i < snapshots.length; i++) {
-        const item = snapshots[i]
-        try {
-          const rec = $app.findRecordById(colecaoAlvo, item.id)
-          rec.set(item.campo, item.valor_anterior)
-
-          if (item.campos_adicionais && typeof item.campos_adicionais === 'object') {
-            const chaves = Object.keys(item.campos_adicionais)
-            for (let k = 0; k < chaves.length; k++) {
-              const extraKey = chaves[k]
-              rec.set(extraKey, item.campos_adicionais[extraKey])
+      // Caso 1: Criação de registro (ex: criar_conta_plano ou criar_credor) -> Reversão exclui o registro criado
+      if (tipoOperacao === 'criar_conta_plano' || tipoOperacao === 'criar_credor') {
+        for (let i = 0; i < snapshots.length; i++) {
+          const item = snapshots[i]
+          try {
+            const targetId = item.id || item.registro_id
+            if (targetId) {
+              const rec = $app.findRecordById(colecaoAlvo, targetId)
+              $app.delete(rec)
+              totalRestaurados++
             }
+          } catch (delErr) {
+            totalFalhas++
+            console.log(`Erro ao reverter criação na coleção ${colecaoAlvo}:`, delErr.message)
           }
+        }
+      } else {
+        // Caso 2: Atualização / Reclassificação -> Restaura valores anteriores do snapshot
+        if (!Array.isArray(snapshots) || snapshots.length === 0) {
+          return e.badRequestError(
+            'Não há snapshot anterior disponível para reverter esta operação.',
+          )
+        }
 
-          $app.save(rec)
-          totalRestaurados++
-        } catch (resErr) {
-          totalFalhas++
-          console.log(`Erro ao restaurar registro ${item.id}:`, resErr.message)
+        for (let i = 0; i < snapshots.length; i++) {
+          const item = snapshots[i]
+          try {
+            const rec = $app.findRecordById(colecaoAlvo, item.id)
+            if (item.campo) {
+              rec.set(item.campo, item.valor_anterior)
+            }
+
+            if (item.campos_adicionais && typeof item.campos_adicionais === 'object') {
+              const chaves = Object.keys(item.campos_adicionais)
+              for (let k = 0; k < chaves.length; k++) {
+                const extraKey = chaves[k]
+                rec.set(extraKey, item.campos_adicionais[extraKey])
+              }
+            }
+
+            $app.save(rec)
+            totalRestaurados++
+          } catch (resErr) {
+            totalFalhas++
+            console.log(`Erro ao restaurar registro ${item.id}:`, resErr.message)
+          }
         }
       }
 

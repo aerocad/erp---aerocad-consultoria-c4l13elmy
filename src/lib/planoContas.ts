@@ -343,13 +343,21 @@ export const PLANO_CONTAS_AEROCAD: ItemPlanoContas[] = [
   },
 ]
 
+// Cache local em memória de contas extras registradas dinamicamente
+let contasExtrasEmMemoria: ItemPlanoContas[] = []
+
+export function registrarContasExtrasPlano(contas: ItemPlanoContas[]) {
+  contasExtrasEmMemoria = contas
+}
+
 export function obterItemPlanoContasPorCodigo(codigo?: string): ItemPlanoContas | undefined {
   if (!codigo) return undefined
   const limpo = codigo.trim()
+  const todas = [...PLANO_CONTAS_AEROCAD, ...contasExtrasEmMemoria]
   return (
-    PLANO_CONTAS_AEROCAD.find((item) => item.codigo === limpo) ||
-    PLANO_CONTAS_AEROCAD.find((item) => item.codigo.startsWith(limpo)) ||
-    PLANO_CONTAS_AEROCAD.find((item) => limpo.startsWith(item.codigo))
+    todas.find((item) => item.codigo === limpo) ||
+    todas.find((item) => item.codigo.startsWith(limpo)) ||
+    todas.find((item) => limpo.startsWith(item.codigo))
   )
 }
 

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-22T01:00:25.159Z",
+  "generatedAt": "2026-10-22T11:55:09.262Z",
   "collections": [
     {
       "name": "users",
@@ -4987,6 +4987,138 @@
         "CREATE INDEX idx_emp_parc_comp ON emprestimos_parcelas (competencia)",
         "CREATE INDEX idx_emp_parc_aprop ON emprestimos_parcelas (juros_apropriados)"
       ]
+    },
+    {
+      "name": "assistente_conversas",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id = usuario.id",
+        "view": "@request.auth.id = usuario.id",
+        "create": "@request.auth.id != \"\"",
+        "update": "@request.auth.id = usuario.id",
+        "delete": "@request.auth.id = usuario.id"
+      },
+      "fields": [
+        {
+          "name": "usuario",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "agent_slug",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "contexto",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "titulo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "mensagens",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "status_processamento",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["concluido", "processando", "pendente", "erro"]
+        },
+        {
+          "name": "pergunta_pendente",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ultima_auditoria_id",
+          "type": "text",
+          "required": false,
+          "system": false
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_ast_conv_usuario ON assistente_conversas (usuario, updated DESC)",
+        "CREATE INDEX idx_ast_conv_slug ON assistente_conversas (agent_slug)"
+      ]
+    },
+    {
+      "name": "plano_contas_customizadas",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != \"\"",
+        "view": "@request.auth.id != \"\"",
+        "create": "@request.auth.role = \"admin\" || @request.auth.role = \"financeiro\"",
+        "update": "@request.auth.role = \"admin\" || @request.auth.role = \"financeiro\"",
+        "delete": "@request.auth.role = \"admin\" || @request.auth.role = \"financeiro\""
+      },
+      "fields": [
+        {
+          "name": "codigo",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "nome",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "natureza",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["ativo", "passivo", "patrimonio_liquido", "receita", "despesa"]
+        },
+        {
+          "name": "grupo",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "fixoOuVariavel",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["fixo", "variavel"]
+        },
+        {
+          "name": "descricao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ativo",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "criado_por",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "users"
+        }
+      ],
+      "indexes": ["CREATE UNIQUE INDEX idx_plano_codigo ON plano_contas_customizadas (codigo)"]
     }
   ]
 }

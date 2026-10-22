@@ -1,44 +1,72 @@
 import { useState, useEffect, useRef } from 'react'
 import {
   Sparkles,
-  Send,
-  Trash2,
   X,
+  Send,
+  Loader2,
   Bot,
   User as UserIcon,
-  Loader2,
-  Info,
-  ChevronDown,
-  RefreshCw,
-  Coins,
-  CheckCircle2,
-  AlertTriangle,
   RotateCcw,
+  Plus,
+  Trash2,
+  CheckCircle2,
   Layers,
   ArrowRight,
   Filter,
+  Info,
+  History,
+  AlertTriangle,
 } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { useAuth } from '@/contexts/AuthContext'
 import { useFinanceiroVisibilidade } from '@/contexts/FinanceiroVisibilidadeContext'
+import type { DisplayMessage } from '@/lib/skipAi'
+import { executarOperacaoBloco, type PropostaBlocoData } from '@/services/assistenteIa'
 import {
-  sendAgentMessage,
-  listAgentConversations,
-  loadConversationMessages,
-  obterPreviaBloco,
-  executarOperacaoBloco,
-  desfazerUltimaOperacaoBloco,
-  type AgentConversationItem,
-  type PropostaBlocoData,
-} from '@/services/assistenteIa'
-import type { DisplayMessage, AgentCitation } from '@/lib/skipAi'
-import { toast } from 'sonner'
+  listarConversasPersistidas,
+  carregarConversaPersistida,
+  excluirConversaPersistida,
+  enviarMensagemPersistidaBackground,
+  atualizarConversaPersistida,
+  type ConversaPersistidaRecord,
+} from '@/services/assistenteConversasService'
+import {
+  executarAcaoFinanceira,
+  desfazerAcaoFinanceira,
+  type PropostaAcaoData,
+} from '@/services/assistenteAcoesService'
 
 export interface AssistenteFinanceiroChatProps {
-  secaoAtual: 'extratos' | 'fluxo' | 'demonstracoes' | 'balancos' | 'ativos' | 'relatorios'
+  secaoAtual:
+    | 'extratos'
+    | 'contas_pagar'
+    | 'contas_receber'
+    | 'balancetes'
+    | 'fluxo_caixa'
+    | 'plano_contas'
+    | 'credores'
+    | 'ativos'
+    | 'valuation'
+    | 'relatorios'
   isOpen?: boolean
   onClose?: () => void
   onAcaoExecutada?: () => void
@@ -46,41 +74,30 @@ export interface AssistenteFinanceiroChatProps {
 
 const SUGESTOES_POR_SECAO: Record<string, string[]> = {
   extratos: [
-    'Reclassificar todos os lançamentos com "tarifa" para despesas operacionais',
-    'Marcar transações bancárias com "aplicacao" como ignoradas para conciliação',
-    'Quais transações bancárias ainda estão pendentes de conciliação?',
-    'Quanto entrou na conta do Banco Inter este mês?',
+    'Qual o saldo disponível consolidado nas contas bancárias PJ?',
+    'Existem lançamentos não conciliados nos extratos recentes?',
+    'Quais foram as 3 maiores saídas bancárias deste mês?',
   ],
-  fluxo: [
-    'Reclassificar todos os lançamentos de combustível para a conta 3.1.5',
-    'Atribuir a conta Banco Inter PJ às contas a pagar sem conta bancária',
-    'Quais as maiores contas a pagar com vencimento esta semana?',
-    'Qual o saldo previsto para os próximos 15 dias no fluxo de caixa?',
+  contas_pagar: [
+    'Quais despesas vencem nos próximos 7 dias?',
+    'Qual o total de despesas em aberto por categoria?',
+    'Criar uma nova conta no Plano de Contas para Marketing Digital',
   ],
-  demonstracoes: [
-    'Atualizar o plano de contas de despesas com cartório para 3.1.1',
-    'Qual o resultado operacional líquido acumulado do exercício?',
-    'Como está a divisão entre receitas de consultoria e despesas?',
-    'Resuma os principais indicadores da DRE do período atual.',
+  contas_receber: [
+    'Qual o valor total de faturamentos pendentes de recebimento?',
+    'Quais clientes possuem faturamentos em atraso?',
   ],
-  balancos: [
-    'Qual o total do Ativo Circulante vs Passivo Circulante?',
-    'Qual a composição do patrimônio líquido da empresa?',
-    'Como está o equilíbrio financeiro do balancete atual?',
+  plano_contas: [
+    'Criar nova conta no Plano de Contas: 3.1.6 Marketing e Divulgação Técnica',
+    'Como está distribuída a estrutura do grupo 3 (Despesas)?',
+    'Cadastrar credor Posto Ipiranga para abastecimento de campo',
   ],
-  ativos: [
-    'Quais são os principais bens e veículos cadastrados no patrimônio?',
-    'Qual o valor total de aquisição dos ativos imobilizados?',
-    'Existe cálculo de depreciação acumulada para os veículos?',
-  ],
-  relatorios: [
-    'Qual o faturamento total acumulado no ano?',
-    'Quais clientes possuem maior saldo pendente de faturamento?',
-    'Resuma a rentabilidade geral das operações.',
+  balancetes: [
+    'Qual o resultado contábil acumulado do trimestre?',
+    'Apresente o resumo DRE entre receitas brutas e despesas fixas.',
   ],
 }
 
-// Interface de estado da proposta no chat
 interface PropostaCardState {
   proposta: PropostaBlocoData
   status: 'pendente' | 'aplicando' | 'aplicada' | 'descartada'
@@ -92,28 +109,55 @@ interface PropostaCardState {
   }
 }
 
-// Extrai proposta JSON delimitada por ```proposta_bloco ... ``` ou ```json ... ```
-function extrairPropostaBloco(texto: string): {
-  textoLimpo: string
-  proposta: PropostaBlocoData | null
-} {
-  if (!texto) return { textoLimpo: '', proposta: null }
+interface AcaoCardState {
+  proposta: PropostaAcaoData
+  status: 'pendente' | 'aplicando' | 'aplicada' | 'descartada'
+  resultado?: {
+    auditId?: string
+    mensagem: string
+  }
+}
 
-  // Tenta achar ```proposta_bloco
+function extrairBlocos(texto: string): {
+  textoLimpo: string
+  propostaBloco: PropostaBlocoData | null
+  propostaAcao: PropostaAcaoData | null
+} {
+  if (!texto) return { textoLimpo: '', propostaBloco: null, propostaAcao: null }
+
+  let limpo = texto
+  let propostaBloco: PropostaBlocoData | null = null
+  let propostaAcao: PropostaAcaoData | null = null
+
+  // 1. Proposta em bloco
   const matchBloco = texto.match(/```(?:proposta_bloco|json)?\s*([\s\S]*?)\s*```/)
   if (matchBloco) {
     try {
       const parsed = JSON.parse(matchBloco[1])
       if (parsed && parsed.tipo_operacao && parsed.colecao_alvo && parsed.alteracoes) {
-        const textoLimpo = texto.replace(matchBloco[0], '').trim()
-        return { textoLimpo, proposta: parsed as PropostaBlocoData }
+        limpo = limpo.replace(matchBloco[0], '').trim()
+        propostaBloco = parsed as PropostaBlocoData
       }
-    } catch (_) {
-      // Ignora erro de JSON incompleto enquanto digita no stream
+    } catch {
+      /* intentionally ignored */
     }
   }
 
-  return { textoLimpo: texto, proposta: null }
+  // 2. Proposta de ação executável (criar conta, credor etc.)
+  const matchAcao = limpo.match(/```(?:proposta_acao)?\s*([\s\S]*?)\s*```/)
+  if (matchAcao) {
+    try {
+      const parsedAcao = JSON.parse(matchAcao[1])
+      if (parsedAcao && parsedAcao.tipo && parsedAcao.dados) {
+        limpo = limpo.replace(matchAcao[0], '').trim()
+        propostaAcao = parsedAcao as PropostaAcaoData
+      }
+    } catch {
+      /* intentionally ignored */
+    }
+  }
+
+  return { textoLimpo: limpo, propostaBloco, propostaAcao }
 }
 
 export function AssistenteFinanceiroChatDrawer({
@@ -125,26 +169,31 @@ export function AssistenteFinanceiroChatDrawer({
   const { user } = useAuth()
   const { podeVerValores } = useFinanceiroVisibilidade()
 
-  // Restrição de perfis: apenas admin ou financeiro com permissão de valores
+  // Restrição estrita de perfis: apenas admin ou financeiro com permissão de valores
   const isAutorizado = (user?.role === 'admin' || user?.role === 'financeiro') && podeVerValores
 
   const [aberto, setAberto] = useState(isOpen ?? false)
   const [messages, setMessages] = useState<DisplayMessage[]>([])
   const [inputMessage, setInputMessage] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const [conversationId, setConversationId] = useState<string | null>(null)
-  const [conversations, setConversations] = useState<AgentConversationItem[]>([])
   const [activeTool, setActiveTool] = useState<string | null>(null)
 
-  // Controle de propostas de escrita em bloco por ID da mensagem do assistente
-  const [propostasPorMensagem, setPropostasPorMensagem] = useState<
+  // Persistência das conversas
+  const [conversaAtivaId, setConversaAtivaId] = useState<string | null>(null)
+  const [listaConversas, setListaConversas] = useState<ConversaPersistidaRecord[]>([])
+  const [conversaParaExcluir, setConversaParaExcluir] = useState<ConversaPersistidaRecord | null>(
+    null,
+  )
+
+  // Controle de propostas em bloco e de ações executáveis com botão Desfazer
+  const [propostasBlocoPorMsg, setPropostasBlocoPorMsg] = useState<
     Record<string, PropostaCardState>
   >({})
+  const [propostasAcaoPorMsg, setPropostasAcaoPorMsg] = useState<Record<string, AcaoCardState>>({})
   const [ultimaAuditoriaId, setUltimaAuditoriaId] = useState<string | null>(null)
   const [isDesfazendo, setIsDesfazendo] = useState(false)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const abortControllerRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
     if (isOpen !== undefined) {
@@ -152,29 +201,37 @@ export function AssistenteFinanceiroChatDrawer({
     }
   }, [isOpen])
 
-  // Rola para o final da conversa
+  // Rola para o fim
   useEffect(() => {
     if (aberto) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     }
-  }, [messages, aberto, activeTool])
+  }, [messages, aberto, activeTool, isLoading])
 
-  // Carrega histórico de conversas do usuário ao abrir
+  // Carregar conversas persistidas no banco
+  const recarregarHistorico = async () => {
+    if (!isAutorizado) return
+    const convs = await listarConversasPersistidas('assistente-financeiro')
+    setListaConversas(convs)
+    return convs
+  }
+
   useEffect(() => {
     if (!aberto || !isAutorizado) return
 
-    listAgentConversations('assistente-financeiro')
-      .then((convs) => {
-        setConversations(convs)
-        if (convs.length > 0 && !conversationId) {
-          const first = convs[0]
-          setConversationId(first.id)
-          loadConversationMessages(first.id, 'assistente-financeiro')
-            .then((msgs) => setMessages(msgs))
-            .catch((err) => console.warn('Erro ao carregar mensagens:', err))
+    void recarregarHistorico().then((convs) => {
+      if (convs && convs.length > 0 && !conversaAtivaId) {
+        const primeira = convs[0]
+        setConversaAtivaId(primeira.id)
+        setMessages(primeira.mensagens || [])
+        if (primeira.ultima_auditoria_id) {
+          setUltimaAuditoriaId(primeira.ultima_auditoria_id)
         }
-      })
-      .catch((err) => console.warn('Erro ao listar conversas financeiras:', err))
+        if (primeira.status_processamento === 'processando') {
+          setIsLoading(true)
+        }
+      }
+    })
   }, [aberto, isAutorizado])
 
   if (!isAutorizado) {
@@ -182,28 +239,51 @@ export function AssistenteFinanceiroChatDrawer({
   }
 
   function handleFechar() {
-    // Ao fechar o drawer, cancela qualquer stream em andamento imediatamente
-    // garantindo que não continue consumindo recursos nem trave o estado
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort('Drawer fechado pelo usuário')
-      abortControllerRef.current = null
-    }
-    setIsLoading(false)
-    setActiveTool(null)
     setAberto(false)
     onClose?.()
   }
 
-  function handleLimparConversa() {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort('Conversa limpa pelo usuário')
-      abortControllerRef.current = null
+  // Trocar de conversa persistida
+  async function handleSelecionarConversa(convId: string) {
+    if (convId === 'nova') {
+      handleIniciarNovaConversa()
+      return
     }
+    const conv = await carregarConversaPersistida(convId)
+    if (conv) {
+      setConversaAtivaId(conv.id)
+      setMessages(conv.mensagens || [])
+      setUltimaAuditoriaId(conv.ultima_auditoria_id || null)
+      setIsLoading(conv.status_processamento === 'processando')
+    }
+  }
+
+  function handleIniciarNovaConversa() {
+    setConversaAtivaId(null)
+    setMessages([])
     setIsLoading(false)
     setActiveTool(null)
-    setConversationId(null)
-    setMessages([])
-    toast.info('Nova conversa iniciada com o Assistente Financeiro.')
+    toast.info('Nova conversa limpa iniciada.')
+  }
+
+  async function handleConfirmarExclusao() {
+    if (!conversaParaExcluir) return
+    const idExcluir = conversaParaExcluir.id
+    try {
+      await excluirConversaPersistida(idExcluir)
+      toast.success('Conversa excluída com sucesso.')
+      setConversaParaExcluir(null)
+      const atualizadas = await recarregarHistorico()
+      if (conversaAtivaId === idExcluir) {
+        if (atualizadas && atualizadas.length > 0) {
+          await handleSelecionarConversa(atualizadas[0].id)
+        } else {
+          handleIniciarNovaConversa()
+        }
+      }
+    } catch (err: unknown) {
+      toast.error(`Falha ao excluir conversa: ${err instanceof Error ? err.message : String(err)}`)
+    }
   }
 
   async function handleEnviarMensagem(texto?: string) {
@@ -211,43 +291,16 @@ export function AssistenteFinanceiroChatDrawer({
     if (!msgToSend || isLoading) return
 
     setInputMessage('')
-
-    // Mensagem do usuário na UI
-    const agora = new Date().toISOString()
-    const userMsg: DisplayMessage = {
-      id: `usr_${Date.now()}`,
-      role: 'user',
-      content: msgToSend,
-      created: agora,
-    }
-
-    const assistantMsgId = `ast_${Date.now()}`
-    const assistantMsgPlaceholder: DisplayMessage = {
-      id: assistantMsgId,
-      role: 'assistant',
-      content: '',
-      created: agora,
-    }
-
-    setMessages((prev) => [...prev, userMsg, assistantMsgPlaceholder])
     setIsLoading(true)
 
-    // Se já havia uma requisição anterior em andamento, aborta imediatamente
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort('Nova mensagem enviada pelo usuário')
-    }
-
-    const abortController = new AbortController()
-    abortControllerRef.current = abortController
-
+    // Inicia envio em background garantindo persistência no banco
     try {
-      let acumulado = ''
-
-      const res = await sendAgentMessage({
-        message: msgToSend,
-        conversationId,
+      const { conversaId } = await enviarMensagemPersistidaBackground({
+        conversaId: conversaAtivaId,
         agentSlug: 'assistente-financeiro',
-        timeoutMs: 45000, // Timeout de 45 segundos para resposta do assistente financeiro
+        contexto: secaoAtual,
+        titulo: msgToSend.slice(0, 48),
+        userText: msgToSend,
         contextRecord: {
           tipo: 'secao_financeira',
           id: secaoAtual,
@@ -259,96 +312,101 @@ export function AssistenteFinanceiroChatDrawer({
             data_consulta: new Date().toISOString(),
           },
         },
-        onChunk: (delta) => {
-          acumulado += delta
-          setMessages((prev) =>
-            prev.map((m) => (m.id === assistantMsgId ? { ...m, content: acumulado } : m)),
-          )
+        onChunk: (_delta, full) => {
+          setMessages((prev) => {
+            const semPlaceholder = prev.filter((m) => m.id !== 'temp-ast')
+            return [
+              ...semPlaceholder,
+              {
+                id: 'temp-ast',
+                role: 'assistant',
+                content: full,
+                created: new Date().toISOString(),
+              },
+            ]
+          })
         },
         onToolCallStart: (info) => {
-          setActiveTool(`Consultando registros em "${info.name}"...`)
+          setActiveTool(`Consultando "${info.name}"...`)
         },
         onToolCallDone: () => {
           setActiveTool(null)
         },
-        onCitations: (citations: AgentCitation[]) => {
-          setMessages((prev) =>
-            prev.map((m) => (m.id === assistantMsgId ? { ...m, citations } : m)),
-          )
+        onFinalizado: (convAtualizada) => {
+          setConversaAtivaId(convAtualizada.id)
+          setMessages(convAtualizada.mensagens || [])
+          setIsLoading(false)
+          setActiveTool(null)
+          void recarregarHistorico()
         },
-        signal: abortController.signal,
+        onError: (err) => {
+          setIsLoading(false)
+          setActiveTool(null)
+          toast.error(`Erro no processamento: ${err instanceof Error ? err.message : String(err)}`)
+        },
       })
 
-      // Após término do stream, verifica se a mensagem gerou uma proposta estruturada de bloco
-      const { proposta } = extrairPropostaBloco(acumulado)
-      if (proposta) {
-        setPropostasPorMensagem((prev) => ({
-          ...prev,
-          [assistantMsgId]: {
-            proposta,
-            status: 'pendente',
-          },
-        }))
-      }
-
-      if (res.conversationId && res.conversationId !== conversationId) {
-        setConversationId(res.conversationId)
-        listAgentConversations('assistente-financeiro')
-          .then((c) => setConversations(c))
-          .catch(() => {})
+      if (!conversaAtivaId) {
+        setConversaAtivaId(conversaId)
+        void recarregarHistorico()
       }
     } catch (err: unknown) {
-      const isAbort =
-        err instanceof Error && (err.name === 'AbortError' || err.message.includes('aborted'))
-      const isTimeout =
-        err instanceof Error &&
-        (err.message.includes('Tempo limite') || err.message.includes('timeout'))
-
-      if (isAbort && !isTimeout) {
-        // Usuário cancelou ou fechou deliberadamente
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === assistantMsgId && !m.content
-              ? { ...m, content: 'Operação interrompida pelo usuário.' }
-              : m,
-          ),
-        )
-        return
-      }
-
-      const msgErr = err instanceof Error ? err.message : String(err)
-      const mensagemAmigavel = isTimeout
-        ? 'Não foi possível processar. O assistente atingiu o tempo limite ao pesquisar os lançamentos. Tente reformular o pedido com critérios mais específicos (ex.: especificar data ou valor aproximado).'
-        : 'Não foi possível processar a solicitação no momento. Tente reformular o pedido.'
-
-      toast.error(
-        isTimeout
-          ? 'Tempo limite atingido no Assistente Financeiro'
-          : `Falha no Assistente: ${msgErr}`,
-      )
-
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === assistantMsgId
-            ? {
-                ...m,
-                content: m.content ? `${m.content}\n\n⚠️ ${mensagemAmigavel}` : mensagemAmigavel,
-              }
-            : m,
-        ),
-      )
-    } finally {
       setIsLoading(false)
-      setActiveTool(null)
-      abortControllerRef.current = null
+      toast.error(`Erro ao enviar mensagem: ${err instanceof Error ? err.message : String(err)}`)
     }
   }
 
-  // Execução da proposta de alteração em bloco aprovada pelo usuário
-  async function handleAplicarProposta(msgId: string, proposta: PropostaBlocoData) {
-    setPropostasPorMensagem((prev) => ({
+  // Execução de Ação Financeira (Criar Conta no Plano de Contas ou Cadastrar Credor)
+  async function handleAplicarAcao(msgId: string, proposta: PropostaAcaoData) {
+    setPropostasAcaoPorMsg((prev) => ({
       ...prev,
-      [msgId]: { ...prev[msgId], status: 'aplicando' },
+      [msgId]: { ...prev[msgId], status: 'aplicando', proposta },
+    }))
+
+    try {
+      const res = await executarAcaoFinanceira(proposta)
+      if (!res.sucesso) {
+        throw new Error(res.mensagem || 'Falha ao executar ação')
+      }
+
+      setPropostasAcaoPorMsg((prev) => ({
+        ...prev,
+        [msgId]: {
+          proposta,
+          status: 'aplicada',
+          resultado: {
+            auditId: res.auditId,
+            mensagem: res.mensagem,
+          },
+        },
+      }))
+
+      if (res.auditId) {
+        setUltimaAuditoriaId(res.auditId)
+        if (conversaAtivaId) {
+          void atualizarConversaPersistida(conversaAtivaId, {
+            ultima_auditoria_id: res.auditId,
+          })
+        }
+      }
+
+      toast.success(res.mensagem)
+      onAcaoExecutada?.()
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      toast.error(`Falha ao executar ação: ${msg}`)
+      setPropostasAcaoPorMsg((prev) => ({
+        ...prev,
+        [msgId]: { ...prev[msgId], status: 'pendente', proposta },
+      }))
+    }
+  }
+
+  // Execução de proposta de alteração em bloco (reclassificação de lançamentos)
+  async function handleAplicarBloco(msgId: string, proposta: PropostaBlocoData) {
+    setPropostasBlocoPorMsg((prev) => ({
+      ...prev,
+      [msgId]: { ...prev[msgId], status: 'aplicando', proposta },
     }))
 
     try {
@@ -357,7 +415,7 @@ export function AssistenteFinanceiroChatDrawer({
         throw new Error(res.mensagem || 'Erro ao processar lote')
       }
 
-      setPropostasPorMensagem((prev) => ({
+      setPropostasBlocoPorMsg((prev) => ({
         ...prev,
         [msgId]: {
           proposta,
@@ -373,38 +431,43 @@ export function AssistenteFinanceiroChatDrawer({
 
       if (res.audit_id) {
         setUltimaAuditoriaId(res.audit_id)
+        if (conversaAtivaId) {
+          void atualizarConversaPersistida(conversaAtivaId, {
+            ultima_auditoria_id: res.audit_id,
+          })
+        }
       }
 
       toast.success(res.mensagem || `${res.total_afetados} registros alterados com sucesso!`)
       onAcaoExecutada?.()
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
-      toast.error(`Falha ao aplicar alteração em bloco: ${msg}`)
-      setPropostasPorMensagem((prev) => ({
+      toast.error(`Falha ao aplicar alteração: ${msg}`)
+      setPropostasBlocoPorMsg((prev) => ({
         ...prev,
-        [msgId]: { ...prev[msgId], status: 'pendente' },
+        [msgId]: { ...prev[msgId], status: 'pendente', proposta },
       }))
     }
   }
 
-  function handleDescartarProposta(msgId: string) {
-    setPropostasPorMensagem((prev) => ({
-      ...prev,
-      [msgId]: { ...prev[msgId], status: 'descartada' },
-    }))
-    toast.info('Proposta de alteração em bloco descartada.')
-  }
-
-  async function handleDesfazerUltimaOperacao() {
+  // Desfazer última alteração
+  async function handleDesfazer(auditIdParaDesfazer?: string) {
     if (isDesfazendo) return
     setIsDesfazendo(true)
+    const auditId = auditIdParaDesfazer || ultimaAuditoriaId || undefined
+
     try {
-      const res = await desfazerUltimaOperacaoBloco(ultimaAuditoriaId || undefined)
+      const res = await desfazerAcaoFinanceira(auditId)
       if (!res.sucesso) {
         throw new Error(res.mensagem || 'Falha ao reverter')
       }
-      toast.success(res.mensagem || 'Operação anterior revertida com sucesso!')
+      toast.success(res.mensagem || 'Ação revertida com sucesso!')
       setUltimaAuditoriaId(null)
+      if (conversaAtivaId) {
+        void atualizarConversaPersistida(conversaAtivaId, {
+          ultima_auditoria_id: '',
+        })
+      }
       onAcaoExecutada?.()
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
@@ -418,7 +481,7 @@ export function AssistenteFinanceiroChatDrawer({
 
   return (
     <>
-      {/* Botão de disparo flutuante discreto com identidade AEROCAD #FF6A13 */}
+      {/* Botão flutuante discreto padrão AEROCAD #FF6A13 */}
       {!aberto && (
         <button
           type="button"
@@ -432,9 +495,9 @@ export function AssistenteFinanceiroChatDrawer({
         </button>
       )}
 
-      {/* Painel lateral Drawer do Chat */}
+      {/* Drawer lateral */}
       {aberto && (
-        <div className="fixed inset-y-0 right-0 z-50 w-full sm:w-[460px] bg-white shadow-2xl border-l border-neutral-200 flex flex-col font-sans animate-in slide-in-from-right duration-200">
+        <div className="fixed inset-y-0 right-0 z-50 w-full sm:w-[480px] bg-white shadow-2xl border-l border-neutral-200 flex flex-col font-sans animate-in slide-in-from-right duration-200">
           {/* Cabeçalho */}
           <div className="bg-[#FF6A13] text-white p-4 flex items-center justify-between border-b border-[#e05b0d]">
             <div className="flex items-center gap-2.5">
@@ -448,7 +511,9 @@ export function AssistenteFinanceiroChatDrawer({
                     AEROCAD
                   </Badge>
                 </h3>
-                <p className="text-[11px] text-white/80">Consulta de dados reais • Modo Leitura</p>
+                <p className="text-[11px] text-white/80">
+                  Poder de Ação Contábil • Histórico Persistido
+                </p>
               </div>
             </div>
 
@@ -456,11 +521,11 @@ export function AssistenteFinanceiroChatDrawer({
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={handleLimparConversa}
+                onClick={handleIniciarNovaConversa}
                 className="text-white hover:bg-white/20 h-8 w-8"
-                title="Limpar conversa / Nova sessão"
+                title="Nova conversa"
               >
-                <Trash2 className="w-4 h-4" />
+                <Plus className="w-4 h-4" />
               </Button>
               <Button
                 variant="ghost"
@@ -474,23 +539,62 @@ export function AssistenteFinanceiroChatDrawer({
             </div>
           </div>
 
-          {/* Aviso com suporte a Propostas em Bloco e Ação de Desfazer */}
+          {/* Barra de Histórico de Conversas Persistidas */}
+          <div className="bg-neutral-100 border-b border-neutral-200 px-3.5 py-2 flex items-center justify-between gap-2 text-xs">
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <History className="w-3.5 h-3.5 text-neutral-500 shrink-0" />
+              <Select
+                value={conversaAtivaId || 'nova'}
+                onValueChange={(val) => handleSelecionarConversa(val)}
+              >
+                <SelectTrigger className="h-7 text-xs bg-white border-neutral-300 w-full max-w-[280px]">
+                  <SelectValue placeholder="Histórico de conversas..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="nova" className="text-xs font-semibold text-[#FF6A13]">
+                    + Iniciar Nova Conversa
+                  </SelectItem>
+                  {listaConversas.map((c) => (
+                    <SelectItem key={c.id} value={c.id} className="text-xs">
+                      {c.titulo || `Conversa de ${new Date(c.created).toLocaleDateString('pt-BR')}`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {conversaAtivaId && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => {
+                  const encontrada = listaConversas.find((c) => c.id === conversaAtivaId)
+                  if (encontrada) setConversaParaExcluir(encontrada)
+                }}
+                className="h-7 w-7 text-neutral-500 hover:text-red-600 hover:bg-red-50"
+                title="Excluir esta conversa definitivamente"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </Button>
+            )}
+          </div>
+
+          {/* Banner de status e botão DESFAZER se houver ação executada */}
           <div className="bg-amber-50 border-b border-amber-200 px-3.5 py-2 text-[11px] text-amber-900 flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <Info className="w-4 h-4 text-amber-600 shrink-0" />
-              <span>
-                <strong>Assistente Financeiro Ativo:</strong> consulta dados e{' '}
-                <strong>propõe correções em bloco</strong> com sua confirmação.
+            <div className="flex items-center gap-1.5 min-w-0 truncate">
+              <Info className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+              <span className="truncate">
+                Ações contábeis exigem confirmação e são 100% reversíveis.
               </span>
             </div>
             {ultimaAuditoriaId && (
               <Button
                 variant="outline"
                 size="sm"
-                onClick={handleDesfazerUltimaOperacao}
+                onClick={() => handleDesfazer(ultimaAuditoriaId)}
                 disabled={isDesfazendo}
-                className="h-6 text-[10px] px-2 border-amber-400 bg-amber-100 hover:bg-amber-200 text-amber-900 flex items-center gap-1 shrink-0"
-                title="Desfazer última alteração em bloco aplicada"
+                className="h-6 text-[10px] px-2 border-amber-400 bg-amber-100 hover:bg-amber-200 text-amber-900 flex items-center gap-1 shrink-0 font-semibold"
+                title="Desfazer última alteração"
               >
                 {isDesfazendo ? (
                   <Loader2 className="w-3 h-3 animate-spin" />
@@ -514,15 +618,15 @@ export function AssistenteFinanceiroChatDrawer({
                     Como posso ajudar no financeiro hoje?
                   </h4>
                   <p className="text-xs text-neutral-500 max-w-xs mx-auto">
-                    Faça perguntas sobre transações, extratos, contas a pagar, recebíveis ou
-                    indicadores contábeis.
+                    Consulte saldos, proponha criação de contas no Plano de Contas, credores ou
+                    reclassifique lançamentos com segurança.
                   </p>
                 </div>
 
-                {/* Sugestões de perguntas rápidas baseadas na seção atual */}
+                {/* Perguntas sugeridas */}
                 <div className="text-left pt-2 space-y-1.5">
                   <p className="text-[11px] font-semibold text-neutral-500 px-1 uppercase tracking-wider">
-                    Perguntas frequentes ({secaoAtual}):
+                    Sugestões para {secaoAtual}:
                   </p>
                   <div className="space-y-1.5">
                     {sugestoes.map((sug, i) => (
@@ -542,11 +646,15 @@ export function AssistenteFinanceiroChatDrawer({
               <div className="space-y-3 pb-2">
                 {messages.map((m) => {
                   const isUser = m.role === 'user'
-                  const propostaEstado = propostasPorMensagem[m.id]
-                  const { textoLimpo, proposta: inlineProposta } = !isUser
-                    ? extrairPropostaBloco(m.content)
-                    : { textoLimpo: m.content, proposta: null }
-                  const propostaAtual = propostaEstado?.proposta || inlineProposta
+                  const { textoLimpo, propostaBloco, propostaAcao } = !isUser
+                    ? extrairBlocos(m.content)
+                    : { textoLimpo: m.content, propostaBloco: null, propostaAcao: null }
+
+                  const blocoState = propostasBlocoPorMsg[m.id]
+                  const acaoState = propostasAcaoPorMsg[m.id]
+
+                  const blocoAtual = blocoState?.proposta || propostaBloco
+                  const acaoAtual = acaoState?.proposta || propostaAcao
 
                   return (
                     <div key={m.id} className="space-y-2">
@@ -566,7 +674,7 @@ export function AssistenteFinanceiroChatDrawer({
                           {textoLimpo || (
                             <span className="flex items-center gap-1.5 text-neutral-500 italic">
                               <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                              Analisando dados do financeiro...
+                              Processando consulta com o Assistente...
                             </span>
                           )}
                         </div>
@@ -577,21 +685,111 @@ export function AssistenteFinanceiroChatDrawer({
                         )}
                       </div>
 
-                      {/* CARTÃO DE PROPOSTA DE CORREÇÃO EM BLOCO */}
-                      {!isUser && propostaAtual && (
-                        <div className="ml-9 max-w-[85%] rounded-xl border-2 border-orange-200 bg-orange-50/70 p-3 shadow-sm text-xs space-y-2.5">
+                      {/* CARTÃO DE PROPOSTA DE AÇÃO EXECUTÁVEL (NOVA CONTA OU NOVO CREDOR) */}
+                      {!isUser && acaoAtual && (
+                        <div className="ml-9 max-w-[88%] rounded-xl border-2 border-orange-300 bg-orange-50/90 p-3.5 shadow-sm text-xs space-y-2.5">
+                          <div className="flex items-center justify-between border-b border-orange-200 pb-2">
+                            <div className="flex items-center gap-1.5 font-bold text-neutral-800">
+                              <Sparkles className="w-4 h-4 text-[#FF6A13]" />
+                              <span>{acaoAtual.titulo || 'Ação Proposta pelo Assistente'}</span>
+                            </div>
+                            <Badge className="bg-[#FF6A13] text-white text-[10px]">
+                              Aprovação Necessária
+                            </Badge>
+                          </div>
+
+                          <p className="text-neutral-700">{acaoAtual.descricao}</p>
+
+                          {/* Detalhes dos Campos */}
+                          <div className="bg-white rounded-lg p-2.5 border border-neutral-200 space-y-1.5 text-[11px]">
+                            {Object.entries(acaoAtual.dados).map(([chave, valor]) => (
+                              <div key={chave} className="flex justify-between items-center py-0.5">
+                                <span className="text-neutral-500 capitalize">
+                                  {chave.replace(/_/g, ' ')}:
+                                </span>
+                                <span className="font-semibold text-neutral-800 font-mono">
+                                  {String(valor)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* Botões de Ação */}
+                          {(!acaoState || acaoState.status === 'pendente') && (
+                            <div className="flex items-center justify-end gap-2 pt-1">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  setPropostasAcaoPorMsg((prev) => ({
+                                    ...prev,
+                                    [m.id]: { proposta: acaoAtual, status: 'descartada' },
+                                  }))
+                                  toast.info('Ação descartada.')
+                                }}
+                                className="h-7 text-xs text-neutral-600 hover:text-neutral-800"
+                              >
+                                Descartar
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                onClick={() => handleAplicarAcao(m.id, acaoAtual)}
+                                className="h-7 text-xs bg-[#FF6A13] hover:bg-[#e05b0d] text-white flex items-center gap-1"
+                              >
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                <span>Confirmar & Executar</span>
+                              </Button>
+                            </div>
+                          )}
+
+                          {acaoState?.status === 'aplicando' && (
+                            <div className="flex items-center justify-center gap-2 py-1 text-[#FF6A13] font-medium text-[11px]">
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              <span>Criando registro e gerando auditoria reversível...</span>
+                            </div>
+                          )}
+
+                          {acaoState?.status === 'aplicada' && (
+                            <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg p-2.5 text-[11px] space-y-2">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-1.5">
+                                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                                  <span>{acaoState.resultado?.mensagem}</span>
+                                </div>
+                                {acaoState.resultado?.auditId && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleDesfazer(acaoState.resultado?.auditId)}
+                                    className="h-6 text-[10px] px-2 border-emerald-300 text-emerald-900 hover:bg-emerald-100 flex items-center gap-1"
+                                  >
+                                    <RotateCcw className="w-3 h-3" />
+                                    <span>Desfazer</span>
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* CARTÃO DE PROPOSTA DE RECLASSIFICAÇÃO EM BLOCO */}
+                      {!isUser && blocoAtual && (
+                        <div className="ml-9 max-w-[88%] rounded-xl border-2 border-orange-200 bg-orange-50/70 p-3 shadow-sm text-xs space-y-2.5">
                           <div className="flex items-center justify-between border-b border-orange-200 pb-1.5">
                             <div className="flex items-center gap-1.5 font-bold text-neutral-800">
                               <Layers className="w-4 h-4 text-[#FF6A13]" />
-                              <span>Proposta de Correção em Bloco</span>
+                              <span>Reclassificação Contábil em Bloco</span>
                             </div>
-                            <Badge className="bg-[#FF6A13] text-white hover:bg-[#e05b0d] text-[10px] px-2">
-                              Aguardando Confirmação
+                            <Badge className="bg-[#FF6A13] text-white text-[10px] px-2">
+                              Confirmação Requerida
                             </Badge>
                           </div>
 
                           <p className="text-neutral-700 font-medium">
-                            {propostaAtual.descricao_resumo || 'Alteração estruturada de registros'}
+                            {blocoAtual.descricao_resumo || 'Alteração de lançamentos'}
                           </p>
 
                           <div className="bg-white rounded-lg p-2.5 border border-neutral-200 space-y-1.5 text-[11px]">
@@ -600,54 +798,51 @@ export function AssistenteFinanceiroChatDrawer({
                                 <Filter className="w-3 h-3 text-[#FF6A13]" /> Coleção Alvo:
                               </span>
                               <span className="font-semibold text-neutral-800 uppercase">
-                                {propostaAtual.colecao_alvo.replace('_', ' ')}
+                                {blocoAtual.colecao_alvo.replace('_', ' ')}
                               </span>
                             </div>
 
                             <div className="flex items-center justify-between text-neutral-600">
                               <span className="text-neutral-500">Critério de Filtro:</span>
                               <span className="font-mono text-[10px] bg-neutral-100 px-1.5 py-0.5 rounded text-neutral-800">
-                                {propostaAtual.filtro.campo} {propostaAtual.filtro.operador} "
-                                {String(propostaAtual.filtro.valor)}"
+                                {blocoAtual.filtro.campo} {blocoAtual.filtro.operador} "
+                                {String(blocoAtual.filtro.valor)}"
                               </span>
                             </div>
 
                             <div className="flex items-center justify-between text-neutral-600 pt-1 border-t border-neutral-100">
-                              <span className="text-neutral-500">Alteração Proposta:</span>
+                              <span className="text-neutral-500">Alteração:</span>
                               <span className="flex items-center gap-1 font-semibold text-[#FF6A13]">
-                                <span>{propostaAtual.alteracoes.campo}</span>
+                                <span>{blocoAtual.alteracoes.campo}</span>
                                 <ArrowRight className="w-3 h-3" />
                                 <span>
-                                  {propostaAtual.alteracoes.valor_novo_label ||
-                                    String(propostaAtual.alteracoes.valor_novo)}
+                                  {blocoAtual.alteracoes.valor_novo_label ||
+                                    String(blocoAtual.alteracoes.valor_novo)}
                                 </span>
                               </span>
                             </div>
-
-                            {propostaAtual.total_estimado !== undefined &&
-                              propostaAtual.total_estimado > 0 && (
-                                <div className="text-[10px] text-neutral-500 text-right">
-                                  Estimativa: ~{propostaAtual.total_estimado} registro(s) afetado(s)
-                                </div>
-                              )}
                           </div>
 
-                          {/* Estado e Ações da Proposta */}
-                          {(!propostaEstado || propostaEstado.status === 'pendente') && (
+                          {(!blocoState || blocoState.status === 'pendente') && (
                             <div className="flex items-center justify-end gap-2 pt-1">
                               <Button
                                 type="button"
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => handleDescartarProposta(m.id)}
-                                className="h-7 text-xs text-neutral-600 hover:text-neutral-800 hover:bg-neutral-200/50"
+                                onClick={() => {
+                                  setPropostasBlocoPorMsg((prev) => ({
+                                    ...prev,
+                                    [m.id]: { proposta: blocoAtual, status: 'descartada' },
+                                  }))
+                                }}
+                                className="h-7 text-xs text-neutral-600"
                               >
                                 Descartar
                               </Button>
                               <Button
                                 type="button"
                                 size="sm"
-                                onClick={() => handleAplicarProposta(m.id, propostaAtual)}
+                                onClick={() => handleAplicarBloco(m.id, blocoAtual)}
                                 className="h-7 text-xs bg-[#FF6A13] hover:bg-[#e05b0d] text-white flex items-center gap-1"
                               >
                                 <CheckCircle2 className="w-3.5 h-3.5" />
@@ -656,27 +851,30 @@ export function AssistenteFinanceiroChatDrawer({
                             </div>
                           )}
 
-                          {propostaEstado?.status === 'aplicando' && (
+                          {blocoState?.status === 'aplicando' && (
                             <div className="flex items-center justify-center gap-2 py-1 text-[#FF6A13] font-medium text-[11px]">
                               <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                              <span>Aplicando alterações no banco de dados...</span>
+                              <span>Aplicando alterações...</span>
                             </div>
                           )}
 
-                          {propostaEstado?.status === 'aplicada' && (
+                          {blocoState?.status === 'aplicada' && (
                             <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg p-2 text-[11px] flex items-center justify-between">
                               <div className="flex items-center gap-1.5">
                                 <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                                <span>
-                                  <strong>Sucesso:</strong> {propostaEstado.resultado?.mensagem}
-                                </span>
+                                <span>{blocoState.resultado?.mensagem}</span>
                               </div>
-                            </div>
-                          )}
-
-                          {propostaEstado?.status === 'descartada' && (
-                            <div className="text-[11px] text-neutral-400 italic text-right">
-                              Proposta descartada pelo usuário.
+                              {blocoState.resultado?.auditId && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleDesfazer(blocoState.resultado?.auditId)}
+                                  className="h-6 text-[10px] px-2 border-emerald-300 text-emerald-900 hover:bg-emerald-100 flex items-center gap-1"
+                                >
+                                  <RotateCcw className="w-3 h-3" />
+                                  <span>Desfazer</span>
+                                </Button>
+                              )}
                             </div>
                           )}
                         </div>
@@ -714,46 +912,68 @@ export function AssistenteFinanceiroChatDrawer({
                     handleEnviarMensagem()
                   }
                 }}
-                placeholder="Pergunte sobre saldos, contas a pagar, boletos ou extratos..."
+                placeholder="Ex.: Criar nova conta no Plano de Contas para Marketing Digital..."
                 className="min-h-[64px] max-h-28 text-xs resize-none bg-white focus-visible:ring-[#FF6A13]"
                 disabled={isLoading}
               />
-              {isLoading ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    if (abortControllerRef.current) {
-                      abortControllerRef.current.abort('Cancelado pelo usuário')
-                      abortControllerRef.current = null
-                    }
-                    setIsLoading(false)
-                    setActiveTool(null)
-                    toast.info('Processamento cancelado.')
-                  }}
-                  className="h-11 px-3 border-orange-300 text-orange-700 hover:bg-orange-100 shrink-0 text-xs flex items-center gap-1.5"
-                  title="Interromper processamento atual"
-                >
-                  <X className="w-4 h-4 text-orange-600" />
-                  <span>Parar</span>
-                </Button>
-              ) : (
-                <Button
-                  type="submit"
-                  disabled={!inputMessage.trim()}
-                  className="h-11 px-3.5 bg-[#FF6A13] hover:bg-[#e05b0d] text-white shrink-0"
-                >
+              <Button
+                type="submit"
+                disabled={!inputMessage.trim() || isLoading}
+                className="h-11 px-3.5 bg-[#FF6A13] hover:bg-[#e05b0d] text-white shrink-0"
+              >
+                {isLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
                   <Send className="w-4 h-4" />
-                </Button>
-              )}
+                )}
+              </Button>
             </form>
             <div className="mt-1.5 flex items-center justify-between text-[10px] text-neutral-400">
               <span>Enter envia • Shift+Enter quebra linha</span>
-              <span>Acesso restrito: Administrador e Financeiro</span>
+              <span>Histórico mantido até você excluir</span>
             </div>
           </div>
         </div>
       )}
+
+      {/* Modal de Confirmação de Exclusão de Conversa */}
+      <Dialog
+        open={Boolean(conversaParaExcluir)}
+        onOpenChange={(v) => !v && setConversaParaExcluir(null)}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <AlertTriangle className="w-5 h-5" />
+              Excluir Conversa do Assistente
+            </DialogTitle>
+            <DialogDescription className="text-xs text-neutral-600 pt-2">
+              Tem certeza que deseja excluir a conversa{' '}
+              <strong>"{conversaParaExcluir?.titulo || 'esta conversa'}"</strong>?
+              <br />
+              Esta ação removerá o histórico do banco de dados definitivamente.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setConversaParaExcluir(null)}
+              className="text-xs"
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleConfirmarExclusao}
+              className="text-xs bg-red-600 hover:bg-red-700 text-white"
+            >
+              Excluir Definitivamente
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }
