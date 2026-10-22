@@ -18,6 +18,7 @@ import {
   ExternalLink,
   Landmark,
   CopySlash,
+  Search,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/lib/format'
@@ -38,6 +39,7 @@ export type FinanceTabKey =
   | 'plano_contas'
   | 'parcelas'
   | 'orfas'
+  | 'localizador'
 
 export interface CentralFinanceiraHubProps {
   activeTab: FinanceTabKey
@@ -123,6 +125,28 @@ export function CentralFinanceiraHub(
     onAbrirEmNovaJanela,
   } = props
   const cards: HubCardConfig[] = [
+    {
+      id: 'localizador',
+      title: 'Localizador de Documentos',
+      subtitle: 'Busca unificada de notas fiscais, boletos e comprovantes',
+      icon: Search,
+      accentColor: '#FF6A13',
+      iconBg: 'bg-orange-50 border-orange-200 text-[#FF6A13]',
+      iconColor: 'text-[#FF6A13]',
+      badge: (
+        <span className="inline-flex items-center gap-1 rounded-full bg-orange-50 px-2 py-0.5 text-[10px] font-bold text-[#D65100] border border-[#FFD2B3]">
+          Global · Rollback
+        </span>
+      ),
+      statLabel: 'Pesquisa & Exclusão',
+      statValue: (
+        <span className="font-bold text-neutral-900 text-xs sm:text-sm">
+          NFS-e · Boletos · Comprovantes
+        </span>
+      ),
+      statSubtext: 'Com exclusão admin e desfazer imediato',
+      visible: true,
+    },
     {
       id: 'credores',
       title: 'Credores',

@@ -29,6 +29,7 @@ import { RelatoriosFinanceirosTab } from '@/components/financeiro/RelatoriosFina
 import { RelatoriosContabeisAvancadosTab } from '@/components/financeiro/RelatoriosContabeisAvancadosTab'
 import { EmprestimosFinanciamentosTab } from '@/components/financeiro/EmprestimosFinanciamentosTab'
 import { SensitiveAreaGate } from '@/components/auth/SensitiveAreaGate'
+import { LocalizadorDocumentosTab } from '@/components/financeiro/LocalizadorDocumentosTab'
 import { CentralFinanceiraHub } from '@/components/financeiro/CentralFinanceiraHub'
 import { PlanoContasTab } from '@/components/financeiro/PlanoContasTab'
 import { ValuationTab } from '@/components/financeiro/ValuationTab'
@@ -373,6 +374,26 @@ export function FinanceiroModuloFocoPage() {
                 clientes={clients.data}
               />
             </SensitiveAreaGate>
+          ) : tabKey === 'localizador' ? (
+            <LocalizadorDocumentosTab
+              parcelas={installments.data}
+              contasPagar={contasPagar.data}
+              contasReceber={contasReceber.data}
+              projetos={projects.data}
+              clientes={clients.data}
+              credores={credores.data}
+              contasBancarias={contasBancarias.data}
+              userRole={user?.role}
+              canWrite={canWrite}
+              onReloadAll={async () => {
+                await Promise.all([
+                  installments.reload(),
+                  contasPagar.reload(),
+                  contasReceber.reload(),
+                  extratosTransacoes.reload(),
+                ])
+              }}
+            />
           ) : (
             <div className="crm-card p-8 text-center">
               <p className="text-neutral-600 font-semibold">

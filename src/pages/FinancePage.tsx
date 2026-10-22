@@ -166,6 +166,7 @@ import {
   useFinanceiroAbasPersonalizadas,
 } from '@/components/financeiro/FinanceiroAbasConfig'
 import { PersonalizarAbasFinanceiroModal } from '@/components/financeiro/PersonalizarAbasFinanceiroModal'
+import { LocalizadorDocumentosTab } from '@/components/financeiro/LocalizadorDocumentosTab'
 import { ExternalLink } from 'lucide-react'
 
 export default FinancePage
@@ -1890,6 +1891,29 @@ export function FinancePage() {
               clientes={clients.data}
             />
           </SensitiveAreaGate>
+        </div>
+      ) : activeTab === 'localizador' ? (
+        <div className="mt-5">
+          <LocalizadorDocumentosTab
+            parcelas={installments.data}
+            contasPagar={contasPagar.data}
+            contasReceber={contasReceber.data}
+            projetos={projects.data}
+            clientes={clients.data}
+            credores={credores.data}
+            contasBancarias={contasBancarias.data}
+            notasOrfas={notasOrfas}
+            userRole={user?.role}
+            canWrite={canWrite}
+            onReloadAll={async () => {
+              await Promise.all([
+                installments.reload(),
+                contasPagar.reload(),
+                contasReceber.reload(),
+                extratosTransacoes.reload(),
+              ])
+            }}
+          />
         </div>
       ) : activeTab === 'orfas' ? (
         <div className="mt-5 space-y-4">

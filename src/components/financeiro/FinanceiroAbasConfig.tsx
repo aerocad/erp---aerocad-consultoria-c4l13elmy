@@ -16,6 +16,7 @@ import {
   FileText,
   Layers,
   Sparkles,
+  Search,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -144,6 +145,14 @@ export const ALL_FINANCE_TABS: readonly TabDefinition[] = [
     shortLabel: 'Parcelas',
     icon: Layers,
     description: 'Visão granular de medições vinculadas aos projetos',
+    defaultVisible: true,
+  },
+  {
+    id: 'localizador',
+    label: 'Localizador de Documentos',
+    shortLabel: 'Localizador',
+    icon: Search,
+    description: 'Busca global de NFS-e, boletos e comprovantes com exclusão e desfazer',
     defaultVisible: true,
   },
   {
