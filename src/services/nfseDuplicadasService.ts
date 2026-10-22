@@ -1,4 +1,4 @@
-import { pb } from '@/lib/pocketbase/client'
+import pb from '@/lib/pocketbase/client'
 import type { ParcelaRecord } from '@/types/crm'
 import type { NfseDadoExtraido } from './nfseParser'
 
