@@ -159,7 +159,7 @@ export async function enviarMensagemPersistidaBackground(params: {
   contextRecord?: AgentContextRecord | null
   onChunk?: (delta: string, acumulado: string) => void
   onToolCallStart?: (info: { id: string; name: string }) => void
-  onToolCallDone?: (info: { id: string; name: string }) => void
+  onToolCallDone?: (info: { id: string; ok: boolean }) => void
   onFinalizado?: (conversaAtualizada: ConversaPersistidaRecord) => void
   onError?: (err: unknown) => void
 }): Promise<{ conversaId: string; userMessage: DisplayMessage }> {

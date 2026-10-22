@@ -1,19 +1,46 @@
 import { useState, useEffect, useRef } from 'react'
-import { Sparkles, Send, Trash2, X, Bot, User as UserIcon, Loader2, Info } from 'lucide-react'
+import {
+  Sparkles,
+  Send,
+  Trash2,
+  X,
+  Bot,
+  User as UserIcon,
+  Loader2,
+  Info,
+  History,
+  Plus,
+  AlertTriangle,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { useAuth } from '@/contexts/AuthContext'
 import { canAccess } from '@/lib/crm'
 import {
-  sendAgentMessage,
-  listAgentConversations,
-  loadConversationMessages,
-  type AgentConversationItem,
-  type CrmAgentSlug,
-  type AgentContextRecord,
-} from '@/services/assistenteIa'
+  listarConversasPersistidas,
+  carregarConversaPersistida,
+  excluirConversaPersistida,
+  enviarMensagemPersistidaBackground,
+  type ConversaPersistidaRecord,
+} from '@/services/assistenteConversasService'
+import type { CrmAgentSlug, AgentContextRecord } from '@/services/assistenteIa'
 import type { DisplayMessage, AgentCitation } from '@/lib/skipAi'
 import { toast } from 'sonner'
 
@@ -72,11 +99,13 @@ export function AssistenteSecaoDrawer({
   const [inputMessage, setInputMessage] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [conversationId, setConversationId] = useState<string | null>(null)
-  const [, setConversations] = useState<AgentConversationItem[]>([])
+  const [listaConversas, setListaConversas] = useState<ConversaPersistidaRecord[]>([])
+  const [conversaParaExcluir, setConversaParaExcluir] = useState<ConversaPersistidaRecord | null>(
+    null,
+  )
   const [activeTool, setActiveTool] = useState<string | null>(null)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const abortControllerRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
     if (isOpen !== undefined) {
@@ -91,49 +120,77 @@ export function AssistenteSecaoDrawer({
     }
   }, [messages, aberto, activeTool])
 
+  const recarregarHistorico = async () => {
+    if (!isAutorizado) return []
+    const convs = await listarConversasPersistidas(agentSlug)
+    setListaConversas(convs)
+    return convs
+  }
+
   // Carrega histórico de conversas do usuário com este agente ao abrir
   useEffect(() => {
     if (!aberto || !isAutorizado) return
 
-    listAgentConversations(agentSlug)
-      .then((convs) => {
-        setConversations(convs)
-        if (convs.length > 0 && !conversationId) {
-          const first = convs[0]
-          setConversationId(first.id)
-          loadConversationMessages(first.id, agentSlug)
-            .then((msgs) => setMessages(msgs))
-            .catch((err) => console.warn(`Erro ao carregar mensagens do agente ${agentSlug}:`, err))
+    void recarregarHistorico().then((convs) => {
+      if (convs && convs.length > 0 && !conversationId) {
+        const primeira = convs[0]
+        setConversationId(primeira.id)
+        setMessages(primeira.mensagens || [])
+        if (primeira.status_processamento === 'processando') {
+          setIsLoading(true)
         }
-      })
-      .catch((err) => console.warn(`Erro ao listar conversas do agente ${agentSlug}:`, err))
-  }, [aberto, isAutorizado, agentSlug, conversationId])
+      }
+    })
+  }, [aberto, isAutorizado, agentSlug])
 
   if (!isAutorizado) {
     return null
   }
 
   function handleFechar() {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort('Drawer fechado pelo usuário')
-      abortControllerRef.current = null
-    }
-    setIsLoading(false)
-    setActiveTool(null)
     setAberto(false)
     onClose?.()
   }
 
-  function handleLimparConversa() {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort('Conversa limpa pelo usuário')
-      abortControllerRef.current = null
+  async function handleSelecionarConversa(convId: string) {
+    if (convId === 'nova') {
+      handleIniciarNovaConversa()
+      return
     }
-    setIsLoading(false)
-    setActiveTool(null)
+    const conv = await carregarConversaPersistida(convId)
+    if (conv) {
+      setConversationId(conv.id)
+      setMessages(conv.mensagens || [])
+      setIsLoading(conv.status_processamento === 'processando')
+    }
+  }
+
+  function handleIniciarNovaConversa() {
     setConversationId(null)
     setMessages([])
+    setIsLoading(false)
+    setActiveTool(null)
     toast.info(`Nova conversa iniciada com o ${titulo}.`)
+  }
+
+  async function handleConfirmarExclusao() {
+    if (!conversaParaExcluir) return
+    const idExcluir = conversaParaExcluir.id
+    try {
+      await excluirConversaPersistida(idExcluir)
+      toast.success('Conversa excluída com sucesso.')
+      setConversaParaExcluir(null)
+      const atualizadas = await recarregarHistorico()
+      if (conversationId === idExcluir) {
+        if (atualizadas && atualizadas.length > 0) {
+          await handleSelecionarConversa(atualizadas[0].id)
+        } else {
+          handleIniciarNovaConversa()
+        }
+      }
+    } catch (err: unknown) {
+      toast.error(`Falha ao excluir conversa: ${err instanceof Error ? err.message : String(err)}`)
+    }
   }
 
   async function handleEnviarMensagem(texto?: string) {
@@ -141,42 +198,15 @@ export function AssistenteSecaoDrawer({
     if (!msgToSend || isLoading) return
 
     setInputMessage('')
-
-    // Mensagem do usuário na UI (garantindo campo created no padrão ISO)
-    const agora = new Date().toISOString()
-    const userMsg: DisplayMessage = {
-      id: `usr_${Date.now()}`,
-      role: 'user',
-      content: msgToSend,
-      created: agora,
-    }
-
-    const assistantMsgId = `ast_${Date.now()}`
-    const assistantMsgPlaceholder: DisplayMessage = {
-      id: assistantMsgId,
-      role: 'assistant',
-      content: '',
-      created: agora,
-    }
-
-    setMessages((prev) => [...prev, userMsg, assistantMsgPlaceholder])
     setIsLoading(true)
 
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort('Nova mensagem enviada pelo usuário')
-    }
-
-    const abortController = new AbortController()
-    abortControllerRef.current = abortController
-
     try {
-      let acumulado = ''
-
-      const res = await sendAgentMessage({
-        message: msgToSend,
-        conversationId,
+      const { conversaId: cid } = await enviarMensagemPersistidaBackground({
+        conversaId: conversationId,
         agentSlug,
-        timeoutMs: 45000,
+        contexto: secaoNome || agentSlug,
+        titulo: msgToSend.slice(0, 48),
+        userText: msgToSend,
         contextRecord: contextRecord || {
           tipo: 'projeto',
           id: secaoNome || agentSlug,
@@ -188,11 +218,19 @@ export function AssistenteSecaoDrawer({
             data_consulta: new Date().toISOString(),
           },
         },
-        onChunk: (delta) => {
-          acumulado += delta
-          setMessages((prev) =>
-            prev.map((m) => (m.id === assistantMsgId ? { ...m, content: acumulado } : m)),
-          )
+        onChunk: (_delta, full) => {
+          setMessages((prev) => {
+            const semPlaceholder = prev.filter((m) => m.id !== 'temp-ast')
+            return [
+              ...semPlaceholder,
+              {
+                id: 'temp-ast',
+                role: 'assistant',
+                content: full,
+                created: new Date().toISOString(),
+              },
+            ]
+          })
         },
         onToolCallStart: (info) => {
           setActiveTool(`Consultando registros em "${info.name}"...`)
@@ -200,58 +238,28 @@ export function AssistenteSecaoDrawer({
         onToolCallDone: () => {
           setActiveTool(null)
         },
-        onCitations: (citations: AgentCitation[]) => {
-          setMessages((prev) =>
-            prev.map((m) => (m.id === assistantMsgId ? { ...m, citations } : m)),
-          )
+        onFinalizado: (convAtualizada) => {
+          setConversationId(convAtualizada.id)
+          setMessages(convAtualizada.mensagens || [])
+          setIsLoading(false)
+          setActiveTool(null)
+          void recarregarHistorico()
         },
-        signal: abortController.signal,
+        onError: (err) => {
+          setIsLoading(false)
+          setActiveTool(null)
+          toast.error(`Erro no processamento: ${err instanceof Error ? err.message : String(err)}`)
+        },
       })
 
-      if (res.conversationId && res.conversationId !== conversationId) {
-        setConversationId(res.conversationId)
-        listAgentConversations(agentSlug)
-          .then((c) => setConversations(c))
-          .catch(() => {})
+      if (!conversationId) {
+        setConversationId(cid)
+        void recarregarHistorico()
       }
     } catch (err: unknown) {
-      const isAbort =
-        err instanceof Error && (err.name === 'AbortError' || err.message.includes('aborted'))
-      const isTimeout =
-        err instanceof Error &&
-        (err.message.includes('Tempo limite') || err.message.includes('timeout'))
-
-      if (isAbort && !isTimeout) {
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === assistantMsgId && !m.content
-              ? { ...m, content: 'Operação interrompida pelo usuário.' }
-              : m,
-          ),
-        )
-        return
-      }
-
-      const msgErr = err instanceof Error ? err.message : String(err)
-      const mensagemAmigavel = isTimeout
-        ? 'Não foi possível processar. O assistente atingiu o tempo limite. Tente reformular o pedido com critérios mais específicos.'
-        : 'Não foi possível processar a consulta no momento. Tente reformular a pergunta.'
-
-      toast.error(isTimeout ? 'Tempo limite excedido' : `Falha no ${titulo}: ${msgErr}`)
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === assistantMsgId
-            ? {
-                ...m,
-                content: m.content ? `${m.content}\n\n⚠️ ${mensagemAmigavel}` : mensagemAmigavel,
-              }
-            : m,
-        ),
-      )
-    } finally {
       setIsLoading(false)
       setActiveTool(null)
-      abortControllerRef.current = null
+      toast.error(`Erro ao enviar mensagem: ${err instanceof Error ? err.message : String(err)}`)
     }
   }
 
@@ -297,11 +305,11 @@ export function AssistenteSecaoDrawer({
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={handleLimparConversa}
+                onClick={handleIniciarNovaConversa}
                 className="text-white hover:bg-white/20 h-8 w-8"
-                title="Limpar conversa / Nova sessão"
+                title="Nova conversa"
               >
-                <Trash2 className="w-4 h-4" />
+                <Plus className="w-4 h-4" />
               </Button>
               <Button
                 variant="ghost"
@@ -313,6 +321,46 @@ export function AssistenteSecaoDrawer({
                 <X className="w-4 h-4" />
               </Button>
             </div>
+          </div>
+
+          {/* Barra de Histórico Persistido com Exclusão Manual */}
+          <div className="bg-neutral-100 border-b border-neutral-200 px-3.5 py-2 flex items-center justify-between gap-2 text-xs">
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <History className="w-3.5 h-3.5 text-neutral-500 shrink-0" />
+              <Select
+                value={conversationId || 'nova'}
+                onValueChange={(val) => handleSelecionarConversa(val)}
+              >
+                <SelectTrigger className="h-7 text-xs bg-white border-neutral-300 w-full max-w-[270px]">
+                  <SelectValue placeholder="Histórico de conversas..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="nova" className="text-xs font-semibold text-[#FF6A13]">
+                    + Iniciar Nova Conversa
+                  </SelectItem>
+                  {listaConversas.map((c) => (
+                    <SelectItem key={c.id} value={c.id} className="text-xs">
+                      {c.titulo || `Conversa de ${new Date(c.created).toLocaleDateString('pt-BR')}`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {conversationId && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => {
+                  const encontrada = listaConversas.find((c) => c.id === conversationId)
+                  if (encontrada) setConversaParaExcluir(encontrada)
+                }}
+                className="h-7 w-7 text-neutral-500 hover:text-red-600 hover:bg-red-50"
+                title="Excluir esta conversa definitivamente"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </Button>
+            )}
           </div>
 
           {/* Aviso Onboarding de Modo Leitura */}
@@ -430,42 +478,64 @@ export function AssistenteSecaoDrawer({
                 className="min-h-[64px] max-h-28 text-xs resize-none bg-white focus-visible:ring-[#FF6A13]"
                 disabled={isLoading}
               />
-              {isLoading ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    if (abortControllerRef.current) {
-                      abortControllerRef.current.abort('Cancelado pelo usuário')
-                      abortControllerRef.current = null
-                    }
-                    setIsLoading(false)
-                    setActiveTool(null)
-                    toast.info('Processamento cancelado.')
-                  }}
-                  className="h-11 px-3 border-orange-300 text-orange-700 hover:bg-orange-100 shrink-0 text-xs flex items-center gap-1.5"
-                  title="Interromper processamento atual"
-                >
-                  <X className="w-4 h-4 text-orange-600" />
-                  <span>Parar</span>
-                </Button>
-              ) : (
-                <Button
-                  type="submit"
-                  disabled={!inputMessage.trim()}
-                  className="h-11 px-3.5 bg-[#FF6A13] hover:bg-[#e05b0d] text-white shrink-0"
-                >
+              <Button
+                type="submit"
+                disabled={!inputMessage.trim() || isLoading}
+                className="h-11 px-3.5 bg-[#FF6A13] hover:bg-[#e05b0d] text-white shrink-0"
+              >
+                {isLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
                   <Send className="w-4 h-4" />
-                </Button>
-              )}
+                )}
+              </Button>
             </form>
             <div className="mt-1.5 flex items-center justify-between text-[10px] text-neutral-400">
               <span>Enter envia • Shift+Enter quebra linha</span>
-              <span>Modo consulta • CRM AEROCAD</span>
+              <span>Registro permanente até exclusão manual</span>
             </div>
           </div>
         </div>
       )}
+
+      {/* Modal de Confirmação de Exclusão de Conversa */}
+      <Dialog
+        open={Boolean(conversaParaExcluir)}
+        onOpenChange={(v) => !v && setConversaParaExcluir(null)}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <AlertTriangle className="w-5 h-5" />
+              Excluir Conversa do Assistente
+            </DialogTitle>
+            <DialogDescription className="text-xs text-neutral-600 pt-2">
+              Tem certeza que deseja excluir a conversa{' '}
+              <strong>"{conversaParaExcluir?.titulo || 'esta conversa'}"</strong>?
+              <br />
+              O histórico será removido definitivamente do banco de dados.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setConversaParaExcluir(null)}
+              className="text-xs"
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleConfirmarExclusao}
+              className="text-xs bg-red-600 hover:bg-red-700 text-white"
+            >
+              Excluir Definitivamente
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }

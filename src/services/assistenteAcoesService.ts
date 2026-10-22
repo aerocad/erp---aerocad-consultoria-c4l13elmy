@@ -1,6 +1,6 @@
 import pb from '@/lib/pocketbase/client'
 import type { ItemPlanoContas } from '@/lib/planoContas'
-import { PLANO_CONTAS_AEROCAD } from '@/lib/planoContas'
+import { PLANO_CONTAS_AEROCAD, removerContaExtraPlano } from '@/lib/planoContas'
 import { salvarCredor, type CredorFormData } from '@/services/credores'
 import { desfazerUltimaOperacaoBloco } from '@/services/assistenteIa'
 
@@ -225,6 +225,22 @@ export async function executarAcaoFinanceira(
 export async function desfazerAcaoFinanceira(
   auditId?: string,
 ): Promise<{ sucesso: boolean; mensagem: string }> {
+  // Se for criação de conta no plano de contas, remove também do cache em memória
+  if (auditId) {
+    try {
+      const audit = await pb.collection('auditoria_operacoes_bloco').getOne(auditId)
+      if (audit && audit.tipo_operacao === 'criar_conta_plano') {
+        const raw = audit.snapshot_anterior
+        const snap = typeof raw === 'string' ? JSON.parse(raw) : raw
+        if (Array.isArray(snap) && snap[0]?.id) {
+          removerContaExtraPlano(snap[0].id)
+        }
+      }
+    } catch {
+      /* intentionally ignored */
+    }
+  }
+
   const res = await desfazerUltimaOperacaoBloco(auditId)
   return {
     sucesso: res.sucesso,

@@ -10,7 +10,7 @@
  * - Visual oficial AEROCAD: #FF6A13, Arial, prancheta técnica
  */
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import {
   Search,
   BookOpen,

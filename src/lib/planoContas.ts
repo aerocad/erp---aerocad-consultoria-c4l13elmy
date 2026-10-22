@@ -350,6 +350,12 @@ export function registrarContasExtrasPlano(contas: ItemPlanoContas[]) {
   contasExtrasEmMemoria = contas
 }
 
+export function removerContaExtraPlano(codigoOuId: string): void {
+  contasExtrasEmMemoria = contasExtrasEmMemoria.filter(
+    (c) => c.codigo !== codigoOuId && (c as any).id !== codigoOuId,
+  )
+}
+
 export function obterItemPlanoContasPorCodigo(codigo?: string): ItemPlanoContas | undefined {
   if (!codigo) return undefined
   const limpo = codigo.trim()

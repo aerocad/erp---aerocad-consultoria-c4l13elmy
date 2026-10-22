@@ -39,12 +39,14 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import {
-  sendAgentMessage,
-  listAgentConversations,
-  loadConversationMessages,
-  type AgentContextRecord,
-  type AgentConversationItem,
-} from '@/services/assistenteIa'
+  listarConversasPersistidas,
+  carregarConversaPersistida,
+  excluirConversaPersistida,
+  enviarMensagemPersistidaBackground,
+  type ConversaPersistidaRecord,
+} from '@/services/assistenteConversasService'
+import { type AgentContextRecord } from '@/services/assistenteIa'
+import { Trash2, AlertTriangle } from 'lucide-react'
 import { uploadAnexo } from '@/services/anexos'
 import { createOne } from '@/services/api'
 import { useAuth } from '@/contexts/AuthContext'
@@ -76,7 +78,10 @@ export function AssistenteIAPanel({
   const [inputText, setInputText] = useState('')
   const [isSending, setIsSending] = useState(false)
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null)
-  const [conversations, setConversations] = useState<AgentConversationItem[]>([])
+  const [conversations, setConversations] = useState<ConversaPersistidaRecord[]>([])
+  const [conversaParaExcluir, setConversaParaExcluir] = useState<ConversaPersistidaRecord | null>(
+    null,
+  )
   const [activeTools, setActiveTools] = useState<ToolStatus[]>([])
   const [streamedAssistantText, setStreamedAssistantText] = useState('')
   const [citations, setCitations] = useState<AgentCitation[]>([])
@@ -105,25 +110,41 @@ export function AssistenteIAPanel({
   // Carregar conversas anteriores do usuário
   const reloadConversations = async () => {
     try {
-      const list = await listAgentConversations()
+      const list = await listarConversasPersistidas('assistente-aerocad')
       setConversations(list)
+      return list
     } catch {
-      // Silencioso em caso de falta de conversas iniciais
+      return []
     }
   }
 
   useEffect(() => {
-    void reloadConversations()
+    void reloadConversations().then((list) => {
+      if (list && list.length > 0 && !currentConversationId) {
+        const primeira = list[0]
+        setCurrentConversationId(primeira.id)
+        setMessages(primeira.mensagens || [])
+        if (primeira.status_processamento === 'processando') {
+          setIsSending(true)
+        }
+      }
+    })
   }, [])
 
   // Trocar de conversa
   const handleSelectConversation = async (convId: string) => {
-    if (isSending) return
+    if (convId === 'nova') {
+      handleStartNewChat()
+      return
+    }
     try {
       setIsSending(true)
-      const history = await loadConversationMessages(convId)
-      setMessages(history)
-      setCurrentConversationId(convId)
+      const conv = await carregarConversaPersistida(convId)
+      if (conv) {
+        setMessages(conv.mensagens || [])
+        setCurrentConversationId(conv.id)
+        setIsSending(conv.status_processamento === 'processando')
+      }
       setStreamedAssistantText('')
       setActiveTools([])
     } catch (err: unknown) {
@@ -135,14 +156,33 @@ export function AssistenteIAPanel({
   }
 
   const handleStartNewChat = () => {
-    if (isSending && abortControllerRef.current) {
-      abortControllerRef.current.abort()
-    }
     setMessages([])
     setCurrentConversationId(null)
     setStreamedAssistantText('')
     setActiveTools([])
     setCitations([])
+    setIsSending(false)
+    toast.info('Nova conversa limpa iniciada.')
+  }
+
+  const handleConfirmarExclusaoConversa = async () => {
+    if (!conversaParaExcluir) return
+    const idExcluir = conversaParaExcluir.id
+    try {
+      await excluirConversaPersistida(idExcluir)
+      toast.success('Conversa excluída com sucesso.')
+      setConversaParaExcluir(null)
+      const atualizadas = await reloadConversations()
+      if (currentConversationId === idExcluir) {
+        if (atualizadas && atualizadas.length > 0) {
+          await handleSelectConversation(atualizadas[0].id)
+        } else {
+          handleStartNewChat()
+        }
+      }
+    } catch (err: unknown) {
+      toast.error(`Falha ao excluir conversa: ${err instanceof Error ? err.message : String(err)}`)
+    }
   }
 
   const handleSend = async (textToSend?: string) => {
@@ -150,28 +190,19 @@ export function AssistenteIAPanel({
     if (!raw || isSending) return
 
     setInputText('')
-    const userMsg: DisplayMessage = {
-      id: `user-${Date.now()}`,
-      role: 'user',
-      content: raw,
-      created: new Date().toISOString(),
-    }
-
-    setMessages((prev) => [...prev, userMsg])
     setIsSending(true)
     setStreamedAssistantText('')
     setActiveTools([])
     setCitations([])
 
-    const controller = new AbortController()
-    abortControllerRef.current = controller
-
     try {
-      const result = await sendAgentMessage({
-        message: raw,
-        conversationId: currentConversationId,
-        contextRecord,
-        signal: controller.signal,
+      const { conversaId } = await enviarMensagemPersistidaBackground({
+        conversaId: currentConversationId,
+        agentSlug: 'assistente-aerocad',
+        contexto: contextRecord?.tipo || 'geral',
+        titulo: raw.slice(0, 48),
+        userText: raw,
+        contextRecord: contextRecord || null,
         onChunk: (_delta, full) => {
           setStreamedAssistantText(full)
         },
@@ -186,35 +217,32 @@ export function AssistenteIAPanel({
             prev.map((t) => (t.id === info.id ? { ...t, status: 'done' } : t)),
           )
         },
-        onCitations: (items) => {
-          setCitations(items)
+        onFinalizado: (convAtualizada) => {
+          setCurrentConversationId(convAtualizada.id)
+          setMessages(convAtualizada.mensagens || [])
+          setStreamedAssistantText('')
+          setIsSending(false)
+          setActiveTools([])
+          void reloadConversations()
+        },
+        onError: (err) => {
+          setIsSending(false)
+          setActiveTools([])
+          const errorText =
+            err instanceof Error ? err.message : 'Erro ao processar resposta com o Assistente IA'
+          toast.error(errorText)
         },
       })
 
-      setCurrentConversationId(result.conversationId)
-      const finalMsg: DisplayMessage = {
-        id: result.messageId || `asst-${Date.now()}`,
-        role: 'assistant',
-        content: result.content,
-        citations: result.citations,
-        created: new Date().toISOString(),
+      if (!currentConversationId) {
+        setCurrentConversationId(conversaId)
+        void reloadConversations()
       }
-
-      setMessages((prev) => [...prev, finalMsg])
-      setStreamedAssistantText('')
-      setActiveTools([])
-      void reloadConversations()
     } catch (err: unknown) {
-      if (controller.signal.aborted) {
-        toast.info('Geração interrompida')
-      } else {
-        const errorText =
-          err instanceof Error ? err.message : 'Erro ao processar resposta com o Assistente IA'
-        toast.error(errorText)
-      }
-    } finally {
       setIsSending(false)
-      abortControllerRef.current = null
+      const errorText =
+        err instanceof Error ? err.message : 'Erro ao enviar mensagem para o Assistente IA'
+      toast.error(errorText)
     }
   }
 
@@ -333,19 +361,35 @@ export function AssistenteIAPanel({
         </div>
 
         <div className="flex items-center gap-2">
-          {conversations.length > 0 && (
-            <Select value={currentConversationId || ''} onValueChange={handleSelectConversation}>
-              <SelectTrigger className="h-8 text-xs w-[180px]">
-                <SelectValue placeholder="Histórico de chats..." />
-              </SelectTrigger>
-              <SelectContent>
-                {conversations.map((c) => (
-                  <SelectItem key={c.id} value={c.id} className="text-xs">
-                    {c.title || `Conversa ${c.id.slice(0, 8)}`}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <Select value={currentConversationId || 'nova'} onValueChange={handleSelectConversation}>
+            <SelectTrigger className="h-8 text-xs w-[200px] bg-white border-neutral-300">
+              <SelectValue placeholder="Histórico de chats..." />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="nova" className="text-xs font-semibold text-[#FF6A13]">
+                + Novo Chat Limpo
+              </SelectItem>
+              {conversations.map((c) => (
+                <SelectItem key={c.id} value={c.id} className="text-xs">
+                  {c.titulo || `Conversa de ${new Date(c.created).toLocaleDateString('pt-BR')}`}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {currentConversationId && (
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={() => {
+                const encontrada = conversations.find((c) => c.id === currentConversationId)
+                if (encontrada) setConversaParaExcluir(encontrada)
+              }}
+              className="h-8 w-8 text-neutral-500 hover:text-red-600 hover:bg-red-50"
+              title="Excluir este chat definitivamente"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
           )}
 
           <Button
@@ -712,6 +756,47 @@ export function AssistenteIAPanel({
               className="bg-[#FF6A13] hover:bg-[#E85B06] text-white text-xs"
             >
               {isSaving ? 'Gravando...' : 'Confirmar e Salvar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Confirmação de Exclusão de Conversa */}
+      <Dialog
+        open={Boolean(conversaParaExcluir)}
+        onOpenChange={(v) => !v && setConversaParaExcluir(null)}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <AlertTriangle className="w-5 h-5" />
+              Excluir Conversa do Assistente
+            </DialogTitle>
+            <DialogDescription className="text-xs text-neutral-600 pt-2">
+              Tem certeza que deseja excluir o histórico da conversa{' '}
+              <strong>"{conversaParaExcluir?.titulo || 'esta conversa'}"</strong>?
+              <br />
+              O registro será removido definitivamente do banco de dados.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setConversaParaExcluir(null)}
+              className="text-xs"
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              onClick={handleConfirmarExclusaoConversa}
+              className="text-xs bg-red-600 hover:bg-red-700 text-white"
+            >
+              Excluir Definitivamente
             </Button>
           </DialogFooter>
         </DialogContent>
