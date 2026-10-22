@@ -97,6 +97,7 @@ import { ConfirmarExcluirNotaModal } from '@/components/financeiro/ConfirmarExcl
 import { EditarVencimentoParcelaModal } from '@/components/financeiro/EditarVencimentoParcelaModal'
 import { ImportacaoNfseModal } from '@/components/financeiro/ImportacaoNfseModal'
 import { ExcluirDuplicadasModal } from '@/components/financeiro/ExcluirDuplicadasModal'
+import { detectarGruposDuplicadas } from '@/services/nfseDuplicadasService'
 import { ExtrairProjetosModal } from '@/components/financeiro/ExtrairProjetosModal'
 import { NotaExclusaoAlvo } from '@/services/exclusaoService'
 import { Button } from '@/components/ui/button'
@@ -332,6 +333,27 @@ export function FinancePage() {
         idsParaExcluir.length === 1 ? 'nota duplicada excluída' : 'notas duplicadas excluídas'
       } com sucesso!`,
     )
+  }
+
+  // Contagem global de duplicatas (parcelas do banco + notas órfãs em sessão)
+  // usando o mesmo motor de detecção do modal de triagem — mantém os badges
+  // da Central Financeira e de Contas a Receber sincronizados com o modal
+  const totalDuplicadasGeral = useMemo(
+    () => detectarGruposDuplicadas(installments.data, notasOrfas).totalDuplicatas,
+    [installments.data, notasOrfas],
+  )
+
+  // Abre o modal de triagem de duplicatas a partir do card da Central Financeira
+  // ou do botão "Triagem de Duplicatas" em Contas a Receber
+  const handleAbrirTriagemDuplicadas = () => {
+    setDuplicadasModalOpen(true)
+  }
+
+  // Após exclusões de parcelas duplicadas no banco: recarrega as listagens afetadas
+  // (Contas a Receber e parcelas) para recalcular contadores/badges
+  const handleSucessoExclusaoDuplicadas = () => {
+    void installments.reload()
+    void contasReceber.reload()
   }
 
   const months = useMemo(() => {
@@ -1388,6 +1410,8 @@ export function FinancePage() {
         totalParcelasProjetos={installments.data.length}
         totalNotasOrfas={notasOrfas.length}
         podeAcessarValuation={canWrite}
+        totalDuplicadas={totalDuplicadasGeral}
+        onAbrirModalDuplicadas={handleAbrirTriagemDuplicadas}
         onAbrirEmNovaJanela={handleAbrirEmNovaJanela}
       />
 
@@ -1673,6 +1697,8 @@ export function FinancePage() {
             projetos={projects.data}
             clientes={clients.data}
             canWrite={canWrite}
+            totalDuplicadas={totalDuplicadasGeral}
+            onAbrirTriagemDuplicadas={handleAbrirTriagemDuplicadas}
             onReloadParcelas={async () => {
               void installments.reload()
             }}
@@ -3137,12 +3163,14 @@ export function FinancePage() {
         }}
       />
 
-      {/* Modal de Deduplicação de Notas Órfãs */}
+      {/* Modal de Triagem de Duplicatas (NFS-e em duplicidade: parcelas + órfãs) */}
       <ExcluirDuplicadasModal
         open={duplicadasModalOpen}
         onOpenChange={setDuplicadasModalOpen}
         notasOrfas={notasOrfas}
+        parcelas={installments.data}
         onExcluirDuplicadas={handleExcluirDuplicadas}
+        onSucessoExclusao={handleSucessoExclusaoDuplicadas}
       />
 
       {/* Modal de Extração de Projetos a partir das Notas Órfãs */}
