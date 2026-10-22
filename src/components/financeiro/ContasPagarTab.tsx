@@ -93,6 +93,7 @@ export const FORMA_PAGTO_LABELS: Record<FormaPagamentoFinanceiro, string> = {
   cartao_credito: 'Cartão de Crédito',
   cartao_debito: 'Cartão de Débito',
   dinheiro: 'Dinheiro',
+  debito_automatico: 'Débito Automático',
   outro: 'Outro',
 }
 

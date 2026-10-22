@@ -635,8 +635,28 @@ export async function pagarParcelaOperacao({
     throw new Error('Contrato de empréstimo não encontrado para esta parcela.')
   }
 
-  const vPago = valorPago || parcela.valor_parcela
+  // Normalização do valor pago garantindo tipo numérico decimal positivo
+  const vPago =
+    typeof valorPago === 'number' && !isNaN(valorPago) && valorPago > 0
+      ? Math.round(valorPago * 100) / 100
+      : Number(valorPago) || parcela.valor_parcela || 0
+
   const cBancaria = contaBancariaId || parcela.conta_bancaria || contrato.conta_bancaria_debito
+
+  // Normalização de forma_pagamento garantindo compatibilidade com o select de contas_pagar
+  const formaPagamentoValida =
+    formaPagamento === 'debito_automatico' ||
+    formaPagamento === 'pix' ||
+    formaPagamento === 'ted_doc' ||
+    formaPagamento === 'ted' ||
+    formaPagamento === 'boleto' ||
+    formaPagamento === 'cartao_credito' ||
+    formaPagamento === 'cartao_debito' ||
+    formaPagamento === 'dinheiro'
+      ? formaPagamento === 'ted'
+        ? 'ted_doc'
+        : formaPagamento
+      : 'outro'
 
   // 1. Se juros da parcela ainda não foram apropriados, apropria antes do pagamento
   if (!parcela.juros_apropriados && parcela.valor_juros > 0) {
@@ -655,7 +675,8 @@ export async function pagarParcelaOperacao({
 
   // 3. Cria e quita lançamento em contas_pagar (para conciliar no extrato e debitar banco)
   // D - Passivo (Amortização) / C - Bancos (Total pago)
-  const dtPagtoFull = `${dataPagamentoIso} 12:00:00.000Z`
+  const dtPagtoClean = (dataPagamentoIso || new Date().toISOString().slice(0, 10)).slice(0, 10)
+  const dtPagtoFull = `${dtPagtoClean} 12:00:00.000Z`
   const cpRecord = await pb.collection('contas_pagar').create({
     descricao: `Pagamento Parcela ${parcela.numero_parcela}/${contrato.quantidade_parcelas} - Contrato ${contrato.numero_contrato} (${contrato.banco_nome})`,
     fornecedor: contrato.banco_nome || 'Credor',
@@ -664,7 +685,7 @@ export async function pagarParcelaOperacao({
     data_vencimento: parcela.data_vencimento,
     data_pagamento: dtPagtoFull,
     status: 'pago',
-    forma_pagamento: formaPagamento,
+    forma_pagamento: formaPagamentoValida,
     numero_documento: `PAG-PARC-${contrato.numero_contrato}-${parcela.numero_parcela}`,
     conta_bancaria: cBancaria || null,
     plano_contas_codigo: contaPassivoCodigo,

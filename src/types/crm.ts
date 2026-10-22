@@ -480,6 +480,7 @@ export type FormaPagamentoFinanceiro =
   | 'cartao_credito'
   | 'cartao_debito'
   | 'dinheiro'
+  | 'debito_automatico'
   | 'outro'
 
 export interface ContaBancariaRecord extends RecordModel {

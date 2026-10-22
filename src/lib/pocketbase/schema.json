@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-22T12:04:56.685Z",
+  "generatedAt": "2026-10-22T12:49:15.271Z",
   "collections": [
     {
       "name": "users",
@@ -2624,6 +2624,7 @@
             "cartao_credito",
             "cartao_debito",
             "dinheiro",
+            "debito_automatico",
             "outro"
           ]
         },
@@ -2734,6 +2735,20 @@
           "type": "bool",
           "required": false,
           "system": false
+        },
+        {
+          "name": "emprestimo_contrato_id",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "emprestimos_financiamentos"
+        },
+        {
+          "name": "emprestimo_parcela_id",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "emprestimos_parcelas"
         }
       ],
       "indexes": [

@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/select'
 import { useToast } from '@/hooks/use-toast'
 import { formatCurrency } from '@/lib/format'
+import { getErrorMessage } from '@/lib/pocketbase/errors'
 import { pagarParcelaOperacao } from '@/services/emprestimosFinanciamentosService'
 import type { EmprestimoParcelaRecord, ContaBancariaRecord } from '@/types/crm'
 import { CreditCard, AlertCircle, CheckCircle2 } from 'lucide-react'
@@ -67,28 +68,39 @@ export function PagarParcelaModal({
     e.preventDefault()
     if (!parcela) return
 
+    const valorNumerico = Number(valorPago)
+    if (isNaN(valorNumerico) || valorNumerico <= 0) {
+      toast({
+        title: 'Valor inválido',
+        description: 'Informe um valor pago maior que zero.',
+        variant: 'destructive',
+      })
+      return
+    }
+
     try {
       setSalvando(true)
       const res = await pagarParcelaOperacao({
         parcelaId: parcela.id,
         dataPagamentoIso: dataPagamento,
-        valorPago,
+        valorPago: valorNumerico,
         contaBancariaId: contaBancariaId || undefined,
         formaPagamento,
       })
 
       toast({
         title: 'Pagamento da Parcela Efetuado!',
-        description: `Parcela ${parcela.numero_parcela} quitada. Amortização de principal baixada no passivo e gerado débito bancário para conciliação.`,
+        description: `Parcela nº ${parcela.numero_parcela} quitada com sucesso. Amortização baixada no passivo e gerado débito bancário para conciliação.`,
       })
 
       onSuccess()
       onOpenChange(false)
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Erro ao pagar parcela:', err)
+      const detalheErro = getErrorMessage(err)
       toast({
         title: 'Erro no pagamento',
-        description: err.message || 'Não foi possível registrar o pagamento da parcela.',
+        description: detalheErro || 'Não foi possível registrar o pagamento da parcela.',
         variant: 'destructive',
       })
     } finally {
@@ -191,7 +203,7 @@ export function PagarParcelaModal({
                 <SelectItem value="debito_automatico">Débito Automático em Conta</SelectItem>
                 <SelectItem value="boleto">Boleto Bancário</SelectItem>
                 <SelectItem value="pix">PIX PJ</SelectItem>
-                <SelectItem value="ted">TED / Transferência</SelectItem>
+                <SelectItem value="ted_doc">TED / Transferência</SelectItem>
               </SelectContent>
             </Select>
           </div>

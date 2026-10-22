@@ -476,6 +476,7 @@ export interface SalvarContaPagarComprovanteParams {
     | 'cartao_credito'
     | 'cartao_debito'
     | 'dinheiro'
+    | 'debito_automatico'
     | 'outro'
   numero_documento?: string
   projetoId?: string | null

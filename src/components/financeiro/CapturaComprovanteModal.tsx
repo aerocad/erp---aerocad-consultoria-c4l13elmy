@@ -52,10 +52,14 @@ import {
 import { useFinanceiroVisibilidade } from '@/contexts/FinanceiroVisibilidadeContext'
 import { salvarCredor } from '@/services/credores'
 import { PLANO_CONTAS_AEROCAD, sugerirPlanoContasPorCategoria } from '@/lib/planoContas'
-import type { ProjetoRecord, CredorRecord, ContaBancariaRecord } from '@/types/crm'
+import type {
+  ProjetoRecord,
+  CredorRecord,
+  ContaBancariaRecord,
+  ContaPagarRecord,
+  FormaPagamentoFinanceiro,
+} from '@/types/crm'
 import { Building2, Copy, Printer, Plus, CheckCircle2 } from 'lucide-react'
-
-import type { ContaPagarRecord } from '@/types/crm'
 import { atualizarContaPagarComComprovante } from '@/services/comprovantesVision'
 import { obterDocumentosSegregados } from '@/services/documentosContasPagar'
 
@@ -112,9 +116,7 @@ export function CapturaComprovanteModal({
   const [cnpjCpf, setCnpjCpf] = useState('')
   const [dataEmissao, setDataEmissao] = useState(new Date().toISOString().slice(0, 10))
   const [valorTotal, setValorTotal] = useState<number | ''>('')
-  const [formaPagamento, setFormaPagamento] = useState<
-    'pix' | 'ted_doc' | 'boleto' | 'cartao_credito' | 'cartao_debito' | 'dinheiro' | 'outro'
-  >('cartao_debito')
+  const [formaPagamento, setFormaPagamento] = useState<FormaPagamentoFinanceiro>('cartao_debito')
   const [creditoTipo, setCreditoTipo] = useState<'a_vista' | 'parcelado'>('a_vista')
   const [numParcelas, setNumParcelas] = useState<number>(1)
 
