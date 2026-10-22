@@ -73,6 +73,7 @@ import type {
   ContaBancariaRecord,
   AtivoPatrimonioRecord,
   ExtratoRecord,
+  EmprestimoFinanciamentoRecord,
 } from '@/types/crm'
 import {
   gerarDossieContabilZip,

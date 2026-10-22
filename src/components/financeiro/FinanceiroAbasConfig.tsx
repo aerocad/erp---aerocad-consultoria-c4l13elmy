@@ -61,6 +61,7 @@ export const ALL_FINANCE_TABS: readonly TabDefinition[] = [
     shortLabel: 'Empréstimos',
     icon: Landmark,
     description: 'Contratos, apropriação mensal de juros, parcelas e reclassificação contábil',
+    requiresWrite: true,
     defaultVisible: true,
   },
   {

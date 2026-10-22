@@ -27,6 +27,7 @@ import { ExtratosComprovantesTab } from '@/components/financeiro/ExtratosComprov
 import { BalancetesTab } from '@/components/financeiro/BalancetesTab'
 import { RelatoriosFinanceirosTab } from '@/components/financeiro/RelatoriosFinanceirosTab'
 import { RelatoriosContabeisAvancadosTab } from '@/components/financeiro/RelatoriosContabeisAvancadosTab'
+import { EmprestimosFinanciamentosTab } from '@/components/financeiro/EmprestimosFinanciamentosTab'
 import { SensitiveAreaGate } from '@/components/auth/SensitiveAreaGate'
 import { CentralFinanceiraHub } from '@/components/financeiro/CentralFinanceiraHub'
 import { PlanoContasTab } from '@/components/financeiro/PlanoContasTab'
@@ -91,6 +92,9 @@ export function FinanceiroModuloFocoPage() {
   })
   const ativosPatrimonio = useCrmData<any>('ativos_patrimonio', {
     sort: '-data_aquisicao',
+  })
+  const emprestimosFinanciamentosData = useCrmData<any>('emprestimos_financiamentos', {
+    sort: '-created',
   })
 
   // Validação de acesso ao módulo
@@ -223,6 +227,17 @@ export function FinanceiroModuloFocoPage() {
               canDelete={user?.role === 'admin'}
               onReload={async () => {
                 void contasBancarias.reload()
+              }}
+            />
+          ) : tabKey === 'emprestimos_financiamentos' ? (
+            <EmprestimosFinanciamentosTab
+              contasBancarias={contasBancarias.data}
+              credores={credores.data}
+              ativosPatrimonio={ativosPatrimonio.data}
+              userRole={user?.role}
+              usuarioNome={user?.name || user?.email || 'Usuário AEROCAD'}
+              onNavigateTab={(tab) => {
+                navigate(`/financeiro/modulo/${tab.replace(/_/g, '-')}`)
               }}
             />
           ) : tabKey === 'contas_receber' ? (

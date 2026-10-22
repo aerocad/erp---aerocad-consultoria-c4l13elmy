@@ -13,7 +13,8 @@ import {
 } from '@/components/ui/select'
 import { useToast } from '@/hooks/use-toast'
 import { formatCurrency, formatDate } from '@/lib/format'
-import { canViewFinancials, isValoresOcultos } from '@/lib/crm'
+import { canViewFinancials } from '@/lib/crm'
+import { isValoresOcultos } from '@/lib/format'
 import type {
   EmprestimoFinanciamentoRecord,
   EmprestimoParcelaRecord,

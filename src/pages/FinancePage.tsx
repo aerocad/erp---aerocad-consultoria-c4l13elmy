@@ -1431,6 +1431,20 @@ export function FinancePage() {
                   {contasBancarias.data.filter((c: any) => c.ativo !== false).length}
                 </span>
               )
+            } else if (
+              tab.id === 'emprestimos_financiamentos' &&
+              emprestimosFinanciamentosData.data.length > 0
+            ) {
+              const ativos = emprestimosFinanciamentosData.data.filter(
+                (e: any) => e.status !== 'cancelado',
+              ).length
+              if (ativos > 0) {
+                countBadge = (
+                  <span className="ml-1 rounded-full bg-orange-100 text-[#D65100] text-[10px] px-1.5 py-0.2 font-bold">
+                    {ativos}
+                  </span>
+                )
+              }
             } else if (tab.id === 'contas_receber') {
               countBadge = (
                 <span className="ml-1 rounded-full bg-neutral-100 text-neutral-700 text-[10px] px-1.5 py-0.2">
@@ -1716,6 +1730,7 @@ export function FinancePage() {
                   if (
                     tab === 'contas_pagar' ||
                     tab === 'contas_receber' ||
+                    tab === 'emprestimos_financiamentos' ||
                     tab === 'fluxo_caixa' ||
                     tab === 'extratos' ||
                     tab === 'balancetes' ||

@@ -16,6 +16,7 @@ import {
   BookOpen,
   Calculator,
   ExternalLink,
+  Landmark,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/lib/format'
@@ -158,7 +159,7 @@ export function CentralFinanceiraHub(
         <span className="text-neutral-400">•••••</span>
       ),
       statSubtext: `${props.totalContratosEmprestimos || 0} contrato(s) ativo(s) / amortização`,
-      visible: true,
+      visible: canWrite,
     },
     {
       id: 'contas_bancarias',
