@@ -27,7 +27,7 @@ import {
   classificarParcela,
   obterItemPlanoContasPorCodigo,
 } from '@/lib/planoContas'
-import { DEPRECIACAO_PADRAO } from '@/services/balanceteContabilService'
+import { DEPRECIACAO_PADRAO } from '@/components/financeiro/AtivosPatrimonioTab'
 import type {
   AtivoPatrimonioRecord,
   ContaBancariaRecord,
@@ -479,24 +479,36 @@ export function consolidarBaseContabil({
   // -------------------------------------------------------------
   let valorImobilizadoLiquidoAtivos = 0
   ativosPatrimonio.forEach((at) => {
-    const vidaUtilConfig =
-      at.categoria === 'terreno' || at.categoria === 'goodwill_intangivel'
-        ? 0
-        : at.vida_util_meses !== undefined
-          ? at.vida_util_meses
-          : (DEPRECIACAO_PADRAO[at.categoria]?.vidaUtilMeses ?? 120)
+    if (at.status === 'baixado_alienado') return
 
-    const calc =
-      at.categoria === 'terreno' || at.categoria === 'goodwill_intangivel' || vidaUtilConfig === 0
-        ? { depreciacaoAcumulada: 0, valorContabilAtual: at.valor_aquisicao }
-        : calcularDepreciacaoAtivo(
-            at.valor_aquisicao,
-            at.data_aquisicao,
-            vidaUtilConfig,
-            at.valor_residual || 0,
-          )
+    let valorLiquido = 0
+    if (
+      at.valor_contabil_atual !== undefined &&
+      at.valor_contabil_atual !== null &&
+      Number(at.valor_contabil_atual) > 0
+    ) {
+      valorLiquido = Number(at.valor_contabil_atual)
+    } else {
+      const vidaUtilConfig =
+        at.categoria === 'terreno' || at.categoria === 'goodwill_intangivel'
+          ? 0
+          : at.vida_util_meses !== undefined
+            ? at.vida_util_meses
+            : (DEPRECIACAO_PADRAO[at.categoria]?.vidaUtilMeses ?? 120)
 
-    valorImobilizadoLiquidoAtivos += calc.valorContabilAtual
+      const calc =
+        at.categoria === 'terreno' || at.categoria === 'goodwill_intangivel' || vidaUtilConfig === 0
+          ? { depreciacaoAcumulada: 0, valorContabilAtual: at.valor_aquisicao }
+          : calcularDepreciacaoAtivo(
+              at.valor_aquisicao,
+              at.data_aquisicao,
+              vidaUtilConfig,
+              at.valor_residual || 0,
+            )
+      valorLiquido = calc.valorContabilAtual
+    }
+
+    valorImobilizadoLiquidoAtivos += valorLiquido
   })
 
   // -------------------------------------------------------------

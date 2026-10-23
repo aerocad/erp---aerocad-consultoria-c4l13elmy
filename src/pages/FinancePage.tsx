@@ -1779,6 +1779,7 @@ export function FinancePage() {
             contasBancarias={contasBancarias.data}
             ativosPatrimonio={ativosPatrimonio.data}
             extratos={extratos.data}
+            extratosTransacoes={extratosTransacoes.data}
             emprestimosFinanciamentos={emprestimosFinanciamentosData.data}
             userRole={user?.role}
             usuarioNome={user?.name || user?.email || 'Usuário AEROCAD'}

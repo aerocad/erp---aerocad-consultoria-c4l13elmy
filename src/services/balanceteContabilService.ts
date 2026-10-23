@@ -1,10 +1,11 @@
-import {
+import type {
   ParcelaRecord,
   ContaPagarRecord,
   ContaReceberRecord,
   ContaBancariaRecord,
   AtivoPatrimonioRecord,
   EmprestimoFinanciamentoRecord,
+  ExtratoTransacaoRecord,
 } from '@/types/crm'
 import { PLANO_CONTAS_AEROCAD } from '@/lib/planoContas'
 import {

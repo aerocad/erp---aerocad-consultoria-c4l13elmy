@@ -102,6 +102,7 @@ export interface RelatoriosContabeisAvancadosTabProps {
   contasBancarias: ContaBancariaRecord[]
   ativosPatrimonio: AtivoPatrimonioRecord[]
   extratos?: ExtratoRecord[]
+  extratosTransacoes?: ExtratoTransacaoRecord[]
   emprestimosFinanciamentos?: EmprestimoFinanciamentoRecord[]
   userRole?: string
   usuarioNome?: string
@@ -125,6 +126,7 @@ export function RelatoriosContabeisAvancadosTab({
   contasBancarias,
   ativosPatrimonio,
   extratos: extratosProp = [],
+  extratosTransacoes: extratosTransacoesProp,
   emprestimosFinanciamentos: emprestimosProp,
   userRole,
   usuarioNome = 'Usuário AEROCAD',
@@ -139,9 +141,23 @@ export function RelatoriosContabeisAvancadosTab({
 
   // Lista de extratos bancários com fallback via PocketBase se não passado como prop
   const [extratosList, setExtratosList] = useState<ExtratoRecord[]>(extratosProp)
+  const [extratosTransacoesList, setExtratosTransacoesList] = useState<ExtratoTransacaoRecord[]>(
+    extratosTransacoesProp || [],
+  )
   const [emprestimosList, setEmprestimosList] = useState<EmprestimoFinanciamentoRecord[]>(
     emprestimosProp || [],
   )
+
+  useEffect(() => {
+    if (extratosTransacoesProp && extratosTransacoesProp.length > 0) {
+      setExtratosTransacoesList(extratosTransacoesProp)
+    } else {
+      pb.collection('extratos_transacoes')
+        .getFullList<ExtratoTransacaoRecord>({ sort: '-data' })
+        .then((res) => setExtratosTransacoesList(res))
+        .catch(() => {})
+    }
+  }, [extratosTransacoesProp])
 
   useEffect(() => {
     if (extratosProp && extratosProp.length > 0) {
@@ -306,6 +322,7 @@ export function RelatoriosContabeisAvancadosTab({
       contasBancarias,
       ativosPatrimonio,
       emprestimosFinanciamentos: emprestimosList,
+      extratosTransacoes: extratosTransacoesList,
       ano,
       mesesFiltro,
       periodoRotulo,
@@ -318,6 +335,7 @@ export function RelatoriosContabeisAvancadosTab({
     contasBancarias,
     ativosPatrimonio,
     emprestimosList,
+    extratosTransacoesList,
     ano,
     mesesFiltro,
     periodoRotulo,
