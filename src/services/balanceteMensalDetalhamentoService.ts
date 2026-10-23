@@ -9,6 +9,7 @@
 
 import {
   PLANO_CONTAS_AEROCAD,
+  isContaRedutora,
   classificarParcela,
   classificarContaReceber,
   classificarContaPagar,
@@ -137,7 +138,14 @@ export function consolidarBalanceteMensal(
   // 1.1 Parcelas
   for (const p of parcelasDoMes) {
     const val = Number(p.valor_recebido || p.valor || 0)
-    receitaTotalMes += val
+    const conta = classificarParcela(p)
+    const ehRedutora = isContaRedutora(conta.codigo)
+
+    if (ehRedutora) {
+      receitaTotalMes -= val
+    } else {
+      receitaTotalMes += val
+    }
 
     const cat = p.nf_numero ? 'Projetos (Faturado NFS-e)' : 'Projetos (Parcelas Contratuais)'
     recPorCategoria[cat] = (recPorCategoria[cat] || 0) + val
@@ -148,7 +156,6 @@ export function consolidarBalanceteMensal(
     cliAtual.qtd += 1
     recPorClienteMap.set(cliNome, cliAtual)
 
-    const conta = classificarParcela(p)
     const dataLanc = (p.data_pagamento || p.vencimento || '').slice(0, 10)
     const docRef = p.nf_numero ? `NFS-e ${p.nf_numero}` : undefined
 
@@ -193,7 +200,14 @@ export function consolidarBalanceteMensal(
   // 1.2 Receitas Avulsas
   for (const c of avulsasDoMes) {
     const val = Number(c.valor_recebido || c.valor || 0)
-    receitaTotalMes += val
+    const conta = classificarContaReceber(c)
+    const ehRedutora = isContaRedutora(conta.codigo)
+
+    if (ehRedutora) {
+      receitaTotalMes -= val
+    } else {
+      receitaTotalMes += val
+    }
 
     const cat = 'Receitas Avulsas / Outros'
     recPorCategoria[cat] = (recPorCategoria[cat] || 0) + val
@@ -204,7 +218,6 @@ export function consolidarBalanceteMensal(
     cliAtual.qtd += 1
     recPorClienteMap.set(cliNome, cliAtual)
 
-    const conta = classificarContaReceber(c)
     const dataLanc = (c.data_recebimento || c.data_vencimento || '').slice(0, 10)
 
     const lancamentoAnalitico: BalanceteLancamentoAnalitico = {
@@ -245,7 +258,14 @@ export function consolidarBalanceteMensal(
   for (const tx of extratosDoMes) {
     if (tx.tipo === 'entrada') {
       const val = Math.abs(Number(tx.valor || 0))
-      receitaTotalMes += val
+      const conta = classificarTransacaoExtrato(tx)
+      const ehRedutora = isContaRedutora(conta.codigo)
+
+      if (ehRedutora) {
+        receitaTotalMes -= val
+      } else {
+        receitaTotalMes += val
+      }
 
       const cat = 'Movimentação Bancária (Entrada Extrato)'
       recPorCategoria[cat] = (recPorCategoria[cat] || 0) + val
@@ -256,7 +276,6 @@ export function consolidarBalanceteMensal(
       cliAtual.qtd += 1
       recPorClienteMap.set(contraparte, cliAtual)
 
-      const conta = classificarTransacaoExtrato(tx)
       const dataLanc = (tx.data || '').slice(0, 10)
 
       const lancamentoAnalitico: BalanceteLancamentoAnalitico = {
@@ -343,7 +362,18 @@ export function consolidarBalanceteMensal(
   // 2.1 Contas a Pagar Pagas
   for (const c of despesasDoMes) {
     const val = Number(c.valor || 0)
-    despesaTotalMes += val
+    const conta = classificarContaPagar(c)
+    const ehRedutora = isContaRedutora(conta.codigo)
+
+    // Se a despesa for uma conta redutora do grupo de receitas (ex: 4.4.1 DAS),
+    // deduz do total de receitas para consistência contábil com o balancete
+    if (ehRedutora && (conta.codigo.startsWith('4.') || conta.codigo === '4.4.1')) {
+      receitaTotalMes -= val
+    } else if (ehRedutora && conta.codigo.startsWith('3.')) {
+      despesaTotalMes -= val
+    } else {
+      despesaTotalMes += val
+    }
 
     const catNome = c.categoria || 'outros'
     despPorCategoria[catNome] = (despPorCategoria[catNome] || 0) + val
@@ -354,7 +384,6 @@ export function consolidarBalanceteMensal(
     fornAtual.qtd += 1
     despPorFornecedorMap.set(fornNome, fornAtual)
 
-    const conta = classificarContaPagar(c)
     const dataLanc = (c.data_pagamento || c.data_vencimento || '').slice(0, 10)
 
     const lancamentoAnalitico: BalanceteLancamentoAnalitico = {
@@ -395,7 +424,16 @@ export function consolidarBalanceteMensal(
   for (const tx of extratosDoMes) {
     if (tx.tipo === 'saida') {
       const val = Math.abs(Number(tx.valor || 0))
-      despesaTotalMes += val
+      const conta = classificarTransacaoExtrato(tx)
+      const ehRedutora = isContaRedutora(conta.codigo)
+
+      if (ehRedutora && (conta.codigo.startsWith('4.') || conta.codigo === '4.4.1')) {
+        receitaTotalMes -= val
+      } else if (ehRedutora && conta.codigo.startsWith('3.')) {
+        despesaTotalMes -= val
+      } else {
+        despesaTotalMes += val
+      }
 
       const catNome = 'despesas_operacionais'
       despPorCategoria[catNome] = (despPorCategoria[catNome] || 0) + val
@@ -406,7 +444,6 @@ export function consolidarBalanceteMensal(
       fornAtual.qtd += 1
       despPorFornecedorMap.set(fornNome, fornAtual)
 
-      const conta = classificarTransacaoExtrato(tx)
       const dataLanc = (tx.data || '').slice(0, 10)
 
       const lancamentoAnalitico: BalanceteLancamentoAnalitico = {
@@ -471,19 +508,40 @@ export function consolidarBalanceteMensal(
     parcelas.forEach((p) => {
       if (p.status !== 'paga') return
       const d = p.data_pagamento || p.data_faturamento || p.vencimento
-      if (d && d.startsWith(refM)) recM += Number(p.valor_recebido || p.valor || 0)
+      if (d && d.startsWith(refM)) {
+        const val = Number(p.valor_recebido || p.valor || 0)
+        const cta = classificarParcela(p)
+        if (isContaRedutora(cta.codigo)) recM -= val
+        else recM += val
+      }
     })
     contasReceber.forEach((c) => {
       if (c.status !== 'recebido') return
       const d = c.data_recebimento || c.data_vencimento
-      if (d && d.startsWith(refM)) recM += Number(c.valor_recebido || c.valor || 0)
+      if (d && d.startsWith(refM)) {
+        const val = Number(c.valor_recebido || c.valor || 0)
+        const cta = classificarContaReceber(c)
+        if (isContaRedutora(cta.codigo)) recM -= val
+        else recM += val
+      }
     })
 
     let despM = 0
     contasPagar.forEach((c) => {
       if (c.status !== 'pago') return
       const d = c.data_pagamento || c.data_vencimento
-      if (d && d.startsWith(refM)) despM += Number(c.valor || 0)
+      if (d && d.startsWith(refM)) {
+        const val = Number(c.valor || 0)
+        const cta = classificarContaPagar(c)
+        const ehRed = isContaRedutora(cta.codigo)
+        if (ehRed && (cta.codigo.startsWith('4.') || cta.codigo === '4.4.1')) {
+          recM -= val
+        } else if (ehRed && cta.codigo.startsWith('3.')) {
+          despM -= val
+        } else {
+          despM += val
+        }
+      }
     })
 
     extratosTransacoes.forEach((tx) => {
@@ -493,8 +551,22 @@ export function consolidarBalanceteMensal(
       }
       if (tx.vinculo_tipo === 'parcela' && parcelas.some((p) => p.id === tx.vinculo_id)) return
 
-      if (tx.tipo === 'entrada') recM += Math.abs(Number(tx.valor || 0))
-      else if (tx.tipo === 'saida') despM += Math.abs(Number(tx.valor || 0))
+      const val = Math.abs(Number(tx.valor || 0))
+      const cta = classificarTransacaoExtrato(tx)
+      const ehRed = isContaRedutora(cta.codigo)
+
+      if (tx.tipo === 'entrada') {
+        if (ehRed) recM -= val
+        else recM += val
+      } else if (tx.tipo === 'saida') {
+        if (ehRed && (cta.codigo.startsWith('4.') || cta.codigo === '4.4.1')) {
+          recM -= val
+        } else if (ehRed && cta.codigo.startsWith('3.')) {
+          despM -= val
+        } else {
+          despM += val
+        }
+      }
     })
 
     totalRecAno += recM

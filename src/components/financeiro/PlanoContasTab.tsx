@@ -59,12 +59,25 @@ import {
   ItemPlanoContas,
   TipoNaturezaConta,
   LancamentoMapeado,
+  isContaRedutora,
   classificarTransacaoExtrato,
   classificarContaPagar,
   classificarContaReceber,
   classificarParcela,
   classificarAtivoPatrimonio,
 } from '@/lib/planoContas'
+
+export interface ContaComTotais extends ItemPlanoContas {
+  qtdLancamentos: number
+  totalValor: number
+  lancamentos: LancamentoMapeado[]
+}
+
+export interface ContaFiltradaPlana extends ContaComTotais {
+  volumeDebito: number
+  volumeCredito: number
+  naturezaSaldo: 'Devedor' | 'Credor'
+}
 import {
   ContaPagarRecord,
   ParcelaRecord,
@@ -101,11 +114,7 @@ interface GrupoEstruturado {
   natureza: TipoNaturezaConta
   subgrupos: {
     nome: string
-    contas: (ItemPlanoContas & {
-      qtdLancamentos: number
-      totalValor: number
-      lancamentos: LancamentoMapeado[]
-    })[]
+    contas: ContaComTotais[]
   }[]
   qtdTotalLancamentos: number
   totalValor: number
@@ -588,14 +597,7 @@ export function PlanoContasTab({
         contasGrupo = []
       }
 
-      const subgruposMap = new Map<
-        string,
-        (ItemPlanoContas & {
-          qtdLancamentos: number
-          totalValor: number
-          lancamentos: LancamentoMapeado[]
-        })[]
-      >()
+      const subgruposMap = new Map<string, ContaComTotais[]>()
 
       let grupoQtdTotal = 0
       let grupoValorTotal = 0
@@ -653,14 +655,7 @@ export function PlanoContasTab({
 
   // Lista plana de contas filtradas para exportação XLSX / CSV e Impressão A4
   const contasFiltradasPlanas = useMemo(() => {
-    const lista: (ItemPlanoContas & {
-      qtdLancamentos: number
-      totalValor: number
-      volumeDebito: number
-      volumeCredito: number
-      naturezaSaldo: 'Devedor' | 'Credor'
-      lancamentos: LancamentoMapeado[]
-    })[] = []
+    const lista: ContaFiltradaPlana[] = []
 
     for (const grupo of arvoreEstruturada) {
       for (const sub of grupo.subgrupos) {
@@ -1265,8 +1260,16 @@ export function PlanoContasTab({
 
                                   {/* Nome */}
                                   <td className="py-2 px-2.5">
-                                    <div className="font-semibold text-neutral-900 text-xs">
-                                      {conta.nome}
+                                    <div className="flex items-center gap-1.5 font-semibold text-neutral-900 text-xs">
+                                      <span>{conta.nome}</span>
+                                      {(conta.redutora || isContaRedutora(conta.codigo)) && (
+                                        <Badge
+                                          variant="outline"
+                                          className="text-[10px] font-bold uppercase bg-[#FF6A13]/10 text-[#FF6A13] border-[#FF6A13]/30 px-1.5 py-0.5"
+                                        >
+                                          Redutora
+                                        </Badge>
+                                      )}
                                     </div>
                                     {conta.descricao && (
                                       <div className="text-[11px] text-neutral-400 truncate max-w-md">
@@ -1569,23 +1572,33 @@ export function PlanoContasTab({
                         { cabecalho: 'Volume (R$)', alinhamento: 'right', largura: '20%' },
                         { cabecalho: 'Natureza Saldo', alinhamento: 'center', largura: '16%' },
                       ],
-                      linhas: contasFiltradasPlanas.map((c) => [
-                        { conteudo: c.codigo, destaque: c.codigo.length <= 3 },
-                        { conteudo: c.nome, destaque: c.codigo.length <= 3 },
-                        {
-                          conteudo: c.qtdLancamentos > 0 ? `${c.qtdLancamentos}` : '—',
-                          alinhamento: 'center',
-                        },
-                        {
-                          conteudo: c.totalValor > 0 ? formatCurrency(c.totalValor) : '—',
-                          alinhamento: 'right',
-                        },
-                        {
-                          conteudo: c.naturezaSaldo,
-                          alinhamento: 'center',
-                          destaque: c.qtdLancamentos > 0,
-                        },
-                      ]),
+                      linhas: contasFiltradasPlanas.map((c) => {
+                        const ehRed = c.redutora || isContaRedutora(c.codigo)
+                        const nomeExibicao =
+                          ehRed && !c.nome.includes('(–)') && !c.nome.includes('(-)')
+                            ? `(–) ${c.nome} [REDUTORA]`
+                            : ehRed
+                              ? `${c.nome} [REDUTORA]`
+                              : c.nome
+
+                        return [
+                          { conteudo: c.codigo, destaque: c.codigo.length <= 3 },
+                          { conteudo: nomeExibicao, destaque: c.codigo.length <= 3 },
+                          {
+                            conteudo: c.qtdLancamentos > 0 ? `${c.qtdLancamentos}` : '—',
+                            alinhamento: 'center',
+                          },
+                          {
+                            conteudo: c.totalValor > 0 ? formatCurrency(c.totalValor) : '—',
+                            alinhamento: 'right',
+                          },
+                          {
+                            conteudo: c.naturezaSaldo,
+                            alinhamento: 'center',
+                            destaque: c.qtdLancamentos > 0,
+                          },
+                        ]
+                      }),
                       linhaTotal: [
                         { conteudo: 'TOTAIS' },
                         { conteudo: `${contasFiltradasPlanas.length} contas listadas` },
