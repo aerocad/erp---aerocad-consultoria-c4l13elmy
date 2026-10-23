@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-23T02:46:27.653Z",
+  "generatedAt": "2026-10-23T03:31:57.362Z",
   "collections": [
     {
       "name": "users",
@@ -3181,6 +3181,12 @@
           "required": false,
           "system": false,
           "collectionRef": "contas_bancarias"
+        },
+        {
+          "name": "socio",
+          "type": "text",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
@@ -5147,6 +5153,81 @@
         }
       ],
       "indexes": ["CREATE UNIQUE INDEX idx_plano_codigo ON plano_contas_customizadas (codigo)"]
+    },
+    {
+      "name": "lancamentos_contabeis_manuais",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != \"\"",
+        "view": "@request.auth.id != \"\"",
+        "create": "@request.auth.id != \"\"",
+        "update": "@request.auth.id != \"\"",
+        "delete": null
+      },
+      "fields": [
+        {
+          "name": "data_lancamento",
+          "type": "date",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "historico",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "linhas_partidas",
+          "type": "json",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "valor_total",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "tipo_fato",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "socio",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "anexo",
+          "type": "file",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "estornado",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "estorno_de_id",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "criado_por",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "users"
+        }
+      ],
+      "indexes": []
     }
   ]
 }
