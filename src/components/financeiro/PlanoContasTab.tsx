@@ -58,6 +58,7 @@ import {
   PLANO_CONTAS_AEROCAD,
   ItemPlanoContas,
   TipoNaturezaConta,
+  NaturezaSaldo,
   LancamentoMapeado,
   isContaRedutora,
   classificarTransacaoExtrato,
@@ -76,7 +77,7 @@ export interface ContaComTotais extends ItemPlanoContas {
 export interface ContaFiltradaPlana extends ContaComTotais {
   volumeDebito: number
   volumeCredito: number
-  naturezaSaldo: 'Devedor' | 'Credor'
+  naturezaSaldo: NaturezaSaldo
 }
 import {
   ContaPagarRecord,
@@ -670,18 +671,18 @@ export function PlanoContasTab({
           // Se a conta tem natureza ativo ou despesa, é devedora (D); passivo ou receita é credora (C)
           const ehDevedora = c.natureza === 'ativo' || c.natureza === 'despesa'
           const saldoCalculado = ehDevedora ? deb - cred : cred - deb
-          const natSaldo: 'Devedor' | 'Credor' =
+          const natSaldo: NaturezaSaldo =
             c.qtdLancamentos === 0
               ? ehDevedora
-                ? 'Devedor'
-                : 'Credor'
+                ? 'devedora'
+                : 'credora'
               : saldoCalculado >= 0
                 ? ehDevedora
-                  ? 'Devedor'
-                  : 'Credor'
+                  ? 'devedora'
+                  : 'credora'
                 : ehDevedora
-                  ? 'Credor'
-                  : 'Devedor'
+                  ? 'credora'
+                  : 'devedora'
 
           lista.push({
             ...c,

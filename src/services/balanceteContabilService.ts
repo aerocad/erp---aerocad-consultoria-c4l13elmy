@@ -43,13 +43,16 @@ export interface BalanceteVerificacaoResultado {
   quantidadeContas: number
 }
 
-interface ParametrosCalculoBalancete {
+import { consolidarBaseContabil } from '@/services/baseContabilService'
+
+export interface ParametrosCalculoBalancete {
   parcelas: ParcelaRecord[]
   contasPagar: ContaPagarRecord[]
   contasReceber: ContaReceberRecord[]
   contasBancarias: ContaBancariaRecord[]
   ativosPatrimonio: AtivoPatrimonioRecord[]
   emprestimosFinanciamentos?: EmprestimoFinanciamentoRecord[]
+  extratosTransacoes?: ExtratoTransacaoRecord[]
   ano: string
   mesesFiltro: number[] | null
   periodoRotulo: string
@@ -63,6 +66,7 @@ export function calcularBalanceteVerificacao({
   contasBancarias,
   ativosPatrimonio,
   emprestimosFinanciamentos = [],
+  extratosTransacoes = [],
   ano,
   mesesFiltro,
   periodoRotulo,
@@ -203,21 +207,34 @@ export function calcularBalanceteVerificacao({
   const cliSaldoFinal = Math.max(0, cliSaldoAnterior + cliDebitosPeriodo - cliCreditosPeriodo)
 
   // -------------------------------------------------------------
-  // IMOBILIZADO E ATIVOS (CONTA 1.2)
+  // IMOBILIZADO E ATIVOS (CONTA 1.2) - MÓDULO DE ATIVOS & PATRIMÔNIO
+  // Lê o valor contábil líquido dos ativos da aba Ativos & Patrimônio (custo - depreciação acumulada)
   // -------------------------------------------------------------
   let ativosCustoHistorico = 0
   let ativosDepreciacaoAcumulada = 0
 
   ativosPatrimonio.forEach((at) => {
-    const calc = calcularDepreciacaoLinear(
-      at.valor_aquisicao,
-      at.data_aquisicao,
-      at.vida_util_meses || DEPRECIACAO_PADRAO[at.categoria]?.vidaUtilMeses || 120,
-      at.valor_residual || 0,
-    )
+    const vidaUtilConfig =
+      at.categoria === 'terreno' || at.categoria === 'goodwill_intangivel'
+        ? 0
+        : at.vida_util_meses !== undefined
+          ? at.vida_util_meses
+          : (DEPRECIACAO_PADRAO[at.categoria]?.vidaUtilMeses ?? 120)
+
+    const calc =
+      at.categoria === 'terreno' || at.categoria === 'goodwill_intangivel' || vidaUtilConfig === 0
+        ? { depreciacaoAcumulada: 0, valorContabilAtual: at.valor_aquisicao }
+        : calcularDepreciacaoLinear(
+            at.valor_aquisicao,
+            at.data_aquisicao,
+            vidaUtilConfig,
+            at.valor_residual || 0,
+          )
+
     ativosCustoHistorico += at.valor_aquisicao
     ativosDepreciacaoAcumulada += calc.depreciacaoAcumulada
   })
+  const ativosValorLiquido = ativosCustoHistorico - ativosDepreciacaoAcumulada
 
   // -------------------------------------------------------------
   // PASSIVO CIRCULANTE: FORNECEDORES E CONTAS A PAGAR (CONTA 2.1)
@@ -289,31 +306,27 @@ export function calcularBalanceteVerificacao({
 
   // -------------------------------------------------------------
   // EMPRÉSTIMOS E FINANCIAMENTOS (PASSIVO CIRCULANTE E NÃO CIRCULANTE)
+  // REGRA DO USUÁRIO: Não deduzir 2.1.8 e 2.2.3 enquanto o passivo
+  // estiver registrado só pelo principal (sem encargos lançados).
   // -------------------------------------------------------------
   let empCirculanteFinal = 0
   let empNaoCirculanteFinal = 0
-  let encargosApropriarCirculante = 0
-  let encargosApropriarNaoCirculante = 0
+  const encargosApropriarCirculante = 0
+  const encargosApropriarNaoCirculante = 0
 
   emprestimosFinanciamentos.forEach((ef) => {
     if (ef.status === 'cancelado') return
     empCirculanteFinal += ef.saldo_circulante || 0
     empNaoCirculanteFinal += ef.saldo_nao_circulante || 0
-    const totalSaldo = (ef.saldo_circulante || 0) + (ef.saldo_nao_circulante || 0)
-    const ratioCirc = totalSaldo > 0 ? (ef.saldo_circulante || 0) / totalSaldo : 1
-    const jurosAprop = ef.saldo_juros_a_apropriar || 0
-    encargosApropriarCirculante += jurosAprop * ratioCirc
-    encargosApropriarNaoCirculante += jurosAprop * (1 - ratioCirc)
   })
 
   // -------------------------------------------------------------
   // PATRIMÔNIO LÍQUIDO / CAPITAL SOCIAL / RESULTADOS (GRUPO 2.3)
   // -------------------------------------------------------------
-  const passivoCirculanteLiquido = fornSaldoFinal + empCirculanteFinal - encargosApropriarCirculante
-  const passivoNaoCirculanteLiquido = empNaoCirculanteFinal - encargosApropriarNaoCirculante
+  const passivoCirculanteLiquido = fornSaldoFinal + empCirculanteFinal
+  const passivoNaoCirculanteLiquido = empNaoCirculanteFinal
 
-  const ativoTotalFinal =
-    dispSaldoFinal + cliSaldoFinal + (ativosCustoHistorico - ativosDepreciacaoAcumulada)
+  const ativoTotalFinal = dispSaldoFinal + cliSaldoFinal + ativosValorLiquido
   const passivoExigivelFinal = passivoCirculanteLiquido + passivoNaoCirculanteLiquido
   const plTotalFinal = Math.max(0, ativoTotalFinal - passivoExigivelFinal)
   const capitalSocial = Math.min(plTotalFinal, 50000)
@@ -469,7 +482,7 @@ export function calcularBalanceteVerificacao({
     saldoFinalNatureza: 'C',
   })
 
-  if (empCirculanteFinal > 0 || encargosApropriarCirculante > 0) {
+  if (empCirculanteFinal > 0) {
     linhas.push({
       codigo: '2.1.6',
       descricao: 'Empréstimos e Financiamentos a Pagar (Curto Prazo)',
@@ -481,31 +494,19 @@ export function calcularBalanceteVerificacao({
       saldoFinal: empCirculanteFinal,
       saldoFinalNatureza: 'C',
     })
-    if (encargosApropriarCirculante > 0) {
-      linhas.push({
-        codigo: '2.1.8',
-        descricao: '(-) Encargos Financeiros a Apropriar (Circulante)',
-        grau: 3,
-        natureza: 'D',
-        saldoAnterior: encargosApropriarCirculante,
-        debitos: 0,
-        creditos: 0,
-        saldoFinal: encargosApropriarCirculante,
-        saldoFinalNatureza: 'D',
-      })
-    }
+    // 2.1.8 não deduzida enquanto passivo for registrado só pelo principal
   }
 
-  if (empNaoCirculanteFinal > 0 || encargosApropriarNaoCirculante > 0) {
+  if (empNaoCirculanteFinal > 0) {
     linhas.push({
       codigo: '2.2',
       descricao: 'PASSIVO NÃO CIRCULANTE (Exigível a Longo Prazo)',
       grau: 2,
       natureza: 'C',
-      saldoAnterior: empNaoCirculanteFinal - encargosApropriarNaoCirculante,
+      saldoAnterior: empNaoCirculanteFinal,
       debitos: 0,
       creditos: 0,
-      saldoFinal: empNaoCirculanteFinal - encargosApropriarNaoCirculante,
+      saldoFinal: empNaoCirculanteFinal,
       saldoFinalNatureza: 'C',
     })
     linhas.push({
@@ -519,19 +520,7 @@ export function calcularBalanceteVerificacao({
       saldoFinal: empNaoCirculanteFinal,
       saldoFinalNatureza: 'C',
     })
-    if (encargosApropriarNaoCirculante > 0) {
-      linhas.push({
-        codigo: '2.2.3',
-        descricao: '(-) Encargos Financeiros a Apropriar (Não Circulante)',
-        grau: 3,
-        natureza: 'D',
-        saldoAnterior: encargosApropriarNaoCirculante,
-        debitos: 0,
-        creditos: 0,
-        saldoFinal: encargosApropriarNaoCirculante,
-        saldoFinalNatureza: 'D',
-      })
-    }
+    // 2.2.3 não deduzida enquanto passivo for registrado só pelo principal
   }
 
   linhas.push({
@@ -747,20 +736,36 @@ export function calcularBalanceteVerificacao({
   })
 
   // -------------------------------------------------------------
-  // TOTALIZAÇÃO DE TESTAGEM (DÉBITOS = CRÉDITOS)
-  // Somente linhas analíticas de grau 2 e 3 ou grau 1 não repetido
+  // TOTALIZAÇÃO DE TESTAGEM (DÉBITOS = CRÉDITOS VIA BASE UNIFICADA)
+  // Cada movimento bancário e financeiro gera partida dobrada estrita:
+  // Débitos = Créditos por construção contábil.
   // -------------------------------------------------------------
-  // Para fins contábeis de conferência de partidas dobradas:
+  const baseUnificada = consolidarBaseContabil({
+    parcelas,
+    contasPagar,
+    contasReceber,
+    contasBancarias,
+    ativosPatrimonio,
+    emprestimosFinanciamentos,
+    extratosTransacoes,
+    ano,
+    mesesFiltro,
+    contaBancariaId,
+  })
+
+  // Se a base consolidada tem pernas com partidas dobradas, seus totais de débito e crédito
+  // são os totais oficiais do balancete de verificação
   const totalDebitos =
-    dispDebitosPeriodo + cliDebitosPeriodo + fornDebitosPeriodo + despDebitosPeriodo
+    baseUnificada.totalDebitos > 0
+      ? baseUnificada.totalDebitos
+      : dispDebitosPeriodo + cliDebitosPeriodo + fornDebitosPeriodo + despDebitosPeriodo
   const totalCreditos =
-    dispCreditosPeriodo + cliCreditosPeriodo + fornCreditosPeriodo + recCreditosPeriodo
+    baseUnificada.totalCreditos > 0
+      ? baseUnificada.totalCreditos
+      : dispCreditosPeriodo + cliCreditosPeriodo + fornCreditosPeriodo + recCreditosPeriodo
 
   const totalSaldoFinalDevedor =
-    dispSaldoFinal +
-    cliSaldoFinal +
-    (ativosCustoHistorico - ativosDepreciacaoAcumulada) +
-    (despDebitosPeriodo - despCreditosPeriodo)
+    dispSaldoFinal + cliSaldoFinal + ativosValorLiquido + (despDebitosPeriodo - despCreditosPeriodo)
   const totalSaldoFinalCredor =
     fornSaldoFinal + plTotalFinal + (recCreditosPeriodo - recDebitosPeriodo)
 
@@ -771,8 +776,7 @@ export function calcularBalanceteVerificacao({
     contaBancariaNome: contaAtivaNome,
     dataGeracao: new Date().toISOString(),
     linhas,
-    totalSaldoAnteriorDevedor:
-      dispSaldoAnterior + cliSaldoAnterior + ativosCustoHistorico - ativosDepreciacaoAcumulada,
+    totalSaldoAnteriorDevedor: dispSaldoAnterior + cliSaldoAnterior + ativosValorLiquido,
     totalSaldoAnteriorCredor: fornSaldoAnterior + plTotalFinal,
     totalDebitos,
     totalCreditos,
