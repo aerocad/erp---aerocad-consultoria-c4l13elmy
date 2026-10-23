@@ -4,15 +4,47 @@
  */
 
 export type TipoNaturezaConta = 'ativo' | 'passivo' | 'patrimonio_liquido' | 'receita' | 'despesa'
+export type NaturezaSaldo = 'devedora' | 'credora'
 
 export interface ItemPlanoContas {
   codigo: string
   nome: string
   natureza: TipoNaturezaConta
   grupo: string
+  naturezaSaldo?: NaturezaSaldo
+  redutora?: boolean
   fixoOuVariavel?: 'fixo' | 'variavel'
   descricao?: string
   semUso?: boolean
+}
+
+/**
+ * Contas redutoras oficiais da AEROCAD Consultoria.
+ * Devem ser subtraídas nos totais de grupo do Balancete, Balanço e DRE.
+ */
+export const CODIGOS_CONTAS_REDUTORAS = [
+  '4.4.1',
+  '1.2.12',
+  '1.2.13',
+  '2.1.8',
+  '2.2.3',
+  '2.3.2',
+  '2.3.5',
+] as const
+
+export function isContaRedutora(codigo?: string): boolean {
+  if (!codigo) return false
+  const limpo = codigo.trim()
+  return (
+    CODIGOS_CONTAS_REDUTORAS.includes(limpo as (typeof CODIGOS_CONTAS_REDUTORAS)[number]) ||
+    limpo.startsWith('4.4.1') ||
+    limpo.startsWith('1.2.12') ||
+    limpo.startsWith('1.2.13') ||
+    limpo.startsWith('2.1.8') ||
+    limpo.startsWith('2.2.3') ||
+    limpo.startsWith('2.3.2') ||
+    limpo.startsWith('2.3.5')
+  )
 }
 
 export const GRUPOS_PLANO_CONTAS = [
@@ -187,6 +219,8 @@ export const PLANO_CONTAS_AEROCAD: ItemPlanoContas[] = [
     nome: '(–) Depreciação Acumulada - Ativo Imobilizado',
     natureza: 'ativo',
     grupo: 'Ativo Não Circulante',
+    naturezaSaldo: 'credora',
+    redutora: true,
     descricao:
       'Conta redutora do ativo imobilizado (desgaste de equipamentos topográficos, drones, veículos e computadores)',
   },
@@ -195,6 +229,8 @@ export const PLANO_CONTAS_AEROCAD: ItemPlanoContas[] = [
     nome: '(–) Amortização Acumulada - Ativo Intangível',
     natureza: 'ativo',
     grupo: 'Ativo Não Circulante',
+    naturezaSaldo: 'credora',
+    redutora: true,
     descricao:
       'Conta redutora de ativos intangíveis (amortização de marcas, softwares e licenças permanentes)',
   },
@@ -255,6 +291,8 @@ export const PLANO_CONTAS_AEROCAD: ItemPlanoContas[] = [
     nome: '(-) Encargos Financeiros a Apropriar (Conta Redutora do Passivo Circulante)',
     natureza: 'passivo',
     grupo: 'Passivo Circulante',
+    naturezaSaldo: 'devedora',
+    redutora: true,
     descricao:
       'Juros contratuais pré-fixados a incorrer no curto prazo (conta retificadora/redutora)',
   },
@@ -291,6 +329,8 @@ export const PLANO_CONTAS_AEROCAD: ItemPlanoContas[] = [
     nome: '(-) Encargos Financeiros a Apropriar (Conta Redutora do Passivo Não Circulante)',
     natureza: 'passivo',
     grupo: 'Passivo Não Circulante',
+    naturezaSaldo: 'devedora',
+    redutora: true,
     descricao: 'Juros pré-fixados a incorrer no longo prazo após os próximos 12 meses',
   },
   {
@@ -322,6 +362,8 @@ export const PLANO_CONTAS_AEROCAD: ItemPlanoContas[] = [
     nome: '(–) Capital Social a Integralizar',
     natureza: 'patrimonio_liquido',
     grupo: 'Patrimônio Líquido',
+    naturezaSaldo: 'devedora',
+    redutora: true,
     descricao:
       'Parcela do capital social subscrito ainda pendente de realização financeira pelos sócios',
   },
@@ -341,9 +383,11 @@ export const PLANO_CONTAS_AEROCAD: ItemPlanoContas[] = [
   },
   {
     codigo: '2.3.5',
-    nome: 'Lucros a Destinar / Distribuição de Lucros Antecipada',
+    nome: '(–) Lucros a Destinar / Distribuição de Lucros Antecipada',
     natureza: 'patrimonio_liquido',
     grupo: 'Patrimônio Líquido',
+    naturezaSaldo: 'devedora',
+    redutora: true,
     descricao:
       'Antecipações de lucros comprovadas do exercício aos sócios conforme apuração contábil',
   },
@@ -560,6 +604,8 @@ export const PLANO_CONTAS_AEROCAD: ItemPlanoContas[] = [
     nome: '(–) DAS sobre o Faturamento',
     natureza: 'receita',
     grupo: 'Deduções sobre o Faturamento',
+    naturezaSaldo: 'devedora',
+    redutora: true,
     fixoOuVariavel: 'variavel',
     descricao:
       'Dedução direta da receita bruta por tributação do Simples Nacional (guia DAS calculada sobre o faturamento)',
@@ -583,13 +629,32 @@ export function obterItemPlanoContasPorCodigo(codigo?: string): ItemPlanoContas 
   if (!codigo) return undefined
   const limpo = codigo.trim()
   const todas = [...PLANO_CONTAS_AEROCAD, ...contasExtrasEmMemoria]
-  return (
+  const achado =
     todas.find((item) => item.codigo === limpo) ||
     todas.find((item) => item.codigo.startsWith(limpo) && !item.semUso) ||
     todas.find((item) => limpo.startsWith(item.codigo) && !item.semUso) ||
     todas.find((item) => item.codigo.startsWith(limpo)) ||
     todas.find((item) => limpo.startsWith(item.codigo))
-  )
+
+  if (!achado) return undefined
+
+  // Garante preenchimento de naturezaSaldo e redutora caso não venha preenchido
+  const redutora = achado.redutora ?? isContaRedutora(achado.codigo)
+  let naturezaSaldo: NaturezaSaldo = achado.naturezaSaldo || 'devedora'
+  if (!achado.naturezaSaldo) {
+    if (redutora) {
+      naturezaSaldo = achado.natureza === 'ativo' ? 'credora' : 'devedora'
+    } else {
+      naturezaSaldo =
+        achado.natureza === 'ativo' || achado.natureza === 'despesa' ? 'devedora' : 'credora'
+    }
+  }
+
+  return {
+    ...achado,
+    redutora,
+    naturezaSaldo,
+  }
 }
 
 export function sugerirPlanoContasPorCategoria(categoria: string): ItemPlanoContas {

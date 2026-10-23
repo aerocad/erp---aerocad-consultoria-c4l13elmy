@@ -722,16 +722,27 @@ export function calcularBalanceteVerificacao({
     saldoFinalNatureza: 'C',
   })
 
-  // 4.4 Deduções sobre o Faturamento (ex: 4.4.1 DAS sobre o Faturamento)
+  // 4.4 Deduções sobre o Faturamento (ex: 4.4.1 DAS sobre o Faturamento) - Conta Redutora
+  let dasDebitosPeriodo = 0
+  contasPagar.forEach((cp) => {
+    if (!matchConta(cp.conta_bancaria) || cp.status !== 'pago') return
+    const dataRef = cp.data_pagamento || cp.data_vencimento
+    if (!ehNoPeriodo(dataRef)) return
+    const cod = cp.plano_contas_codigo || ''
+    if (cod === '4.4.1' || cod.startsWith('4.4')) {
+      dasDebitosPeriodo += cp.valor || 0
+    }
+  })
+
   linhas.push({
     codigo: '4.4',
     descricao: '(–) Deduções sobre o Faturamento (DAS Simples Nacional)',
     grau: 2,
     natureza: 'D',
     saldoAnterior: 0,
-    debitos: 0,
+    debitos: dasDebitosPeriodo,
     creditos: 0,
-    saldoFinal: 0,
+    saldoFinal: dasDebitosPeriodo,
     saldoFinalNatureza: 'D',
   })
 
