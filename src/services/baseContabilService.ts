@@ -545,7 +545,7 @@ export function consolidarBaseContabil({
 
     let cTot = contasMap.get(perna.contaCodigo)
     if (!cTot) {
-      const itemPlano = obterItemPlanoContasPorCodigo(perna.contaCodigo) || {
+      const itemPlano: ItemPlanoContas = obterItemPlanoContasPorCodigo(perna.contaCodigo) || {
         codigo: perna.contaCodigo,
         nome: perna.contaNome,
         grupo: perna.contaGrupo,
@@ -556,7 +556,7 @@ export function consolidarBaseContabil({
             : perna.contaCodigo.startsWith('3')
               ? 'despesa'
               : 'receita',
-        fixoOuVariavel: 'geral',
+        fixoOuVariavel: undefined,
         descricao: perna.contaNome,
       }
       const ehDevedora = itemPlano.natureza === 'ativo' || itemPlano.natureza === 'despesa'

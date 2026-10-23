@@ -73,6 +73,7 @@ import type {
   ContaBancariaRecord,
   AtivoPatrimonioRecord,
   ExtratoRecord,
+  ExtratoTransacaoRecord,
   EmprestimoFinanciamentoRecord,
 } from '@/types/crm'
 import {
