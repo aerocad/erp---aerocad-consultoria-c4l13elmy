@@ -132,6 +132,15 @@ export const PLANO_CONTAS_AEROCAD: ItemPlanoContas[] = [
     descricao: 'Movimentações e aportes entre contas bancárias da própria pessoa jurídica',
   },
   {
+    codigo: '1.1.8',
+    nome: 'Conta Corrente de Sócios',
+    natureza: 'ativo',
+    grupo: 'Ativo Circulante',
+    naturezaSaldo: 'devedora',
+    descricao:
+      'Valores adiantados aos sócios a comprovar ou devolver (não aprovados como distribuição de lucros)',
+  },
+  {
     codigo: '1.2.1',
     nome: 'Equipamentos Topográficos e Geodésicos',
     natureza: 'ativo',

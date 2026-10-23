@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-23T03:31:57.362Z",
+  "generatedAt": "2026-10-23T03:39:54.086Z",
   "collections": [
     {
       "name": "users",
@@ -5225,6 +5225,74 @@
           "required": false,
           "system": false,
           "collectionRef": "users"
+        }
+      ],
+      "indexes": []
+    },
+    {
+      "name": "socios",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != \"\"",
+        "view": "@request.auth.id != \"\"",
+        "create": "@request.auth.id != \"\"",
+        "update": "@request.auth.id != \"\"",
+        "delete": null
+      },
+      "fields": [
+        {
+          "name": "nome",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "cpf",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "percentual_participacao",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "capital_subscrito",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "capital_integralizado",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "capital_a_integralizar",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "prazo_integralizacao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ata_distribuicao_url",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ativo",
+          "type": "bool",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": []
